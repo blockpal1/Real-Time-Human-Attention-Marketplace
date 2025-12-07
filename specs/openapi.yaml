@@ -1,0 +1,154 @@
+openapi: 3.0.3
+info:
+  title: Real-Time Human Attention Marketplace API
+  version: 0.1.0
+  description: |
+    API for the two-sided marketplace matching AI Agents (Buyers) with Human Attention (Sellers).
+    
+    **Flow**:
+    1. Agents post Bids (`/bids`).
+    2. Users (via Chrome Ext) connect via WebSocket (`/ws/events`) to stream EngagementEvents.
+    3. Matching Engine assigns Bids to Users.
+    
+servers:
+  - url: http://localhost:3000/v1
+    description: Local Development Server
+
+paths:
+  /status:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: System operational
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "ok"
+                  matcher_queue_depth:
+                    type: integer
+  
+  /attestation/challenge:
+    post:
+      summary: Request a nonce for device attestation
+      description: Returns a random nonce that the secure enclave must sign to prove liveness/authenticity.
+      operationId: createAttestationChallenge
+      responses:
+        '201':
+          description: Challenge created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  nonce:
+                    type: string
+                    description: Random base64 string
+                  timestamp:
+                    type: integer
+
+  /agents/bids:
+    post:
+      summary: Submit an Attention Bid
+      description: Agents (buyers) place a bid for human attention matching specific criteria.
+      operationId: createBid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BidRequest'
+      responses:
+        '201':
+          description: Bid accepted and queued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  bid_id:
+                    type: string
+        '400':
+          description: Invalid bid parameters
+        '402':
+          description: Insufficient escrow balance
+
+  /users/session/start:
+    post:
+      summary: Initialize a Selling Session
+      description: Called by Chrome Extension to register availability and price floor before WS connection.
+      operationId: startSession
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                pubkey: 
+                  type: string
+                  description: User's Solana wallet address
+                price_floor_micros:
+                  type: integer
+                  description: Min USDC micro-cents per second
+                device_attestation:
+                  type: string
+                  description: Initial hardware integrity proof
+      responses:
+        '200':
+          description: Session initialized
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  session_token:
+                    type: string
+                    description: JWT to use for WS authentication
+
+components:
+  schemas:
+    BidRequest:
+      type: object
+      required:
+        - max_price_per_second
+        - required_attention_score
+      properties:
+        target_url:
+          type: string
+          description: The URL the user should be looking at (optional context)
+        max_price_per_second:
+          type: integer
+          description: Bid amount in micro-USDC
+        required_attention_score:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+          description: Minimum engagement score required to pay
+        expiry_seconds:
+          type: integer
+          default: 60
+    
+    EngagementEvent:
+      type: object
+      description: Payload sent via WebSocket (informational schema)
+      properties:
+        session_id:
+          type: string
+        seq:
+          type: integer
+        timestamp:
+          type: integer
+        attention_score:
+          type: number
+        is_human:
+          type: number
+        liveness_score:
+          type: number
+        signature:
+          type: string

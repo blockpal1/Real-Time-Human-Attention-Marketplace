@@ -1,0 +1,10 @@
+{
+    "name": "@attention/shared",
+    "version": "0.1.0",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "scripts": {
+        "build": "tsc",
+        "generate:openapi": "openapi-typescript ../specs/openapi.yaml -o src/openapi_types.ts"
+    }
+}

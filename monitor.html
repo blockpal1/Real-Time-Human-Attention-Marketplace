@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Attentium Monitor</title>
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            background: #0a0e27;
+            color: #00ff41;
+            padding: 20px;
+            margin: 0;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: #00ff41;
+            text-align: center;
+            font-size: 2em;
+            margin-bottom: 30px;
+        }
+
+        .panel {
+            background: #1a1f3a;
+            border: 2px solid #00ff41;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .panel h2 {
+            margin-top: 0;
+            color: #00d4ff;
+            font-size: 1.3em;
+        }
+
+        .status {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 4px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+
+        .status.running {
+            background: #00ff41;
+            color: #0a0e27;
+        }
+
+        .status.stopped {
+            background: #ff4444;
+            color: white;
+        }
+
+        .log-container {
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 4px;
+            padding: 15px;
+            height: 200px;
+            overflow-y: auto;
+            font-size: 0.9em;
+        }
+
+        .log-entry {
+            margin: 5px 0;
+            padding: 5px;
+            border-left: 3px solid #00ff41;
+            padding-left: 10px;
+        }
+
+        .log-entry.match {
+            border-left-color: #ff6b35;
+            color: #ff6b35;
+        }
+
+        .log-entry.bid {
+            border-left-color: #00d4ff;
+            color: #00d4ff;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .stat-box {
+            background: #0d1117;
+            padding: 15px;
+            border-radius: 4px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #00ff41;
+        }
+
+        .stat-label {
+            color: #8b949e;
+            margin-top: 5px;
+        }
+
+        button {
+            background: #00ff41;
+            color: #0a0e27;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            margin: 5px;
+        }
+
+        button:hover {
+            background: #00d4ff;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>🎯 Attentium - Live Monitor</h1>
+
+        <div class="panel">
+            <h2>System Status</h2>
+            <div>
+                Gateway: <span class="status running" id="gateway-status">RUNNING</span>
+                <span style="color: #8b949e; margin-left: 20px;">Port 3000</span>
+            </div>
+            <div style="margin-top: 10px;">
+                Matcher: <span class="status running" id="matcher-status">RUNNING</span>
+                <span style="color: #8b949e; margin-left: 20px;">OrderBook Active</span>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h2>Live Statistics</h2>
+            <div class="stats">
+                <div class="stat-box">
+                    <div class="stat-value" id="total-bids">0</div>
+                    <div class="stat-label">Total Bids</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="total-matches">0</div>
+                    <div class="stat-label">Matches Created</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="avg-price">0µs</div>
+                    <div class="stat-label">Avg Price</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h2>Matcher Activity</h2>
+            <div class="log-container" id="matcher-logs">
+                <div class="log-entry">Waiting for matches...</div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h2>Gateway Logs</h2>
+            <div class="log-container" id="gateway-logs">
+                <div class="log-entry">Gateway listening on port 3000...</div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h2>Actions</h2>
+            <div style="margin-bottom: 10px;">
+                <label style="color: #00ff41; margin-right: 10px;">Bid Price (µs):</label>
+                <input type="number" id="bid-price" value="50"
+                    style="padding: 5px; border-radius: 4px; border: 1px solid #00ff41; background: #0d1117; color: #00ff41; width: 80px;">
+            </div>
+            <button onclick="submitTestBid()">Submit Test Bid</button>
+            <button onclick="connectWallet()" id="connect-wallet-btn" style="background: #9945FF; color: white;">Connect
+                Phantom 👻</button>
+            <button onclick="clearLogs()">Clear Logs</button>
+        </div>
+    </div>
+
+    <script>
+        // Global Error Handler - Display on screen
+        window.onerror = function (msg, url, lineNo, columnNo, error) {
+            const container = document.getElementById('gateway-logs');
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.style.color = '#ff4444';
+            entry.textContent = `CRITICAL ERROR: ${msg} (${lineNo}:${columnNo})`;
+            if (container) container.insertBefore(entry, container.firstChild);
+            return false;
+        };
+
+        let totalBids = 0;
+        let totalMatches = 0;
+        let prices = [];
+        let walletAddress = null;
+
+        function addMatcherLog(message, type = 'info') {
+            const container = document.getElementById('matcher-logs');
+            if (!container) return;
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            container.insertBefore(entry, container.firstChild);
+
+            while (container.children.length > 50) {
+                container.removeChild(container.lastChild);
+            }
+        }
+
+        function addGatewayLog(message) {
+            const container = document.getElementById('gateway-logs');
+            if (!container) return;
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            container.insertBefore(entry, container.firstChild);
+
+            while (container.children.length > 50) {
+                container.removeChild(container.lastChild);
+            }
+        }
+
+        function updateStats() {
+            const bidsEl = document.getElementById('total-bids');
+            const matchesEl = document.getElementById('total-matches');
+            const priceEl = document.getElementById('avg-price');
+
+            if (bidsEl) bidsEl.textContent = totalBids;
+            if (matchesEl) matchesEl.textContent = totalMatches;
+
+            if (priceEl) {
+                const avgPrice = prices.length > 0
+                    ? Math.round(prices.reduce((a, b) => a + b, 0) / prices.length)
+                    : 0;
+                priceEl.textContent = avgPrice + 'µs';
+            }
+        }
+
+        // INIT
+        addGatewayLog('Initialising Monitor...');
+
+        // Connect to Live Gateway Monitor Stream
+        const wsUrl = 'ws://localhost:3000/ws/monitor';
+        addGatewayLog(`Attempting WebSocket connection to: ${wsUrl}`);
+
+        let ws;
+        try {
+            ws = new WebSocket(wsUrl);
+        } catch (e) {
+            addGatewayLog(`WS Creation Error: ${e.message}`);
+        }
+
+        if (ws) {
+            ws.onopen = () => {
+                addGatewayLog('WebSocket Connected! 🟢');
+                const statusEl = document.getElementById('gateway-status');
+                if (statusEl) statusEl.textContent = "CONNECTED";
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+
+                    if (data.type === 'status') {
+                        addGatewayLog(data.msg);
+                    } else if (data.type === 'bid') {
+                        totalBids++;
+                        addMatcherLog(`New Bid: ${data.payload.max_price_per_second}µs (Score: ${data.payload.required_attention_score})`, 'bid');
+                        updateStats();
+                    } else if (data.type === 'match') {
+                        totalMatches++;
+                        prices.push(data.payload.maxPrice);
+                        addMatcherLog(`MATCH! User ${data.payload.userId} sold to ${data.payload.bidId} @ ${data.payload.maxPrice}µs`, 'match');
+                        updateStats();
+                    }
+                } catch (e) {
+                    console.error('Error parsing WS message', e);
+                    addGatewayLog('Error parsing WS message');
+                }
+            };
+
+            ws.onerror = (error) => {
+                console.error('WebSocket Error', error);
+                addGatewayLog('WebSocket Error Occurred (Check Console)');
+            };
+
+            ws.onclose = (event) => {
+                addGatewayLog(`Disconnected from Gateway 🔴 (Code: ${event.code})`);
+                const statusEl = document.getElementById('gateway-status');
+                if (statusEl) {
+                    statusEl.textContent = "DISCONNECTED";
+                    statusEl.className = "status stopped";
+                }
+            };
+        }
+
+        async function submitTestBid() {
+            const priceInput = document.getElementById('bid-price');
+            const price = priceInput ? parseInt(priceInput.value) : 100;
+
+            addGatewayLog(`Submitting test bid @ ${price}µs...`);
+            try {
+                const response = await fetch('http://localhost:3000/v1/bids', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        max_price_per_second: price,
+                        required_attention_score: 0.5
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                addGatewayLog(`Bid submitted successfully: ${data.bid_id}`);
+            } catch (e) {
+                addGatewayLog(`Error submitting bid: ${e.message}`);
+                console.error(e);
+            }
+        }
+
+        async function connectWallet() {
+            // Check if Phantom is available
+            const isPhantomInstalled = window.solana && window.solana.isPhantom;
+
+            if (isPhantomInstalled) {
+                try {
+                    addGatewayLog('Connecting to Phantom...');
+                    const resp = await window.solana.connect();
+                    walletAddress = resp.publicKey.toString();
+                    addGatewayLog(`Wallet Connected: ${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`);
+
+                    const btn = document.getElementById('connect-wallet-btn');
+                    if (btn) {
+                        btn.textContent = `Connected: ${walletAddress.slice(0, 4)}...`;
+                        btn.style.background = '#00ff41';
+                        btn.style.color = '#0a0e27';
+                    }
+                } catch (err) {
+                    addGatewayLog(`Wallet Connection Failed: ${err.message}`);
+                    console.error(err);
+                }
+            } else {
+                addGatewayLog('Phantom Wallet not detected!');
+                window.open('https://phantom.app/', '_blank');
+            }
+        }
+
+        function clearLogs() {
+            const mLogs = document.getElementById('matcher-logs');
+            const gLogs = document.getElementById('gateway-logs');
+            if (mLogs) mLogs.innerHTML = '<div class="log-entry">Logs cleared...</div>';
+            if (gLogs) gLogs.innerHTML = '<div class="log-entry">Logs cleared...</div>';
+        }
+    </script>
+</body>
+
+</html>
