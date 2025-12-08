@@ -13,8 +13,12 @@ export const PriceFloorSetter: React.FC<PriceFloorSetterProps> = ({ duration, se
     const handleSubmit = async () => {
         setLoading(true);
         try {
-            await api.startSession('mock-user-addr-' + Date.now(), price);
+            // Mock pubkey for demo (Privy crashing)
+            const pubkey = 'test-user-consistent';
+            await api.startSession(pubkey, Math.floor(price * 1_000_000));
+
             // Visual feedback handled by WS stream
+            alert("Ask Posted to Order Book!");
         } catch (e) {
             console.error(e);
             alert('Failed to post ask');

@@ -37,6 +37,7 @@ export const PlaceBid: React.FC<PlaceBidProps> = ({ duration, setDuration }) => 
                 // @ts-ignore
                 validation_question: question,
             });
+            console.log("Bid Submitted Successfully");
             alert('Bid Placed Successfully!');
         } catch (e) {
             console.error(e);

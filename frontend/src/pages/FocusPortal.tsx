@@ -12,13 +12,15 @@ export default function FocusPortal() {
     const [ws, setWs] = useState<WebSocket | null>(null);
     const [balance, setBalance] = useState(0.0000);
     // Web 2.5 State
-    const [askPrice, setAskPrice] = useState(0.05);
-    const [selectedDuration, setSelectedDuration] = useState(30);
     const [countdown, setCountdown] = useState(30);
+    const [sessionToken, setSessionToken] = useState<string | null>(null);
+
+    // Mock Auth for Verification
+    const user = { wallet: { address: 'test-user-wallet-123' } };
 
     // WebSocket Connection
     useEffect(() => {
-        if (!permissionGranted) return;
+        if (!permissionGranted || state === 'LOBBY' || !sessionToken) return;
 
         // Connect only when we have permission (User is "Online")
         const socket = new WebSocket('ws://localhost:3000/ws/events');
@@ -27,8 +29,8 @@ export default function FocusPortal() {
             console.log('Connected to Focus Grid');
             setState('SCANNING');
             setStatusText("Scanning for Neural Tasks...");
-            // Auth
-            socket.send(JSON.stringify({ type: 'AUTH', token: 'mock-user-session' }));
+            // Auth with Real Token
+            socket.send(JSON.stringify({ type: 'AUTH', token: sessionToken }));
         };
 
         socket.onmessage = (event) => {
@@ -53,7 +55,7 @@ export default function FocusPortal() {
         return () => {
             socket.close();
         };
-    }, [permissionGranted]);
+    }, [permissionGranted, sessionToken, state]);
 
 
     // Verification Loop (Simulation)
@@ -100,7 +102,6 @@ export default function FocusPortal() {
             setBalance(b => b + (match.price * match.duration)); // Full reward
         }
     };
-
     // --- RENDER ---
 
     return (
@@ -142,42 +143,12 @@ export default function FocusPortal() {
                             <span className="text-xs text-[var(--text-secondary)]">(Required for verification)</span>
                         </div>
                     ) : (
-                        <div className="flex flex-col gap-4 text-left mt-6">
-                            {/* Ask Price Input */}
-                            <div>
-                                <label className="block text-secondary text-[10px] uppercase mb-1">Set Ask Price ($/s)</label>
-                                <input
-                                    type="number"
-                                    step="0.01"
-                                    value={askPrice}
-                                    onChange={(e) => setAskPrice(Number(e.target.value))}
-                                    className="w-full bg-black/50 border border-green-500/30 rounded p-2 text-green-400 font-mono text-center"
-                                />
-                            </div>
-
-                            {/* Duration Selection */}
-                            <div>
-                                <label className="block text-secondary text-[10px] uppercase mb-1">Order Book (Duration)</label>
-                                <div className="flex gap-2">
-                                    {[10, 30, 60].map(d => (
-                                        <button
-                                            key={d}
-                                            onClick={() => setSelectedDuration(d)}
-                                            className={`flex-1 py-2 text-xs border rounded transition-all ${selectedDuration === d ? 'bg-green-500 text-black border-green-500' : 'border-gray-700 text-gray-500 hover:border-gray-500'}`}
-                                        >
-                                            {d}s
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-
-                            <button
-                                onClick={() => setState('SCANNING')}
-                                className="w-full bg-green-500 text-black font-bold py-3 rounded mt-2 hover:bg-green-400 shadow-green-glow"
-                            >
-                                ENTER MARKET
-                            </button>
-                        </div>
+                        <button
+                            onClick={() => setState('SCANNING')}
+                            className="w-full bg-green-500 text-black font-bold py-3 rounded mt-6 hover:bg-green-400 shadow-green-glow"
+                        >
+                            ACTIVATE NEURAL LINK
+                        </button>
                     )}
                 </div>
             )}

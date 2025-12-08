@@ -2,7 +2,7 @@ use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
 use anchor_spl::associated_token::AssociatedToken;
 
-declare_id!("FmbE2GnWNb89qsQWqLgviYAALqJGLBqNyVJrGF547GSms");
+declare_id!("ASCVNHy64hK2tKbHKh5cvbuuyCki8z7DoDjviYsWasjK9");
 
 #[program]
 pub mod attention_marketplace {
