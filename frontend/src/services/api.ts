@@ -2,7 +2,7 @@ const API_URL = 'http://localhost:3000/v1';
 
 export const api = {
     async submitBid(bid: any) {
-        const response = await fetch(`${API_URL}/bids`, {
+        const response = await fetch(`${API_URL}/agents/bids`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(bid)

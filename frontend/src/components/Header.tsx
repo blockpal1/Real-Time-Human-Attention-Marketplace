@@ -53,7 +53,7 @@ export const Header: React.FC<HeaderProps> = ({ setView, theme, setTheme }) => {
                 {authenticated && user ? (
                     <div className="flex items-center gap-3">
                         <div className="px-3 py-1 rounded-full bg-green-500/10 border border-green-500 text-xs text-green-400 font-mono">
-                            {user.email ? user.email.address : user.wallet ? `${user.wallet.address.slice(0, 4)}...${user.wallet.address.slice(-4)}` : 'User'}
+                            {user.email ? user.email.address : 'User'}
                         </div>
                         <button
                             onClick={logout}

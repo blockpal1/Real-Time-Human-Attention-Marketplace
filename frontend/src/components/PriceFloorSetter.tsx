@@ -7,17 +7,15 @@ interface PriceFloorSetterProps {
 }
 
 export const PriceFloorSetter: React.FC<PriceFloorSetterProps> = ({ duration, setDuration }) => {
-    const [price, setPrice] = useState(50);
+    const [price, setPrice] = useState(0.0001); // USDC per second (matching Bid side)
     const [loading, setLoading] = useState(false);
 
     const handleSubmit = async () => {
         setLoading(true);
         try {
-            // Mock pubkey for demo (Privy crashing)
+            // Mock pubkey for demo
             const pubkey = 'test-user-consistent';
             await api.startSession(pubkey, Math.floor(price * 1_000_000));
-
-            // Visual feedback handled by WS stream
             alert("Ask Posted to Order Book!");
         } catch (e) {
             console.error(e);
@@ -28,81 +26,68 @@ export const PriceFloorSetter: React.FC<PriceFloorSetterProps> = ({ duration, se
     };
 
     return (
-        <div style={{
-            background: '#1a1f3a',
-            padding: '20px',
-            borderRadius: '8px',
-            marginBottom: '20px',
-            border: '1px solid #00AAFF'
-        }}>
-            <h3 style={{ margin: '0 0 10px 0', color: '#00AAFF' }}>Your Ask Price</h3>
+        <div className="flex flex-col gap-4">
+            {/* Ask Settings Header */}
+            <div className="glass-panel p-4 rounded flex flex-col gap-4">
+                <div className="text-secondary text-xs uppercase tracking-wide font-bold border-b border-gray-800 pb-2 mb-2">Ask Settings</div>
 
-            {/* Duration Selector for Humans */}
-            <div className="mb-4">
-                <label style={{ display: 'block', color: '#888', marginBottom: '5px', fontSize: '0.8em', textTransform: 'uppercase' }}>Session Duration</label>
-                <div style={{ display: 'flex', gap: '5px' }}>
-                    {[10, 30, 60].map(s => (
-                        <button
-                            key={s}
-                            onClick={() => setDuration(s)}
-                            style={{
-                                flex: 1,
-                                padding: '5px',
-                                border: '1px solid',
-                                borderColor: duration === s ? '#00AAFF' : '#333',
-                                background: duration === s ? 'rgba(0, 170, 255, 0.1)' : 'transparent',
-                                color: duration === s ? '#00AAFF' : '#888',
-                                borderRadius: '4px',
-                                fontSize: '0.8em',
-                                cursor: 'pointer'
-                            }}
-                        >
-                            {s}s
-                        </button>
-                    ))}
+                {/* Duration Selector */}
+                <div>
+                    <label className="block text-secondary text-[10px] uppercase mb-1">Select Order Book (Duration)</label>
+                    <div className="flex gap-2">
+                        {[10, 30, 60].map(s => (
+                            <button
+                                key={s}
+                                onClick={() => setDuration(s)}
+                                className={`flex-1 py-2 text-xs border rounded transition-all font-mono ${duration === s
+                                    ? 'border-green-500 bg-green-500/10 text-green-400 shadow-[0_0_10px_rgba(0,255,65,0.2)]'
+                                    : 'border-gray-700 hover:border-gray-600 text-gray-400'
+                                    }`}
+                            >
+                                {s}s
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Ask Price Input */}
+                <div>
+                    <label className="block text-secondary text-[10px] uppercase mb-1">
+                        Ask Price <span className="text-cyan-900">(USDC/s)</span>
+                    </label>
+                    <div className="relative flex items-center">
+                        <input
+                            type="number"
+                            step="0.0001"
+                            min="0.0001"
+                            value={price}
+                            onChange={(e) => setPrice(Number(e.target.value))}
+                            className="w-full bg-dark border border-gray-700 rounded p-2 text-sm text-center font-mono text-cyan-400 transition-colors focus:border-cyan-500"
+                        />
+                    </div>
                 </div>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px' }}>
-                <input
-                    type="range"
-                    min="1"
-                    max="500"
-                    value={price}
-                    onChange={(e: any) => setPrice(Number(e.target.value))}
-                    style={{ flex: 1 }}
-                />
-                <div style={{
-                    fontSize: '1.2em',
-                    fontWeight: 'bold',
-                    color: 'white',
-                    minWidth: '100px'
-                }}>
-                    {(price / 1000000).toFixed(4)} USDC/s
-                </div>
-            </div>
-
+            {/* Submit Button */}
             <button
                 onClick={handleSubmit}
                 disabled={loading}
-                style={{
-                    width: '100%',
-                    background: '#00AAFF',
-                    color: '#0a0e27',
-                    border: 'none',
-                    padding: '8px',
-                    borderRadius: '4px',
-                    fontWeight: 'bold',
-                    cursor: loading ? 'not-allowed' : 'pointer',
-                    opacity: loading ? 0.7 : 1
-                }}
+                className={`w-full py-3 rounded font-bold uppercase tracking-wider text-sm transition-all
+                    ${loading
+                        ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                        : 'bg-cyan-500 hover:bg-cyan-400 text-black shadow-[0_0_20px_rgba(0,170,255,0.3)] hover:shadow-[0_0_30px_rgba(0,170,255,0.5)]'
+                    }`}
             >
-                {loading ? 'Posting...' : 'Post Ask to Order Book'}
+                {loading ? 'Posting...' : 'Place Ask'}
             </button>
 
-            <div style={{ fontSize: '0.8em', color: '#888', marginTop: '10px' }}>
-                Minimum price per second
-            </div>
+            {/* Accept Highest Bid Button */}
+            <button
+                onClick={() => alert('Feature coming soon: Auto-match with best bid')}
+                className="w-full py-2 rounded border border-gray-700 text-gray-400 text-xs hover:border-green-500 hover:text-green-400 transition-colors uppercase tracking-widest"
+            >
+                Accept Highest Bid
+            </button>
         </div>
     );
 };
