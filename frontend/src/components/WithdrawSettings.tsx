@@ -30,8 +30,11 @@ export const WithdrawSettings: React.FC = () => {
     };
 
     return (
-        <div className="p-4 bg-gray-800 rounded-lg text-white space-y-4">
-            <h2 className="text-xl font-bold">Wallet & Liquidity</h2>
+        <div className="p-6 bg-[var(--bg-glass)] border border-[var(--border-neon)] rounded-xl text-white space-y-6 shadow-[var(--shadow-neon)] backdrop-blur-md relative overflow-hidden">
+            {/* Scanline Effect */}
+            <div className="absolute top-0 left-0 w-full h-[2px] bg-[var(--primary-neon)] shadow-[0_0_10px_var(--primary-neon)] opacity-30 pointer-events-none animate-[scan-line_4s_linear_infinite]"></div>
+
+            <h2 className="text-xl font-bold tracking-wider uppercase text-[var(--primary-neon)]">Wallet & Liquidity</h2>
 
             <div className="flex flex-col space-y-2">
                 <div className="text-sm text-gray-400">Connected Embedded Wallet:</div>
@@ -40,7 +43,7 @@ export const WithdrawSettings: React.FC = () => {
                 </div>
             </div>
 
-            <div className="pt-4 border-t border-gray-700">
+            <div className="pt-4 border-t border-[var(--border-color)]">
                 <h3 className="font-semibold mb-2">Link External Wallet</h3>
                 <p className="text-sm text-gray-400 mb-3">
                     Connect a Phantom wallet to withdraw earnings or add liquidity.
@@ -53,7 +56,7 @@ export const WithdrawSettings: React.FC = () => {
                 </button>
             </div>
 
-            <div className="pt-4 border-t border-gray-700">
+            <div className="pt-4 border-t border-[var(--border-color)]">
                 <h3 className="font-semibold mb-2">Withdraw Earnings</h3>
                 <p className="text-sm text-gray-400 mb-3">
                     Gasless withdrawal powered by Fuel Tank.

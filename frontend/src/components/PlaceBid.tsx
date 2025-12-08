@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
 
 interface PlaceBidProps {
@@ -10,7 +10,7 @@ export const PlaceBid: React.FC<PlaceBidProps> = ({ duration, setDuration }) => 
     // Campaign Logic
     const [price, setPrice] = useState(0.0001); // USDC per second
     const [targetUsers, setTargetUsers] = useState(100);
-    const [category] = useState<'meme' | 'doc' | 'video'>('meme');
+    const [category, setCategory] = useState<'meme' | 'doc' | 'video'>('meme');
     const [question, setQuestion] = useState('');
     const [file, setFile] = useState<File | null>(null);
     const [loading, setLoading] = useState(false);
@@ -77,7 +77,7 @@ export const PlaceBid: React.FC<PlaceBidProps> = ({ duration, setDuration }) => 
 
                 {/* Duration Bucket */}
                 <div>
-                    <label className="block text-secondary text-[10px] uppercase mb-1">Duration per User</label>
+                    <label className="block text-secondary text-[10px] uppercase mb-1">Select Order Book (Duration)</label>
                     <div className="flex gap-2">
                         {[10, 30, 60].map(s => (
                             <button
@@ -98,7 +98,7 @@ export const PlaceBid: React.FC<PlaceBidProps> = ({ duration, setDuration }) => 
                     {/* Target Users */}
                     <div>
                         <label className="block text-secondary text-[10px] uppercase mb-1">
-                            Target Humans <span className="text-gray-600">(Count)</span>
+                            Order Size <span className="text-gray-600">(Target Humans)</span>
                         </label>
                         <div className="relative flex items-center">
                             <input

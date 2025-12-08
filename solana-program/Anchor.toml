@@ -5,7 +5,7 @@ seeds = false
 skip-lint = false
 
 [programs.localnet]
-attention_marketplace = "Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS"
+attention_marketplace = "FmbE2GnWNb89qsQWqLgviYAALqJGLBqNyVJrGF547GSms"
 
 [registry]
 url = "https://api.apr.dev"

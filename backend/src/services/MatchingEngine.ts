@@ -94,13 +94,15 @@ export class MatchingEngine {
 
         // Notify Extension via Redis PubSub
         if (redis.isOpen) {
-            await redis.publish('match_events', JSON.stringify({
-                type: 'MATCH_FOUND',
+            await redis.publish('marketplace_events', JSON.stringify({
+                type: 'MATCH_CREATED',
                 sessionId: session.id,
+                matchId: matchRecord.id, // Direct property for WS Manager
+                bidId: bid.id,
+                targetUrl: bid.targetUrl,
+                price: bid.maxPricePerSecond / 1_000_000,
                 payload: {
-                    bidId: bid.id,
-                    matchId: matchRecord.id,
-                    price: bid.maxPricePerSecond / 1_000_000, // Convert to USDC for frontend
+                    price: bid.maxPricePerSecond / 1_000_000,
                     duration: bid.durationPerUser,
                     category: bid.targetUrl ? 'Ad' : 'Campaign',
                     content_url: bid.targetUrl || 'default.mp4',

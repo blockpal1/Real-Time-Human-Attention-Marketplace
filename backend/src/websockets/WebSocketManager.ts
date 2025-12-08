@@ -91,6 +91,15 @@ export class WebSocketManager {
                 // await redis.set(`session:${ws.sessionId}:last_engagement`, JSON.stringify(msg.data), { EX: 5 });
             }
         }
+        else if (msg.type === 'ACCEPT_MATCH') {
+            console.log(`Match Accepted: ${msg.matchId} by Session ${ws.sessionId}`);
+            // In a real system, notify Matching Engine to start session tracking
+        }
+        else if (msg.type === 'SUBMIT_QA') {
+            console.log(`QA Submitted: ${msg.answer} for Match ${msg.matchId}`);
+            // Mock Settlement Log
+            console.log('SETTLEMENT EXECUTED: Funds released to user.');
+        }
     }
 
     private async subscribeToRedis() {

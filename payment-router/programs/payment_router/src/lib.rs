@@ -39,6 +39,39 @@ pub mod payment_router {
         Ok(())
     }
 
+    pub fn withdraw_escrow(ctx: Context<WithdrawEscrow>, amount: u64) -> Result<()> {
+        let escrow = &mut ctx.accounts.escrow_account;
+        require!(escrow.balance >= amount, ErrorCode::InsufficientFunds);
+
+        // Seeds for signing
+        let agent_key = ctx.accounts.agent.key();
+        let bump = escrow.bump;
+        let seeds = &[
+            b"escrow",
+            agent_key.as_ref(),
+            &[bump],
+        ];
+        let signer = &[&seeds[..]];
+
+        let transfer_instruction = Transfer {
+            from: ctx.accounts.vault.to_account_info(),
+            to: ctx.accounts.agent_token_account.to_account_info(),
+            authority: escrow.to_account_info(),
+        };
+
+        let cpi_ctx = CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            transfer_instruction,
+            signer,
+        );
+
+        token::transfer(cpi_ctx, amount)?;
+
+        escrow.balance -= amount;
+
+        Ok(())
+    }
+
     pub fn close_settlement(
         ctx: Context<CloseSettlement>,
         verified_seconds: u64,
@@ -127,6 +160,23 @@ pub struct DepositEscrow<'info> {
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
     pub rent: Sysvar<'info, Rent>,
+}
+
+#[derive(Accounts)]
+pub struct WithdrawEscrow<'info> {
+    #[account(mut)]
+    pub agent: Signer<'info>,
+    #[account(mut)]
+    pub agent_token_account: Account<'info, TokenAccount>,
+    #[account(
+        mut,
+        seeds = [b"escrow", agent.key().as_ref()],
+        bump = escrow_account.bump
+    )]
+    pub escrow_account: Account<'info, EscrowAccount>,
+    #[account(mut)]
+    pub vault: Account<'info, TokenAccount>,
+    pub token_program: Program<'info, Token>,
 }
 
 #[derive(Accounts)]

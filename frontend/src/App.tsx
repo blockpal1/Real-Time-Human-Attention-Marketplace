@@ -12,6 +12,7 @@ import FocusPortal from './pages/FocusPortal';
 function App() {
     const [view, setView] = React.useState<'agent' | 'human'>('agent');
     const [duration, setDuration] = React.useState(10); // Restore duration state
+    const [theme, setTheme] = React.useState<'quantum' | 'classic'>('quantum');
 
     React.useEffect(() => {
         wsClient.connect();
@@ -19,7 +20,7 @@ function App() {
 
     if (view === 'human') {
         return (
-            <div className="h-screen bg-black">
+            <div className={`h-screen bg-black ${theme}`}>
                 {/* Minimal Header for Focus Mode */}
                 <div className="absolute top-0 left-0 p-4 z-50">
                     <button onClick={() => setView('agent')} className="text-gray-500 hover:text-white text-xs uppercase tracking-widest border border-gray-800 px-3 py-1 rounded bg-black/50 backdrop-blur">
@@ -32,8 +33,8 @@ function App() {
     }
 
     return (
-        <div className="flex flex-col h-screen text-main bg-dark overflow-hidden">
-            <Header setView={setView} />
+        <div className={`flex flex-col h-screen text-main bg-dark overflow-hidden ${theme}`}>
+            <Header setView={setView} theme={theme} setTheme={setTheme} />
 
             <main className="flex flex-1 w-full overflow-hidden">
                 {/* LEFT COLUMN: Campaign Logic */}

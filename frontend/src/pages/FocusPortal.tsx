@@ -11,6 +11,10 @@ export default function FocusPortal() {
     const [match, setMatch] = useState<any>(null);
     const [ws, setWs] = useState<WebSocket | null>(null);
     const [balance, setBalance] = useState(0.0000);
+    // Web 2.5 State
+    const [askPrice, setAskPrice] = useState(0.05);
+    const [selectedDuration, setSelectedDuration] = useState(30);
+    const [countdown, setCountdown] = useState(30);
 
     // WebSocket Connection
     useEffect(() => {
@@ -31,6 +35,7 @@ export default function FocusPortal() {
             const msg = JSON.parse(event.data);
             if (msg.type === 'MATCH_FOUND') {
                 setMatch(msg.payload);
+                setCountdown(29); // Start countdown
                 setState('OFFER');
             }
         };
@@ -66,6 +71,18 @@ export default function FocusPortal() {
         }
     }, [state, ws, isAttentive]);
 
+    // Handshake Timer
+    useEffect(() => {
+        if (state !== 'OFFER') return;
+        if (countdown <= 0) {
+            // Timeout - Auto Reject
+            setMatch(null);
+            setState('SCANNING'); // Or Lobby
+            return;
+        }
+        const timer = setInterval(() => setCountdown(c => c - 1), 1000);
+        return () => clearInterval(timer);
+    }, [state, countdown]);
 
     // Handlers
     const handleAccept = () => {
@@ -87,10 +104,10 @@ export default function FocusPortal() {
     // --- RENDER ---
 
     return (
-        <div className="min-h-screen bg-black text-white font-mono flex flex-col items-center justify-center p-4 relative overflow-hidden">
+        <div className="min-h-screen bg-[var(--bg-dark)] text-[var(--text-main)] font-mono flex flex-col items-center justify-center p-4 relative overflow-hidden">
 
             {/* Background Grid */}
-            <div className="absolute inset-0 bg-grid pointer-events-none"></div>
+            <div className="absolute inset-0 bg-grid opacity-20 pointer-events-none"></div>
 
             {/* Hidden Camera Feed (Used for AI) */}
             <video
@@ -113,20 +130,53 @@ export default function FocusPortal() {
 
             {/* --- LOBBY STATE --- */}
             {state === 'LOBBY' && (
-                <div className="bg-black-alt border border-green-900/50 p-8 rounded-lg max-w-md w-full text-center shadow-green-glow">
-                    <h1 className="text-3xl font-bold mb-2 tracking-tighter text-green-500 shadow-green-glow">
+                <div className="bg-[var(--bg-glass)] border border-[var(--border-neon)] p-8 rounded-lg max-w-md w-full text-center shadow-[var(--shadow-neon)] backdrop-blur-md">
+                    <h1 className="text-3xl font-bold mb-2 tracking-tighter text-[var(--primary-neon)] shadow-green-glow animate-pulse">
                         FOCUS PORTAL
                     </h1>
-                    <p className="text-gray-500 mb-8 text-sm">Monetize your attention securely.</p>
+                    <p className="text-[var(--text-secondary)] mb-8 text-sm">Monetize your attention securely.</p>
 
                     {!permissionGranted ? (
-                        <div className="text-yellow-500 text-sm mb-4">
+                        <div className="text-yellow-500 text-sm mb-4 animate-bounce">
                             Waiting for Camera Access...<br />
-                            <span className="text-xs text-gray-600">(Required for verification)</span>
+                            <span className="text-xs text-[var(--text-secondary)]">(Required for verification)</span>
                         </div>
                     ) : (
-                        <div className="text-green-500 text-sm mb-4">
-                            Biometrics Calibrated.
+                        <div className="flex flex-col gap-4 text-left mt-6">
+                            {/* Ask Price Input */}
+                            <div>
+                                <label className="block text-secondary text-[10px] uppercase mb-1">Set Ask Price ($/s)</label>
+                                <input
+                                    type="number"
+                                    step="0.01"
+                                    value={askPrice}
+                                    onChange={(e) => setAskPrice(Number(e.target.value))}
+                                    className="w-full bg-black/50 border border-green-500/30 rounded p-2 text-green-400 font-mono text-center"
+                                />
+                            </div>
+
+                            {/* Duration Selection */}
+                            <div>
+                                <label className="block text-secondary text-[10px] uppercase mb-1">Order Book (Duration)</label>
+                                <div className="flex gap-2">
+                                    {[10, 30, 60].map(d => (
+                                        <button
+                                            key={d}
+                                            onClick={() => setSelectedDuration(d)}
+                                            className={`flex-1 py-2 text-xs border rounded transition-all ${selectedDuration === d ? 'bg-green-500 text-black border-green-500' : 'border-gray-700 text-gray-500 hover:border-gray-500'}`}
+                                        >
+                                            {d}s
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <button
+                                onClick={() => setState('SCANNING')}
+                                className="w-full bg-green-500 text-black font-bold py-3 rounded mt-2 hover:bg-green-400 shadow-green-glow"
+                            >
+                                ENTER MARKET
+                            </button>
                         </div>
                     )}
                 </div>
@@ -153,14 +203,15 @@ export default function FocusPortal() {
             {/* --- OFFER STATE --- */}
             {state === 'OFFER' && match && (
                 <div className="bg-[#0a0a0a] border border-[#00FF41] p-8 rounded-xl max-w-lg w-full relative overflow-hidden">
-                    <div className="absolute top-0 left-0 w-full h-1 bg-[#00FF41] animate-[width_30s_linear_reverse]"></div>
+                    <div className="absolute top-0 left-0 h-1 bg-[#00FF41] transition-all duration-1000 ease-linear" style={{ width: `${(countdown / 30) * 100}%` }}></div>
 
-                    <h2 className="text-xl text-white mb-1">Incoming Signal</h2>
-                    <h3 className="text-2xl text-[#00FF41] font-bold mb-6">{match.topic || 'Unknown Content'}</h3>
+                    <h2 className="text-xl text-white mb-1">Match Found!</h2>
+                    <h3 className="text-2xl text-[#00FF41] font-bold mb-2">{match.topic || 'Unknown Content'}</h3>
+                    <div className="text-red-500 font-mono text-sm mb-6 animate-pulse">Expires in {countdown}s</div>
 
                     <div className="grid grid-cols-2 gap-4 mb-8">
                         <div className="bg-[#111] p-3 rounded">
-                            <div className="text-gray-500 text-xs">REWARD</div>
+                            <div className="text-gray-500 text-xs">EARNINGS</div>
                             <div className="text-xl font-mono">${(match.price * match.duration).toFixed(4)}</div>
                         </div>
                         <div className="bg-[#111] p-3 rounded">
@@ -173,13 +224,13 @@ export default function FocusPortal() {
                         onClick={handleAccept}
                         className="w-full bg-[#00FF41] text-black font-bold py-4 rounded hover:bg-[#00cc33] transition-colors tracking-widest shadow-[0_0_20px_rgba(0,255,65,0.4)]"
                     >
-                        INITIATE LINK
+                        PAY ATTENTIUM
                     </button>
                     <button
                         onClick={() => setState('SCANNING')}
                         className="w-full mt-3 bg-transparent text-gray-500 text-xs hover:text-white transition-colors"
                     >
-                        IGNORE SIGNAL
+                        REJECT MATCH
                     </button>
                 </div>
             )}

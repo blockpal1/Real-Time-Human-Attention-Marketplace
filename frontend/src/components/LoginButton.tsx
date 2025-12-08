@@ -11,9 +11,9 @@ export const LoginButton: React.FC = () => {
     return (
         <button
             onClick={login}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+            className="px-4 py-2 bg-purple-600 border border-purple-500 hover:bg-purple-500 text-white text-xs font-bold uppercase tracking-wider rounded transition-all hover:shadow-[0_0_15px_rgba(147,51,234,0.5)]"
         >
-            Log in
+            Universal Login
         </button>
     );
 };
