@@ -14,19 +14,12 @@ interface MatchNotification {
     topic?: string;
 }
 
-interface MatchHistoryItem {
-    price: number;
-    duration: number;
-    time: string;
-}
-
 function App() {
     const [view, setView] = React.useState<'agent' | 'human'>('agent');
     const [duration, setDuration] = React.useState(10);
     const [theme, setTheme] = React.useState<'quantum' | 'classic'>('quantum');
     const [match, setMatch] = React.useState<MatchNotification | null>(null);
     const [liveFeed, setLiveFeed] = React.useState<string[]>([]);
-    const [matchHistory, setMatchHistory] = React.useState<MatchHistoryItem[]>([]);
 
     React.useEffect(() => {
         wsClient.connect();
@@ -34,24 +27,15 @@ function App() {
         // Subscribe to match events
         const unsubMatch = wsClient.subscribe('MATCH_FOUND', (data: any) => {
             console.log('MATCH_FOUND received:', data);
-            const price = data.price || 0;
-            const dur = data.duration || 30;
 
             setMatch({
                 matchId: data.matchId || data.id,
-                price: price,
-                duration: dur,
+                price: data.price || 0,
+                duration: data.duration || 30,
                 topic: data.topic || 'Ad Campaign'
             });
 
-            // Add to history
-            setMatchHistory(prev => [{
-                price: price,
-                duration: dur,
-                time: new Date().toLocaleTimeString()
-            }, ...prev].slice(0, 20));
-
-            setLiveFeed(prev => [`[MATCH] ${data.matchId} @ $${price.toFixed(4)}/s`, ...prev].slice(0, 10));
+            setLiveFeed(prev => [`[MATCH] ${data.matchId} @ $${(data.price || 0).toFixed(4)}/s`, ...prev].slice(0, 10));
         });
 
         // Subscribe to bid events for live feed
@@ -170,38 +154,12 @@ function App() {
                         </div>
                     </div>
 
-                    {/* Order Book - Limited Height */}
-                    <div className="w-full max-w-2xl min-w-[350px] flex-shrink-0" style={{ maxHeight: '400px' }}>
+                    {/* Order Book */}
+                    <div className="flex-1 flex flex-col overflow-hidden w-full max-w-2xl min-w-[350px]">
                         <h2 className="text-sm font-bold text-white uppercase tracking-wider mb-2">
                             {`<${duration} Second Order Book`}
                         </h2>
-                        <div className="h-[350px]">
-                            <OrderBook filterDuration={duration} />
-                        </div>
-                    </div>
-
-                    {/* Recent Matches History */}
-                    <div className="w-full max-w-2xl min-w-[350px] mt-4 flex-shrink-0">
-                        <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">Recent Matches</h2>
-                        <div className="glass-panel rounded p-4 max-h-[200px] overflow-y-auto">
-                            {matchHistory.length === 0 ? (
-                                <div className="text-center text-gray-600 text-sm py-4">No matches yet</div>
-                            ) : (
-                                <div className="space-y-2">
-                                    {matchHistory.map((m, i) => (
-                                        <div key={i} className="flex justify-between items-center text-sm font-mono border-b border-gray-800 pb-2">
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-green-400">${m.price.toFixed(4)}/s</span>
-                                                <span className="text-gray-500">×</span>
-                                                <span className="text-white">{m.duration}s</span>
-                                            </div>
-                                            <div className="text-green-400 font-bold">${(m.price * m.duration).toFixed(4)}</div>
-                                            <div className="text-gray-600 text-xs">{m.time}</div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
+                        <OrderBook filterDuration={duration} />
                     </div>
                 </div>
 

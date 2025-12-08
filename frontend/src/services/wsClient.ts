@@ -60,4 +60,4 @@ class WSClient {
     }
 }
 
-export const wsClient = new WSClient('ws://localhost:3000/ws/monitor');
+export const wsClient = new WSClient('ws://localhost:3000/v1/ws/events');
