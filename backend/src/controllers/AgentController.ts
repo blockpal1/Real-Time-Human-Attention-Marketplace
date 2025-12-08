@@ -81,3 +81,20 @@ export const createBid = async (req: Request, res: Response) => {
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
+
+export const getActiveBids = async (req: Request, res: Response) => {
+    try {
+        const bids = await prisma.bid.findMany({
+            where: {
+                active: true,
+                targetQuantity: { gt: 0 },
+                expiry: { gt: new Date() }
+            },
+            take: 100,
+            orderBy: { maxPricePerSecond: 'desc' }
+        });
+        res.json(bids);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch bids' });
+    }
+};

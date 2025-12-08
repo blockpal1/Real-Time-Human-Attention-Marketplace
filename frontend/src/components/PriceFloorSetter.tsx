@@ -4,9 +4,10 @@ import { api } from '../services/api';
 interface PriceFloorSetterProps {
     duration: number;
     setDuration: (d: number) => void;
+    setSessionToken: (token: string) => void;
 }
 
-export const PriceFloorSetter: React.FC<PriceFloorSetterProps> = ({ duration, setDuration }) => {
+export const PriceFloorSetter: React.FC<PriceFloorSetterProps> = ({ duration, setDuration, setSessionToken }) => {
     const [price, setPrice] = useState(0.0001); // USDC per second (matching Bid side)
     const [loading, setLoading] = useState(false);
 
@@ -15,8 +16,11 @@ export const PriceFloorSetter: React.FC<PriceFloorSetterProps> = ({ duration, se
         try {
             // Mock pubkey for demo
             const pubkey = 'test-user-consistent';
-            await api.startSession(pubkey, Math.floor(price * 1_000_000));
-            alert("Ask Posted to Order Book!");
+            const data = await api.startSession(pubkey, Math.floor(price * 1_000_000));
+            if (data.session_token) {
+                setSessionToken(data.session_token);
+                alert("Ask Posted to Order Book!");
+            }
         } catch (e) {
             console.error(e);
             alert('Failed to post ask');

@@ -3,24 +3,29 @@ import { useAttentionAI } from '../hooks/useAttentionAI';
 
 type PortalState = 'LOBBY' | 'SCANNING' | 'OFFER' | 'ACTIVE' | 'QA';
 
-export default function FocusPortal() {
+interface FocusPortalProps {
+    initialMatch?: any;
+    initialToken?: string | null;
+}
+
+export default function FocusPortal({ initialMatch, initialToken }: FocusPortalProps) {
     // Logic
     const { videoRef, isAttentive, permissionGranted, error } = useAttentionAI();
-    const [state, setState] = useState<PortalState>('LOBBY');
+    const [state, setState] = useState<PortalState>(initialMatch ? 'ACTIVE' : 'LOBBY');
     const [statusText, setStatusText] = useState("Initializing...");
-    const [match, setMatch] = useState<any>(null);
+    const [match, setMatch] = useState<any>(initialMatch || null);
     const [ws, setWs] = useState<WebSocket | null>(null);
     const [balance, setBalance] = useState(0.0000);
     // Web 2.5 State
     const [countdown, setCountdown] = useState(30);
-    const [sessionToken, setSessionToken] = useState<string | null>(null);
+    const [sessionToken] = useState<string | null>(initialToken || null);
 
-    // Mock Auth for Verification
-    const user = { wallet: { address: 'test-user-wallet-123' } };
+    // Mock Auth for Verification (Unused for now)
+    // const user = { wallet: { address: 'test-user-wallet-123' } };
 
     // WebSocket Connection
     useEffect(() => {
-        if (!permissionGranted || state === 'LOBBY' || !sessionToken) return;
+        if (!permissionGranted || !sessionToken) return;
 
         // Connect only when we have permission (User is "Online")
         const socket = new WebSocket('ws://localhost:3000/ws/events');

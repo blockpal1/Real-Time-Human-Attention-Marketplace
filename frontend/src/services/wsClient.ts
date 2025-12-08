@@ -11,6 +11,11 @@ class WSClient {
     }
 
     connect() {
+        if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
+            console.log('WS already connected or connecting');
+            return;
+        }
+
         try {
             this.ws = new WebSocket(this.url);
 
@@ -57,6 +62,14 @@ class WSClient {
         this.subscribers.get(topic)?.forEach(cb => cb(data));
         // Also notify wildcard subscribers
         this.subscribers.get('*')?.forEach(cb => cb({ topic, data }));
+    }
+
+    send(data: any) {
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify(data));
+        } else {
+            console.warn('WS not connected, cannot send:', data);
+        }
     }
 }
 

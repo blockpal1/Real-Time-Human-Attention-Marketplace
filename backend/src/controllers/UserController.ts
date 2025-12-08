@@ -59,3 +59,18 @@ export const startSession = async (req: Request, res: Response) => {
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
+
+export const getActiveSessions = async (req: Request, res: Response) => {
+    try {
+        const sessions = await prisma.session.findMany({
+            where: {
+                active: true,
+                matches: { none: { status: { in: ['active', 'offered'] } } } // Available only
+            },
+            take: 100
+        });
+        res.json(sessions);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch sessions' });
+    }
+};

@@ -6,6 +6,7 @@ import { PriceFloorSetter } from './components/PriceFloorSetter';
 import { PlaceBid } from './components/PlaceBid';
 import { wsClient } from './services/wsClient';
 import FocusPortal from './pages/FocusPortal';
+import { MatchNotificationModal } from './components/MatchNotificationModal';
 
 interface MatchNotification {
     matchId: string;
@@ -20,8 +21,10 @@ function App() {
     const [theme, setTheme] = React.useState<'quantum' | 'classic'>('quantum');
     const [match, setMatch] = React.useState<MatchNotification | null>(null);
     const [liveFeed, setLiveFeed] = React.useState<string[]>([]);
+    const [sessionToken, setSessionToken] = React.useState<string | null>(null);
 
     React.useEffect(() => {
+        // Connect if not already connected (handled by wsClient internal check)
         wsClient.connect();
 
         // Subscribe to match events
@@ -32,37 +35,26 @@ function App() {
                 matchId: data.matchId || data.id,
                 price: data.price || 0,
                 duration: data.duration || 30,
-                topic: data.topic || 'Ad Campaign'
+                topic: (typeof data.topic === 'string' ? data.topic : 'Ad Campaign')
             });
 
-            setLiveFeed(prev => [`[MATCH] ${data.matchId} @ $${(data.price || 0).toFixed(4)}/s`, ...prev].slice(0, 10));
+            const topicStr = typeof data.topic === 'string' ? data.topic : 'Campaign';
+            setLiveFeed(prev => [`[MATCH] ${topicStr} @ $${(data.price || 0).toFixed(4)}/s`, ...prev].slice(0, 10));
         });
 
-        // Subscribe to bid events for live feed
-        const unsubBid = wsClient.subscribe('bid', (data: any) => {
-            const price = data.price || (data.max_price_per_second / 1_000_000);
-            setLiveFeed(prev => [`[BID] $${price.toFixed(4)}/s x${data.quantity || 1}`, ...prev].slice(0, 10));
-        });
-
-        // Subscribe to ask events for live feed
-        const unsubAsk = wsClient.subscribe('ask', (data: any) => {
-            const price = data.pricePerSecond ? data.pricePerSecond / 1_000_000 : 0;
-            setLiveFeed(prev => [`[ASK] $${price.toFixed(4)}/s`, ...prev].slice(0, 10));
-        });
+        // Removed Bid/Ask from Live Feed to reduce noise as per user request
 
         return () => {
             unsubMatch();
-            unsubBid();
-            unsubAsk();
         };
     }, []);
 
     const handleAcceptMatch = () => {
         if (match) {
             console.log('Accepting match:', match.matchId);
-            // TODO: Send ACCEPT_MATCH via WebSocket
-            setView('human'); // Switch to Focus Portal
-            setMatch(null);
+            // Switch to Focus Portal, passing the match and token
+            setView('human');
+            // Do not clear match here, let FocusPortal hold it (it accepts initialMatch)
         }
     };
 
@@ -78,7 +70,7 @@ function App() {
                         &larr; Exit Focus Portal
                     </button>
                 </div>
-                <FocusPortal />
+                <FocusPortal initialMatch={match} initialToken={sessionToken} />
             </div>
         );
     }
@@ -89,41 +81,11 @@ function App() {
 
             {/* MATCH NOTIFICATION OVERLAY */}
             {match && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center">
-                    <div className="bg-[#0a0a0a] border-2 border-[#00FF41] p-8 rounded-xl max-w-md w-full mx-4 shadow-[0_0_40px_rgba(0,255,65,0.3)]">
-                        <div className="text-[#00FF41] text-xs font-bold mb-2 uppercase tracking-widest animate-pulse">Match Found!</div>
-                        <h2 className="text-2xl text-white font-bold mb-4">{match.topic}</h2>
-
-                        <div className="grid grid-cols-2 gap-4 mb-6">
-                            <div className="bg-[#111] p-3 rounded">
-                                <div className="text-gray-500 text-xs uppercase">Rate</div>
-                                <div className="text-xl font-mono text-green-400">${match.price.toFixed(4)}/s</div>
-                            </div>
-                            <div className="bg-[#111] p-3 rounded">
-                                <div className="text-gray-500 text-xs uppercase">Duration</div>
-                                <div className="text-xl font-mono text-white">{match.duration}s</div>
-                            </div>
-                        </div>
-
-                        <div className="bg-[#111] p-3 rounded mb-6">
-                            <div className="text-gray-500 text-xs uppercase">Total Earnings</div>
-                            <div className="text-2xl font-mono text-green-400">${(match.price * match.duration).toFixed(4)}</div>
-                        </div>
-
-                        <button
-                            onClick={handleAcceptMatch}
-                            className="w-full bg-[#00FF41] text-black font-bold py-4 rounded hover:bg-[#00cc33] transition-colors tracking-widest shadow-[0_0_20px_rgba(0,255,65,0.4)] mb-3"
-                        >
-                            PAY ATTENTIUM
-                        </button>
-                        <button
-                            onClick={handleDismissMatch}
-                            className="w-full bg-transparent text-gray-500 text-xs hover:text-white transition-colors py-2"
-                        >
-                            DISMISS
-                        </button>
-                    </div>
-                </div>
+                <MatchNotificationModal
+                    match={match}
+                    onAccept={handleAcceptMatch}
+                    onDismiss={handleDismissMatch}
+                />
             )}
 
             <main className="flex flex-1 w-full overflow-hidden">
@@ -166,7 +128,7 @@ function App() {
                 {/* RIGHT COLUMN: Analytics */}
                 <div className="flex flex-col w-analytics border-l border-[#333842] bg-panel p-4 gap-4 overflow-y-auto">
                     <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">Ask Settings</h2>
-                    <PriceFloorSetter duration={duration} setDuration={setDuration} />
+                    <PriceFloorSetter duration={duration} setDuration={setDuration} setSessionToken={setSessionToken} />
 
                     <div className="p-4 border border-dashed border-gray-700 rounded text-center text-gray-500 text-sm mt-4">
                         [Heatmap Placeholder]

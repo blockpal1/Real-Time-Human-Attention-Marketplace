@@ -26,9 +26,9 @@ export class MatchingEngine {
             const pendingBids = await prisma.bid.findMany({
                 where: {
                     active: true,
-                    expiry: { gt: new Date() }
+                    expiry: { gt: new Date() },
+                    targetQuantity: { gt: 0 } // Strict Quantity Check
                 },
-                include: { matches: true }, // Need to count matches
                 orderBy: { maxPricePerSecond: 'desc' },
                 take: 100
             });
@@ -39,7 +39,7 @@ export class MatchingEngine {
             const availableSessions = await prisma.session.findMany({
                 where: {
                     active: true,
-                    connected: true,
+                    // connected: true, // Relaxed for Demo/Dashboard flow
                     matches: {
                         none: {
                             status: { in: ['active', 'offered'] }
@@ -52,22 +52,31 @@ export class MatchingEngine {
 
             if (availableSessions.length === 0) return;
 
-            for (const bid of pendingBids) {
-                // Check Capacity
-                // @ts-ignore - Prisma Client not regenerated
-                const activeMatches = bid.matches.filter(m => ['active', 'offered', 'completed'].includes(m.status)).length;
-                // @ts-ignore - Prisma Client not regenerated
-                if (activeMatches >= bid.targetQuantity) continue;
+            if (pendingBids.length > 0 && availableSessions.length > 0) {
+                console.log(`Matching Cycle: ${pendingBids.length} Bids, ${availableSessions.length} Sessions`);
+            }
 
-                const match = availableSessions.find(session =>
-                    session.priceFloor <= bid.maxPricePerSecond
-                );
+            for (const bid of pendingBids) {
+                // Strict Quantity Check (Virtual Ledger)
+                if (bid.targetQuantity <= 0) continue;
+
+                const match = availableSessions.find(session => {
+                    const isMatch = session.priceFloor <= bid.maxPricePerSecond;
+                    return isMatch;
+                });
 
                 if (match) {
+                    console.log(`MATCH FOUND! Bid ${bid.maxPricePerSecond} >= Ask ${match.priceFloor}`);
                     await this.executeSoftMatch(bid, match);
                     // Remove matched session from local pool
                     const index = availableSessions.indexOf(match);
                     if (index > -1) availableSessions.splice(index, 1);
+                } else {
+                    // Debug why no match
+                    if (availableSessions.length > 0) {
+                        const s = availableSessions[0];
+                        console.log(`No Match: Bid ${bid.maxPricePerSecond} vs Session ${s.priceFloor}`);
+                    }
                 }
             }
 
@@ -82,31 +91,60 @@ export class MatchingEngine {
     private async executeSoftMatch(bid: any, session: any) {
         console.log(`SOFT MATCH: Bid ${bid.id} -> Session ${session.id}`);
 
-        // Create match with 'offered' status
+        // 1. ATOMIC: Decrement Quantity (Virtual Ledger)
+        const updatedBid = await prisma.bid.update({
+            where: { id: bid.id },
+            data: { targetQuantity: { decrement: 1 } }
+        });
+
+        // 2. Create Match Record
         const matchRecord = await prisma.match.create({
             data: {
                 bidId: bid.id,
                 sessionId: session.id,
-                status: 'offered', // <--- RESERVATION STATE
+                status: 'offered',
                 startTime: new Date()
             }
         });
 
-        // Notify Extension via Redis PubSub
+        // 3. Publish Granular Events
         if (redis.isOpen) {
+            // A. Update Order Book (The "100 -> 99" visual)
+            if (updatedBid.targetQuantity > 0) {
+                await redis.publish('marketplace_events', JSON.stringify({
+                    type: 'BID_UPDATED',
+                    payload: {
+                        bidId: bid.id,
+                        remainingQuantity: updatedBid.targetQuantity
+                    }
+                }));
+            } else {
+                await redis.publish('marketplace_events', JSON.stringify({
+                    type: 'BID_FILLED',
+                    payload: { bidId: bid.id }
+                }));
+            }
+
+            // B. Remove Ask (It's taken)
             await redis.publish('marketplace_events', JSON.stringify({
-                type: 'MATCH_CREATED',
-                sessionId: session.id,
-                matchId: matchRecord.id, // Direct property for WS Manager
+                type: 'ASK_MATCHED',
+                payload: { askId: session.id }
+            }));
+
+            // C. Notify Users (Broadcast for Demo Mode)
+            await redis.publish('marketplace_events', JSON.stringify({
+                type: 'MATCH_CREATED', // Triggers MATCH_FOUND in WS
+                sessionId: session.id, // For Targeted
+                matchId: matchRecord.id,
                 bidId: bid.id,
-                targetUrl: bid.targetUrl,
                 price: bid.maxPricePerSecond / 1_000_000,
+                // Payload for Broadcast Feed/Modal
                 payload: {
                     price: bid.maxPricePerSecond / 1_000_000,
                     duration: bid.durationPerUser,
-                    category: bid.targetUrl ? 'Ad' : 'Campaign',
-                    content_url: bid.targetUrl || 'default.mp4',
-                    validation_question: bid.validationQuestion
+                    quantity: 1, // Quantity matched
+                    topic: bid.targetUrl ? 'Ad Campaign' : 'Data Collection',
+                    matchId: matchRecord.id
                 }
             }));
         }

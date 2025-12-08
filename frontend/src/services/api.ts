@@ -12,13 +12,24 @@ export const api = {
     },
 
     async startSession(pubkey: string, price: number) {
-        // Gateway needs this endpoint
         const response = await fetch(`${API_URL}/users/session/start`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ pubkey, price_floor_micros: price })
         });
         if (!response.ok) throw new Error('Session start failed');
+        return response.json();
+    },
+
+    async getActiveBids() {
+        const response = await fetch(`${API_URL}/agents/bids`);
+        if (!response.ok) return [];
+        return response.json();
+    },
+
+    async getActiveAsks() {
+        const response = await fetch(`${API_URL}/users/sessions`);
+        if (!response.ok) return [];
         return response.json();
     }
 };

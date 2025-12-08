@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { wsClient } from '../services/wsClient';
+import { api } from '../services/api';
 
 interface Order {
     id: string;
@@ -20,6 +21,37 @@ export const OrderBook: React.FC<OrderBookProps> = ({ filterDuration }) => {
     const [lastPrice, setLastPrice] = useState<number>(0);
 
     useEffect(() => {
+        // Initial Fetch
+        const fetchState = async () => {
+            try {
+                const [activeBids, activeAsks] = await Promise.all([
+                    api.getActiveBids(),
+                    api.getActiveAsks()
+                ]);
+
+                setBids(activeBids.map((b: any) => ({
+                    id: b.id,
+                    price: b.maxPricePerSecond / 1_000_000,
+                    size: b.durationPerUser,
+                    quantity: b.targetQuantity,
+                    total: (b.maxPricePerSecond / 1_000_000) * b.durationPerUser * b.targetQuantity,
+                    type: 'bid'
+                })));
+
+                setAsks(activeAsks.map((a: any) => ({
+                    id: a.id,
+                    price: a.priceFloor / 1_000_000,
+                    size: 60, // Default for sessions
+                    quantity: 1,
+                    total: (a.priceFloor / 1_000_000) * 60,
+                    type: 'ask'
+                })));
+            } catch (e) {
+                console.error("Failed to load order book:", e);
+            }
+        };
+        fetchState();
+
         const unsubBid = wsClient.subscribe('bid', (data: any) => {
             // Priority: Normalized 'price' field -> Raw 'max_price_per_second' / 1e6 -> 0
             let price = data.price;
@@ -35,18 +67,43 @@ export const OrderBook: React.FC<OrderBookProps> = ({ filterDuration }) => {
             const duration = data.duration || 30;
 
             const newOrder: Order = {
-                id: data.bidId || Math.random().toString(),
-                price: price,
+                id: data.bidId || data.id,
+                price: price, // Normalized price
                 size: duration,
                 quantity: quantity,
                 total: price * duration * quantity,
                 type: 'bid'
             };
+
+            if (!newOrder.id) return; // Ignore if no ID
+
             setBids(prev => {
-                if (prev.some(o => o.id === newOrder.id)) return prev;
+                const exists = prev.find(o => o.id === newOrder.id);
+                if (exists) {
+                    return prev.map(o => o.id === newOrder.id ? newOrder : o);
+                }
                 const updated = [...prev, newOrder].sort((a, b) => b.price - a.price).slice(0, 50);
                 return updated;
             });
+        });
+
+        // Event: BID_UPDATED (Partial Fill)
+        const unsubBidUpdate = wsClient.subscribe('BID_UPDATED', (data: any) => {
+            setBids(prev => prev.map(o => {
+                if (o.id === data.bidId) {
+                    return {
+                        ...o,
+                        quantity: data.remainingQuantity,
+                        total: o.price * o.size * data.remainingQuantity
+                    };
+                }
+                return o;
+            }));
+        });
+
+        // Event: BID_FILLED (Remove)
+        const unsubBidFilled = wsClient.subscribe('BID_FILLED', (data: any) => {
+            setBids(prev => prev.filter(o => o.id !== data.bidId));
         });
 
         const unsubAsk = wsClient.subscribe('ask', (data: any) => {
@@ -57,30 +114,34 @@ export const OrderBook: React.FC<OrderBookProps> = ({ filterDuration }) => {
             }
 
             const newOrder: Order = {
-                id: data.id || Math.random().toString(),
+                id: data.id, // Strict ID
                 price: price,
                 size: 60,
-                quantity: 1, // Assumption for single user ask
+                quantity: 1,
                 total: price * 60,
                 type: 'ask'
             };
 
-            if (Math.random() > 0.5) newOrder.size = 10;
-            else if (Math.random() > 0.5) newOrder.size = 30;
-
-            // Recalculate total
-            newOrder.total = newOrder.price * newOrder.size * newOrder.quantity;
+            if (!newOrder.id) return;
 
             setAsks(prev => {
-                if (prev.some(o => o.id === newOrder.id)) return prev;
-                const updated = [...prev, newOrder].sort((a, b) => a.price - b.price).slice(0, 50);
-                return updated;
+                const exists = prev.find(o => o.id === newOrder.id);
+                if (exists) return prev;
+                return [...prev, newOrder];
             });
+        });
+
+        // Event: ASK_MATCHED (Remove)
+        const unsubAskMatched = wsClient.subscribe('ASK_MATCHED', (data: any) => {
+            setAsks(prev => prev.filter(o => o.id !== data.askId));
         });
 
         return () => {
             unsubBid();
+            unsubBidUpdate();
+            unsubBidFilled();
             unsubAsk();
+            unsubAskMatched();
         };
     }, []);
 
@@ -110,15 +171,19 @@ export const OrderBook: React.FC<OrderBookProps> = ({ filterDuration }) => {
 
     // Aggregation Logic
     const aggregate = (orders: Order[]) => {
-        const groups = new Map<number, Order>();
+        const groups = new Map<string, Order>();
         orders.forEach(o => {
-            const existing = groups.get(o.price);
+            const priceKey = o.price.toFixed(4); // Use fixed string key to group
+            const existing = groups.get(priceKey);
             if (existing) {
-                existing.size += o.size; // Total Duration
-                existing.quantity += o.quantity; // Total Quantity
-                existing.total += o.total; // Total Value
+                // Must create new object to avoid mutating state directly in some cases, though here it's derived
+                const updated = { ...existing };
+                updated.size += o.size;
+                updated.quantity += o.quantity;
+                updated.total += o.total;
+                groups.set(priceKey, updated);
             } else {
-                groups.set(o.price, { ...o, id: `agg_${o.price}` });
+                groups.set(priceKey, { ...o, id: `agg_${priceKey}` });
             }
         });
         return Array.from(groups.values());
@@ -127,25 +192,7 @@ export const OrderBook: React.FC<OrderBookProps> = ({ filterDuration }) => {
     const aggregatedAsks = aggregate(filteredAsks);
     const aggregatedBids = aggregate(filteredBids);
 
-    const asksToRender = aggregatedAsks.sort((a, b) => b.price - a.price).slice(0, 15); // Show highest asks... wait, asks usually sorted ascending? 
-    // Standard Order Book:
-    // Asks: Lowest Price at bottom (closest to spread). Sorted Descending visually for "Waterfall" but structurally Ascending price? 
-    // Usually:
-    // Asks (Top Half): Price desc (High -> Low). Bottom of Asks is lowest price (Best Ask).
-    // Bids (Bottom Half): Price desc (High -> Low). Top of Bids is highest price (Best Bid).
-
-    // Existing code: `asksToRender.sort((a, b) => b.price - a.price)` -> Descending. High asks at top. Low asks at bottom. Correct.
-    // Wait, typical order book: 
-    // Sell 110
-    // Sell 105
-    // Sell 100
-    // --- Spread ---
-    // Buy 99
-    // Buy 95
-    // Buy 90
-
-    // So Asks sorted Descending (110, 105, 100). Yes.
-
+    const asksToRender = aggregatedAsks.sort((a, b) => b.price - a.price).slice(0, 15);
     const bidsToRender = aggregatedBids.sort((a, b) => b.price - a.price).slice(0, 15);
 
     // Update last price based on visible book (Best Bid)

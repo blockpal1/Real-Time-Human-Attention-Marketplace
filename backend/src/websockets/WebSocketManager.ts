@@ -111,40 +111,48 @@ export class WebSocketManager {
         await subscriber.subscribe('marketplace_events', (message) => {
             const event = JSON.parse(message);
 
-            if (event.type === 'MATCH_CREATED') {
-                const ws = this.sessions.get(event.sessionId);
-                if (ws && ws.readyState === WebSocket.OPEN) {
-                    ws.send(JSON.stringify({
-                        type: 'MATCH_FOUND',
-                        matchId: event.matchId,
-                        bidId: event.bidId,
-                        targetUrl: event.targetUrl,
-                        price: event.price
-                    }));
+            // BROADCAST ALL EVENTS for Demo/Monitor purposes
+            this.wss.clients.forEach(client => {
+                if (client.readyState === WebSocket.OPEN) {
+
+                    // 1. MATCH FOUND (Targeted + Broadcast for Demo)
+                    if (event.type === 'MATCH_CREATED') {
+                        // Original Targeted Logic (Optional, keep for future auth)
+                        // const ws = this.sessions.get(event.sessionId);
+                        // if (ws === client) ... 
+
+                        // BROADCAST VERSION
+                        client.send(JSON.stringify({
+                            type: 'MATCH_FOUND',
+                            matchId: event.matchId,
+                            price: event.price,
+                            duration: event.payload?.duration || 30,
+                            quantity: 1, // Logic handled in backend
+                            topic: typeof event.payload?.topic === 'string' ? event.payload.topic : 'New Match'
+                        }));
+                    }
+                    // 2. BID CREATED
+                    else if (event.type === 'BID_CREATED') {
+                        client.send(JSON.stringify({ type: 'bid', payload: event.payload }));
+                    }
+                    // 3. ASK CREATED
+                    else if (event.type === 'ASK_CREATED') {
+                        client.send(JSON.stringify({ type: 'ask', payload: event.payload }));
+                    }
+                    // 4. BID UPDATED
+                    else if (event.type === 'BID_UPDATED') {
+                        client.send(JSON.stringify({ type: 'BID_UPDATED', payload: event.payload }));
+                    }
+                    // 5. BID FILLED / REMOVED
+                    else if (event.type === 'BID_FILLED') {
+                        client.send(JSON.stringify({ type: 'BID_FILLED', payload: event.payload }));
+                    }
+                    // 6. ASK MATCHED / REMOVED
+                    else if (event.type === 'ASK_MATCHED') {
+                        client.send(JSON.stringify({ type: 'ASK_MATCHED', payload: event.payload }));
+                    }
                 }
-            }
-            else if (event.type === 'BID_CREATED') {
-                // Broadcast to all connected monitors/clients
-                this.wss.clients.forEach(client => {
-                    if (client.readyState === WebSocket.OPEN) {
-                        client.send(JSON.stringify({
-                            type: 'bid',
-                            payload: event.payload
-                        }));
-                    }
-                });
-            }
-            else if (event.type === 'ASK_CREATED') {
-                // Broadcast to all connected monitors/clients
-                this.wss.clients.forEach(client => {
-                    if (client.readyState === WebSocket.OPEN) {
-                        client.send(JSON.stringify({
-                            type: 'ask',
-                            payload: event.payload
-                        }));
-                    }
-                });
-            }
+            });
         });
     }
 }
