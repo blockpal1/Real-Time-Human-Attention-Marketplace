@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { api } from '../services/api';
+import { LivenessCheck } from './LivenessCheck';
 
 interface MatchNotificationModalProps {
     match: {
@@ -14,7 +15,7 @@ interface MatchNotificationModalProps {
     onDismiss: () => void;
 }
 
-type Phase = 'matching' | 'preparing' | 'expanding' | 'focused' | 'question';
+type Phase = 'matching' | 'preparing' | 'liveness' | 'expanding' | 'focused' | 'question';
 const HANDSHAKE_TIMEOUT = 10;
 const PREP_COUNTDOWN = 3;
 const QUESTION_GRACE_PERIOD = 30; // 30 seconds to answer question
@@ -25,6 +26,8 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
     const [prepCountdown, setPrepCountdown] = useState(PREP_COUNTDOWN);
     const [sessionTime, setSessionTime] = useState(match.duration);
     const [questionTime, setQuestionTime] = useState(QUESTION_GRACE_PERIOD);
+    const [livenessTime, setLivenessTime] = useState(15);
+    const [failedVerification, setFailedVerification] = useState(false);
     const [answer, setAnswer] = useState('');
     const [initialDuration] = useState(match.duration); // Store initial duration
 
@@ -32,6 +35,23 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
     const totalEarnings = match.price * match.duration;
     const contentUrl = match.contentUrl;
     const validationQuestion = match.validationQuestion;
+
+    // Liveness Timer
+    useEffect(() => {
+        if (phase !== 'liveness') return;
+        const timer = setInterval(() => {
+            setLivenessTime(prev => {
+                if (prev <= 1) {
+                    clearInterval(timer);
+                    setFailedVerification(true);
+                    setTimeout(() => onDismiss(), 3000); // Close after 3s
+                    return 0;
+                }
+                return prev - 1;
+            });
+        }, 1000);
+        return () => clearInterval(timer);
+    }, [phase, onDismiss]);
 
     // Matching phase countdown
     useEffect(() => {
@@ -50,7 +70,7 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
         if (phase !== 'preparing') return;
         const timer = setInterval(() => {
             setPrepCountdown(prev => {
-                if (prev <= 1) { clearInterval(timer); setPhase('expanding'); return 0; }
+                if (prev <= 1) { clearInterval(timer); setPhase('liveness'); return 0; }
                 return prev - 1;
             });
         }, 1000);
@@ -147,6 +167,16 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
     };
 
     const renderContent = () => {
+        if (failedVerification) {
+            return (
+                <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '48px', marginBottom: '16px' }}>❌</div>
+                    <div style={{ color: '#ff4444', fontSize: '18px', fontWeight: 'bold', marginBottom: '8px' }}>VERIFICATION FAILED</div>
+                    <div style={{ color: '#666', fontSize: '14px', marginBottom: '8px' }}>Request timed out.</div>
+                    <div style={{ color: '#444', fontSize: '12px' }}>Closing session...</div>
+                </div>
+            );
+        }
         if (phase === 'matching') {
             return (
                 <>
@@ -181,6 +211,15 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
                     <div style={{ fontSize: '120px', fontFamily: 'monospace', fontWeight: 'bold', color: '#00FF41', textShadow: '0 0 40px rgba(0,255,65,0.6)' }}>{prepCountdown}</div>
                     <div style={{ color: '#888', fontSize: '14px', letterSpacing: '4px', marginTop: '16px' }}>PREPARING SESSION...</div>
                 </div>
+            );
+        }
+
+        if (phase === 'liveness') {
+            return (
+                <LivenessCheck
+                    active={true}
+                    onVerified={() => setPhase('expanding')}
+                />
             );
         }
 
