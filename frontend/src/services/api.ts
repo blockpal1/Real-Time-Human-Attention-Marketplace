@@ -7,7 +7,10 @@ export const api = {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(bid)
         });
-        if (!response.ok) throw new Error('Bid submission failed');
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Bid failed: ${errorText || response.statusText}`);
+        }
         return response.json();
     },
 

@@ -45,7 +45,7 @@ export const PlaceBid: React.FC<PlaceBidProps> = ({ duration, setDuration }) => 
             setQuestion('');
         } catch (e) {
             console.error(e);
-            alert('Failed to submit bid');
+            alert(`Failed to submit bid: ${e instanceof Error ? e.message : 'Unknown error'}`);
         } finally {
             setLoading(false);
         }
