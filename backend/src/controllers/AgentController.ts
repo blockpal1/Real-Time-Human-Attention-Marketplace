@@ -51,6 +51,7 @@ export const createBid = async (req: Request, res: Response) => {
             data: {
                 agentPubkey: agentPubkey,
                 targetUrl: target_url || '',
+                contentUrl: content_url || null,
                 maxPricePerSecond: max_price_per_second,
                 requiredAttentionScore: required_attention_score,
                 expiry: new Date(Date.now() + (expiry_seconds || 60) * 1000),

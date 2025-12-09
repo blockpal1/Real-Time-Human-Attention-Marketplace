@@ -3,7 +3,7 @@ import { getStatus } from '../controllers/StatusController';
 import { createChallenge } from '../controllers/AttestationController';
 import { startSession, getActiveSessions } from '../controllers/UserController';
 import { createBid, getActiveBids } from '../controllers/AgentController';
-import { acceptMatch, rejectMatch, submitQA } from '../controllers/MatchController';
+import { completeMatch, submitValidationResult } from '../controllers/MatchController';
 
 const router = Router();
 
@@ -17,8 +17,7 @@ router.post('/users/session/start', startSession);
 router.post('/agents/bids', createBid);
 
 // Match Lifecycle Routes
-router.post('/match/accept', acceptMatch);
-router.post('/match/reject', rejectMatch);
-router.post('/match/qa', submitQA);
+router.post('/matches/:matchId/complete', completeMatch); // Human completes match
+router.post('/matches/:matchId/validation', submitValidationResult); // Agent validates answer
 
 export default router;

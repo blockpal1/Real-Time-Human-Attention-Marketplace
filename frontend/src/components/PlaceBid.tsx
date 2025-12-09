@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { api } from '../services/api';
 
 interface PlaceBidProps {
@@ -10,9 +10,8 @@ export const PlaceBid: React.FC<PlaceBidProps> = ({ duration, setDuration }) => 
     // Campaign Logic
     const [price, setPrice] = useState(0.0001); // USDC per second
     const [targetUsers, setTargetUsers] = useState(100);
-    const [category, setCategory] = useState<'meme' | 'doc' | 'video'>('meme');
     const [question, setQuestion] = useState('');
-    const [file, setFile] = useState<File | null>(null);
+    const [contentUrl, setContentUrl] = useState('');
     const [loading, setLoading] = useState(false);
 
     // Derived
@@ -22,23 +21,22 @@ export const PlaceBid: React.FC<PlaceBidProps> = ({ duration, setDuration }) => 
     const handleSubmit = async () => {
         setLoading(true);
         try {
-            const fakeContentUrl = file ? `https://storage.attentium.com/${file.name}` : undefined;
-
             await api.submitBid({
-                max_price_per_second: Math.floor(price * 1_000_000), // Protocol still expects micros
-                quantity_seconds: totalSeconds, // Keep for legacy validation if needed
+                max_price_per_second: Math.floor(price * 1_000_000),
+                quantity_seconds: totalSeconds,
                 required_attention_score: 0.5,
-                category: category,
-                content_url: fakeContentUrl,
+                category: 'meme',
+                content_url: contentUrl || undefined,
                 target_url: 'https://example.com/ad',
-                // New Fields for Matcher
                 duration_per_user: duration,
                 target_quantity: targetUsers,
-                // @ts-ignore
-                validation_question: question,
+                validation_question: question || undefined,
             });
             console.log("Bid Submitted Successfully");
             alert('Bid Placed Successfully!');
+            // Reset form
+            setContentUrl('');
+            setQuestion('');
         } catch (e) {
             console.error(e);
             alert('Failed to submit bid');
@@ -50,14 +48,17 @@ export const PlaceBid: React.FC<PlaceBidProps> = ({ duration, setDuration }) => 
     return (
         <div className="flex flex-col gap-4">
 
-            {/* 1. Upload Section */}
+            {/* 1. Creative Asset (Image URL for now) */}
             <div className="glass-panel p-4 rounded">
-                <div className="text-secondary text-xs uppercase tracking-wide mb-2 font-bold">1. Creative Asset</div>
+                <div className="text-secondary text-xs uppercase tracking-wide mb-2 font-bold">1. Creative Asset URL</div>
                 <input
-                    type="file"
-                    onChange={(e) => setFile(e.target.files ? e.target.files[0] : null)}
-                    className="w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-[#1a1f2e] file:text-green-400 hover:file:bg-green-900/20 cursor-pointer"
+                    type="url"
+                    placeholder="https://example.com/image.jpg"
+                    value={contentUrl}
+                    onChange={(e) => setContentUrl(e.target.value)}
+                    className="w-full bg-dark border border-gray-700 rounded p-3 text-sm focus:border-green-500 transition-colors text-white placeholder-gray-600"
                 />
+                <div className="text-[10px] text-gray-600 mt-1">Paste an image URL (supports jpg, png, gif)</div>
             </div>
 
             {/* 2. Validation */}

@@ -31,5 +31,15 @@ export const api = {
         const response = await fetch(`${API_URL}/users/sessions`);
         if (!response.ok) return [];
         return response.json();
+    },
+
+    async completeMatch(matchId: string, data: { answer: string; actualDuration: number; exitedEarly: boolean }) {
+        const response = await fetch(`${API_URL}/matches/${matchId}/complete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        if (!response.ok) throw new Error('Match completion failed');
+        return response.json();
     }
 };

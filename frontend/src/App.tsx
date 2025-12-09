@@ -12,6 +12,8 @@ interface MatchNotification {
     price: number;
     duration: number;
     topic?: string;
+    contentUrl?: string | null;
+    validationQuestion?: string | null;
 }
 
 function App() {
@@ -33,7 +35,9 @@ function App() {
                 matchId: data.matchId || data.id,
                 price: data.price || 0,
                 duration: data.duration || 30,
-                topic: (typeof data.topic === 'string' ? data.topic : 'Ad Campaign')
+                topic: (typeof data.topic === 'string' ? data.topic : 'Ad Campaign'),
+                contentUrl: data.contentUrl || null,
+                validationQuestion: data.validationQuestion || null
             });
 
             const topicStr = typeof data.topic === 'string' ? data.topic : 'Campaign';

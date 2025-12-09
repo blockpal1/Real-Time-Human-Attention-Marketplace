@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import { api } from '../services/api';
 
 interface MatchNotificationModalProps {
     match: {
@@ -6,34 +7,38 @@ interface MatchNotificationModalProps {
         price: number;
         duration: number;
         topic?: string | object;
+        contentUrl?: string | null;
+        validationQuestion?: string | null;
     };
     onAccept: () => void;
     onDismiss: () => void;
 }
 
-type Phase = 'matching' | 'preparing' | 'expanding' | 'focused';
+type Phase = 'matching' | 'preparing' | 'expanding' | 'focused' | 'question';
 const HANDSHAKE_TIMEOUT = 10;
 const PREP_COUNTDOWN = 3;
+const QUESTION_GRACE_PERIOD = 30; // 30 seconds to answer question
 
 export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ match, onAccept, onDismiss }) => {
     const [phase, setPhase] = useState<Phase>('matching');
     const [countdown, setCountdown] = useState(HANDSHAKE_TIMEOUT);
     const [prepCountdown, setPrepCountdown] = useState(PREP_COUNTDOWN);
     const [sessionTime, setSessionTime] = useState(match.duration);
+    const [questionTime, setQuestionTime] = useState(QUESTION_GRACE_PERIOD);
+    const [answer, setAnswer] = useState('');
+    const [initialDuration] = useState(match.duration); // Store initial duration
 
     const topicDisplay = typeof match.topic === 'string' ? match.topic : 'Ad Campaign';
     const totalEarnings = match.price * match.duration;
+    const contentUrl = match.contentUrl;
+    const validationQuestion = match.validationQuestion;
 
     // Matching phase countdown
     useEffect(() => {
         if (phase !== 'matching') return;
         const timer = setInterval(() => {
             setCountdown(prev => {
-                if (prev <= 1) {
-                    clearInterval(timer);
-                    onDismiss();
-                    return 0;
-                }
+                if (prev <= 1) { clearInterval(timer); onDismiss(); return 0; }
                 return prev - 1;
             });
         }, 1000);
@@ -45,11 +50,7 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
         if (phase !== 'preparing') return;
         const timer = setInterval(() => {
             setPrepCountdown(prev => {
-                if (prev <= 1) {
-                    clearInterval(timer);
-                    setPhase('expanding');
-                    return 0;
-                }
+                if (prev <= 1) { clearInterval(timer); setPhase('expanding'); return 0; }
                 return prev - 1;
             });
         }, 1000);
@@ -63,11 +64,30 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
         return () => clearTimeout(timer);
     }, [phase]);
 
-    // Focus session timer
+    // Focus session timer (content viewing phase)
     useEffect(() => {
         if (phase !== 'focused') return;
         const timer = setInterval(() => {
             setSessionTime(prev => {
+                if (prev <= 1) {
+                    clearInterval(timer);
+                    // If there's a validation question, transition to question phase
+                    if (validationQuestion) {
+                        setPhase('question');
+                    }
+                    return 0;
+                }
+                return prev - 1;
+            });
+        }, 1000);
+        return () => clearInterval(timer);
+    }, [phase, validationQuestion]);
+
+    // Question phase timer (grace period)
+    useEffect(() => {
+        if (phase !== 'question') return;
+        const timer = setInterval(() => {
+            setQuestionTime(prev => {
                 if (prev <= 1) {
                     clearInterval(timer);
                     return 0;
@@ -79,7 +99,32 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
     }, [phase]);
 
     const handleAccept = useCallback(() => setPhase('preparing'), []);
-    const handleEndSession = useCallback(() => onAccept(), [onAccept]);
+
+    const handleEndSession = useCallback(async () => {
+        try {
+            // Calculate how long they actually spent
+            const actualDuration = initialDuration - sessionTime;
+            const exitedEarly = sessionTime > 0; // If timer hasn't hit 0, they exited early
+
+            // Submit match completion with answer
+            await api.completeMatch(match.matchId, {
+                answer: answer.trim(),
+                actualDuration,
+                exitedEarly
+            });
+
+            console.log('Match completed successfully:', {
+                answer: answer.trim(),
+                actualDuration,
+                exitedEarly
+            });
+        } catch (error) {
+            console.error('Failed to submit match completion:', error);
+            // Still close modal even if submission fails
+        }
+
+        onAccept(); // Close modal
+    }, [match.matchId, answer, sessionTime, initialDuration, onAccept]);
 
     const getModalStyles = (): React.CSSProperties => {
         const base: React.CSSProperties = {
@@ -143,9 +188,52 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
             );
         }
 
-        // Focused phase
+        // Question Phase - Grace period for answering validation question
+        if (phase === 'question') {
+            return (
+                <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+                    {/* Top Bar */}
+                    <div style={{ position: 'absolute', top: 0, left: 0, right: 0, padding: '12px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                            <div style={{ color: '#00FF41', fontSize: '10px', letterSpacing: '2px' }}>SESSION ENDED - ANSWER QUESTION</div>
+                            <div style={{ color: questionTime <= 5 ? '#ff4444' : '#888', fontSize: '12px', fontFamily: 'monospace' }}>{questionTime}s</div>
+                        </div>
+                    </div>
+
+                    {/* Question Card */}
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 24px 24px' }}>
+                        {questionTime > 0 ? (
+                            <div style={{ width: '100%', maxWidth: '600px', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '12px', padding: '32px' }}>
+                                <div style={{ color: '#888', fontSize: '10px', letterSpacing: '2px', marginBottom: '16px' }}>VALIDATION QUESTION</div>
+                                <div style={{ color: 'white', fontSize: '18px', marginBottom: '24px', lineHeight: '1.6' }}>{validationQuestion}</div>
+                                <input
+                                    type="text"
+                                    value={answer}
+                                    onChange={(e) => setAnswer(e.target.value)}
+                                    placeholder="Type your answer..."
+                                    autoFocus
+                                    style={{ width: '100%', backgroundColor: '#0a0a0a', border: '2px solid #00FF41', borderRadius: '8px', padding: '16px', color: 'white', fontSize: '16px', marginBottom: '24px' }}
+                                />
+                                <button onClick={handleEndSession} style={{ width: '100%', backgroundColor: '#00FF41', color: 'black', fontWeight: 'bold', padding: '16px', borderRadius: '8px', border: 'none', fontSize: '16px', cursor: 'pointer' }}>SUBMIT & FINISH</button>
+                            </div>
+                        ) : (
+                            /* Time's up */
+                            <div style={{ textAlign: 'center' }}>
+                                <div style={{ fontSize: '48px', marginBottom: '16px' }}>⏱️</div>
+                                <div style={{ color: '#ff4444', fontSize: '18px', fontWeight: 'bold', marginBottom: '8px' }}>TIME EXPIRED</div>
+                                <div style={{ color: '#666', fontSize: '14px', marginBottom: '24px' }}>Question not answered in time</div>
+                                <button onClick={handleEndSession} style={{ backgroundColor: '#00FF41', color: 'black', fontWeight: 'bold', padding: '12px 32px', borderRadius: '8px', border: 'none', fontSize: '14px', cursor: 'pointer' }}>RETURN TO DASHBOARD</button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        // Focused phase - Show content (NO validation question here anymore)
         return (
             <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+                {/* Top Bar */}
                 <div style={{ position: 'absolute', top: 0, left: 0, right: 0, padding: '12px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                         <div style={{ color: '#00FF41', fontSize: '10px', letterSpacing: '2px', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -157,12 +245,21 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
                     <button onClick={handleEndSession} style={{ backgroundColor: 'transparent', color: '#666', border: '1px solid #333', padding: '6px 12px', borderRadius: '4px', fontSize: '10px', cursor: 'pointer' }}>EXIT</button>
                 </div>
 
-                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '80px 24px 24px' }}>
+                {/* Main Content Area */}
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 24px 24px', gap: '24px' }}>
                     {sessionTime > 0 ? (
-                        <div style={{ textAlign: 'center', opacity: 0.3 }}>
-                            <div style={{ color: '#333', fontSize: '14px', letterSpacing: '4px' }}>{topicDisplay.toUpperCase()}</div>
-                        </div>
+                        /* Content Display Only */
+                        contentUrl ? (
+                            <div style={{ maxWidth: '600px', maxHeight: '400px', borderRadius: '8px', overflow: 'hidden', border: '1px solid #333' }}>
+                                <img src={contentUrl} alt="Campaign Content" style={{ width: '100%', height: '100%', objectFit: 'contain' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                            </div>
+                        ) : (
+                            <div style={{ textAlign: 'center', opacity: 0.3 }}>
+                                <div style={{ color: '#333', fontSize: '14px', letterSpacing: '4px' }}>{topicDisplay.toUpperCase()}</div>
+                            </div>
+                        )
                     ) : (
+                        /* Session Complete */
                         <div style={{ textAlign: 'center' }}>
                             <div style={{ fontSize: '48px', marginBottom: '16px' }}>✓</div>
                             <div style={{ color: '#00FF41', fontSize: '18px', fontWeight: 'bold', marginBottom: '8px' }}>SESSION COMPLETE</div>
@@ -180,7 +277,7 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
     };
 
     return (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: phase === 'focused' || phase === 'expanding' ? '#000' : 'rgba(0,0,0,0.9)', transition: 'background-color 0.8s ease' }}>
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: (phase === 'focused' || phase === 'expanding' || phase === 'question') ? '#000' : 'rgba(0,0,0,0.9)', transition: 'background-color 0.8s ease' }}>
             <div style={getModalStyles()}>
                 {renderContent()}
             </div>

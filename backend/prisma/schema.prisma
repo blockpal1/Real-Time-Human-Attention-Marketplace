@@ -43,6 +43,7 @@ model Bid {
   maxPricePerSecond   Int
   requiredAttentionScore Float
   targetUrl           String?
+  contentUrl          String?   // URL to uploaded creative asset (image/video)
   expiry              DateTime
   active              Boolean   @default(true)
   createdAt           DateTime  @default(now())
@@ -65,7 +66,14 @@ model Match {
   startTime DateTime @default(now())
   endTime   DateTime?
   
-  validationAnswer Boolean? // New: Q&A Response
+  // Validation & Completion Tracking
+  validationAnswer       String?   // Human's text answer to validation question
+  validationSubmittedAt  DateTime? // When human submitted answer
+  validationResult       String?   // Agent's verdict: "approved" | "rejected" | "pending"
+  completedAt            DateTime? // When session ended
+  humanExitedEarly       Boolean   @default(false) // Did human exit before timer?
+  actualDuration         Int?      // Actual seconds spent (vs expected)
+  
   settlements Settlement[]
 }
 

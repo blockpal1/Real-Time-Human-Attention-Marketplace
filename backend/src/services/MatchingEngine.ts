@@ -149,9 +149,12 @@ export class MatchingEngine {
                 payload: {
                     price: bid.maxPricePerSecond / 1_000_000,
                     duration: bid.durationPerUser,
-                    quantity: 1, // Quantity matched
-                    topic: bid.targetUrl ? 'Ad Campaign' : 'Data Collection',
-                    matchId: matchRecord.id
+                    quantity: 1,
+                    topic: bid.targetUrl || 'Ad Campaign',
+                    matchId: matchRecord.id,
+                    // Content for Focus Session
+                    contentUrl: bid.contentUrl || null,
+                    validationQuestion: bid.validationQuestion || null
                 }
             }));
         }

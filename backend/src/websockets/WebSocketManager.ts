@@ -125,7 +125,10 @@ export class WebSocketManager {
                             price: event.price,
                             duration: event.payload?.duration || 30,
                             quantity: 1,
-                            topic: typeof event.payload?.topic === 'string' ? event.payload.topic : 'New Match'
+                            topic: typeof event.payload?.topic === 'string' ? event.payload.topic : 'Ad Campaign',
+                            // Content for Focus Session
+                            contentUrl: event.payload?.contentUrl || null,
+                            validationQuestion: event.payload?.validationQuestion || null
                         }));
                     }
                     // 2. BID CREATED
@@ -149,6 +152,16 @@ export class WebSocketManager {
                     // 6. ASK MATCHED / REMOVED
                     else if (event.type === 'ASK_MATCHED') {
                         client.send(JSON.stringify({ type: 'ASK_MATCHED', payload: event.payload }));
+                    }
+                    // 7. MATCH COMPLETED (Human submitted answer)
+                    else if (event.type === 'MATCH_COMPLETED') {
+                        console.log('WS Broadcasting MATCH_COMPLETED to agent');
+                        client.send(JSON.stringify({ type: 'MATCH_COMPLETED', payload: event.payload }));
+                    }
+                    // 8. VALIDATION RESULT (Agent approved/rejected)
+                    else if (event.type === 'VALIDATION_RESULT') {
+                        console.log('WS Broadcasting VALIDATION_RESULT to human');
+                        client.send(JSON.stringify({ type: 'VALIDATION_RESULT', payload: event.payload }));
                     }
                 }
             });
