@@ -43,6 +43,9 @@ export const completeMatch = async (req: Request, res: Response) => {
 
         // Publish completion event to agent for analytics
         if (redis.isOpen && approved) {
+            // Add user to campaign's "seen" set (enforces unique match rule)
+            await redis.sAdd(`campaign:${match.bidId}:users`, match.session.userPubkey);
+
             await redis.publish('marketplace_events', JSON.stringify({
                 type: 'MATCH_COMPLETED',
                 agentPubkey: match.bid.agentPubkey,

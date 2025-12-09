@@ -61,10 +61,23 @@ export class MatchingEngine {
                 // Strict Quantity Check (Virtual Ledger)
                 if (bid.targetQuantity <= 0) continue;
 
-                const match = availableSessions.find(session => {
+                // Find eligible session using Redis for uniqueness check
+                let match = null;
+                for (const session of availableSessions) {
                     const isMatch = session.priceFloor <= bid.maxPricePerSecond;
-                    return isMatch;
-                });
+                    if (!isMatch) continue;
+
+                    // Redis SISMEMBER: O(1) uniqueness check
+                    let alreadySeen = false;
+                    if (redis.isOpen) {
+                        alreadySeen = Boolean(await redis.sIsMember(`campaign:${bid.id}:users`, session.userPubkey));
+                    }
+
+                    if (!alreadySeen) {
+                        match = session;
+                        break;
+                    }
+                }
 
                 if (match) {
                     console.log(`MATCH FOUND! Bid ${bid.maxPricePerSecond} >= Ask ${match.priceFloor}`);
