@@ -5,10 +5,11 @@ interface PriceFloorSetterProps {
     duration: number;
     setDuration: (d: number) => void;
     setSessionToken: (token: string) => void;
+    setUserPubkey: (pubkey: string) => void;
 }
 
-export const PriceFloorSetter: React.FC<PriceFloorSetterProps> = ({ duration, setDuration, setSessionToken }) => {
-    const [price, setPrice] = useState(0.0001); // USDC per second (matching Bid side)
+export const PriceFloorSetter: React.FC<PriceFloorSetterProps> = ({ duration, setDuration, setSessionToken, setUserPubkey }) => {
+    const [price, setPrice] = useState(0.0001);
     const [loading, setLoading] = useState(false);
 
     const handleSubmit = async () => {
@@ -19,6 +20,7 @@ export const PriceFloorSetter: React.FC<PriceFloorSetterProps> = ({ duration, se
             const data = await api.startSession(pubkey, Math.floor(price * 1_000_000));
             if (data.session_token) {
                 setSessionToken(data.session_token);
+                setUserPubkey(pubkey); // Store pubkey for earnings tracking
                 alert("Ask Posted to Order Book!");
             }
         } catch (e) {

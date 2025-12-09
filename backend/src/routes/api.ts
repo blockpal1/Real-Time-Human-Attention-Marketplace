@@ -4,14 +4,25 @@ import { createChallenge } from '../controllers/AttestationController';
 import { startSession, getActiveSessions } from '../controllers/UserController';
 import { createBid, getActiveBids } from '../controllers/AgentController';
 import { completeMatch, submitValidationResult } from '../controllers/MatchController';
+import { getUserEarnings, getSessionHistory } from '../controllers/UserEarningsController';
+import { getCampaignResponses, getAgentCampaigns } from '../controllers/AgentCampaignController';
 
 const router = Router();
 
 router.get('/status', getStatus);
 router.post('/attestation/challenge', createChallenge);
+
 // Getter Routes
 router.get('/agents/bids', getActiveBids);
 router.get('/users/sessions', getActiveSessions);
+
+// User Earnings
+router.get('/users/:pubkey/earnings', getUserEarnings);
+router.get('/users/:pubkey/sessions', getSessionHistory);
+
+// Agent Campaign Analytics
+router.get('/agents/:pubkey/campaigns', getAgentCampaigns);
+router.get('/campaigns/:bidId/responses', getCampaignResponses);
 
 router.post('/users/session/start', startSession);
 router.post('/agents/bids', createBid);

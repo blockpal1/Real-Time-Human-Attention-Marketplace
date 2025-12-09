@@ -100,31 +100,36 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
 
     const handleAccept = useCallback(() => setPhase('preparing'), []);
 
+    const [paymentResult, setPaymentResult] = useState<any>(null);
+
     const handleEndSession = useCallback(async () => {
+        // If we already have payment result (from "SUBMIT & FINISH"), just close
+        if (paymentResult) {
+            onAccept();
+            return;
+        }
+
         try {
             // Calculate how long they actually spent
             const actualDuration = initialDuration - sessionTime;
             const exitedEarly = sessionTime > 0; // If timer hasn't hit 0, they exited early
 
             // Submit match completion with answer
-            await api.completeMatch(match.matchId, {
+            const result = await api.completeMatch(match.matchId, {
                 answer: answer.trim(),
                 actualDuration,
                 exitedEarly
             });
 
-            console.log('Match completed successfully:', {
-                answer: answer.trim(),
-                actualDuration,
-                exitedEarly
-            });
+            console.log('Match completed successfully:', result);
+            setPaymentResult(result); // Store for display
+
         } catch (error) {
             console.error('Failed to submit match completion:', error);
             // Still close modal even if submission fails
+            onAccept();
         }
-
-        onAccept(); // Close modal
-    }, [match.matchId, answer, sessionTime, initialDuration, onAccept]);
+    }, [match.matchId, answer, sessionTime, initialDuration, onAccept, paymentResult]);
 
     const getModalStyles = (): React.CSSProperties => {
         const base: React.CSSProperties = {
@@ -190,6 +195,30 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
 
         // Question Phase - Grace period for answering validation question
         if (phase === 'question') {
+            // If payment result is available, show confirmation screen
+            if (paymentResult) {
+                return (
+                    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+                        <div style={{ textAlign: 'center' }}>
+                            <div style={{ fontSize: '48px', marginBottom: '16px' }}>✅</div>
+                            <div style={{ color: '#00FF41', fontSize: '18px', fontWeight: 'bold', marginBottom: '8px' }}>THANK YOU!</div>
+                            <div style={{ backgroundColor: 'rgba(0,255,65,0.1)', border: '1px solid rgba(0,255,65,0.3)', borderRadius: '8px', padding: '16px 32px', marginBottom: '8px', display: 'inline-block' }}>
+                                <div style={{ color: '#888', fontSize: '10px', letterSpacing: '2px', marginBottom: '4px' }}>YOU EARNED</div>
+                                <div style={{ color: '#00FF41', fontSize: '32px', fontFamily: 'monospace', fontWeight: 'bold' }}>${paymentResult.earnedAmount.toFixed(4)}</div>
+                            </div>
+                            <div style={{ color: '#00FF41', fontSize: '12px', marginBottom: '8px' }}>✅ Payment Confirmed</div>
+                            {answer && (
+                                <div style={{ color: '#555', fontSize: '12px', marginBottom: '16px' }}>
+                                    Your response: "{answer.slice(0, 60)}{answer.length > 60 ? '...' : ''}"
+                                </div>
+                            )}
+                            <div style={{ color: '#666', fontSize: '14px', marginBottom: '24px' }}>Funds released to your wallet!</div>
+                            <button onClick={handleEndSession} style={{ backgroundColor: '#00FF41', color: 'black', fontWeight: 'bold', padding: '12px 32px', borderRadius: '8px', border: 'none', fontSize: '14px', cursor: 'pointer' }}>CONTINUE EARNING</button>
+                        </div>
+                    </div>
+                );
+            }
+
             return (
                 <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', position: 'relative' }}>
                     {/* Top Bar */}
@@ -258,17 +287,29 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
                                 <div style={{ color: '#333', fontSize: '14px', letterSpacing: '4px' }}>{topicDisplay.toUpperCase()}</div>
                             </div>
                         )
-                    ) : (
-                        /* Session Complete */
+                    ) : paymentResult ? (
+                        /* Session Complete - Payment Confirmed */
                         <div style={{ textAlign: 'center' }}>
-                            <div style={{ fontSize: '48px', marginBottom: '16px' }}>✓</div>
-                            <div style={{ color: '#00FF41', fontSize: '18px', fontWeight: 'bold', marginBottom: '8px' }}>SESSION COMPLETE</div>
-                            <div style={{ backgroundColor: 'rgba(0,255,65,0.1)', border: '1px solid rgba(0,255,65,0.3)', borderRadius: '8px', padding: '16px 32px', marginBottom: '16px', display: 'inline-block' }}>
+                            <div style={{ fontSize: '48px', marginBottom: '16px' }}>✅</div>
+                            <div style={{ color: '#00FF41', fontSize: '18px', fontWeight: 'bold', marginBottom: '8px' }}>THANK YOU!</div>
+                            <div style={{ backgroundColor: 'rgba(0,255,65,0.1)', border: '1px solid rgba(0,255,65,0.3)', borderRadius: '8px', padding: '16px 32px', marginBottom: '8px', display: 'inline-block' }}>
                                 <div style={{ color: '#888', fontSize: '10px', letterSpacing: '2px', marginBottom: '4px' }}>YOU EARNED</div>
-                                <div style={{ color: '#00FF41', fontSize: '32px', fontFamily: 'monospace', fontWeight: 'bold' }}>${totalEarnings.toFixed(4)}</div>
+                                <div style={{ color: '#00FF41', fontSize: '32px', fontFamily: 'monospace', fontWeight: 'bold' }}>${paymentResult.earnedAmount.toFixed(4)}</div>
                             </div>
-                            <div style={{ color: '#666', fontSize: '14px', marginBottom: '24px' }}>Thank you for your attention</div>
-                            <button onClick={handleEndSession} style={{ backgroundColor: '#00FF41', color: 'black', fontWeight: 'bold', padding: '12px 32px', borderRadius: '8px', border: 'none', fontSize: '14px', cursor: 'pointer' }}>RETURN TO DASHBOARD</button>
+                            <div style={{ color: '#00FF41', fontSize: '12px', marginBottom: '8px' }}>✅ Payment Confirmed</div>
+                            {answer && (
+                                <div style={{ color: '#555', fontSize: '12px', marginBottom: '16px' }}>
+                                    Your response: "{answer.slice(0, 60)}{answer.length > 60 ? '...' : ''}"
+                                </div>
+                            )}
+                            <div style={{ color: '#666', fontSize: '14px', marginBottom: '24px' }}>Funds released to your wallet!</div>
+                            <button onClick={handleEndSession} style={{ backgroundColor: '#00FF41', color: 'black', fontWeight: 'bold', padding: '12px 32px', borderRadius: '8px', border: 'none', fontSize: '14px', cursor: 'pointer' }}>CONTINUE EARNING</button>
+                        </div>
+                    ) : (
+                        /* Loading Payment... */
+                        <div style={{ textAlign: 'center' }}>
+                            <div style={{ width: '60px', height: '60px', border: '3px solid #00FF41', borderTop: '3px solid transparent', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 16px' }} />
+                            <div style={{ color: '#888', fontSize: '14px' }}>Processing Payment...</div>
                         </div>
                     )}
                 </div>

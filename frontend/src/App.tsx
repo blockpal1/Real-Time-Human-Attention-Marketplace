@@ -6,6 +6,7 @@ import { PriceFloorSetter } from './components/PriceFloorSetter';
 import { PlaceBid } from './components/PlaceBid';
 import { wsClient } from './services/wsClient';
 import { MatchNotificationModal } from './components/MatchNotificationModal';
+import { CampaignAnalytics } from './components/CampaignAnalytics';
 
 interface MatchNotification {
     matchId: string;
@@ -22,6 +23,18 @@ function App() {
     const [match, setMatch] = React.useState<MatchNotification | null>(null);
     const [liveFeed, setLiveFeed] = React.useState<string[]>([]);
     const [sessionToken, setSessionToken] = React.useState<string | null>(null);
+    const [userPubkey, setUserPubkey] = React.useState<string | null>(null);
+    const [showAnalytics, setShowAnalytics] = React.useState(false);
+
+    // Listen for hash changes to show analytics
+    React.useEffect(() => {
+        const handleHashChange = () => {
+            setShowAnalytics(window.location.hash === '#analytics');
+        };
+        handleHashChange(); // Check initial hash
+        window.addEventListener('hashchange', handleHashChange);
+        return () => window.removeEventListener('hashchange', handleHashChange);
+    }, []);
 
     React.useEffect(() => {
         // Connect if not already connected (handled by wsClient internal check)
@@ -70,7 +83,7 @@ function App() {
 
     return (
         <div className={`flex flex-col h-screen text-main bg-dark overflow-hidden ${theme}`}>
-            <Header theme={theme} setTheme={setTheme} />
+            <Header theme={theme} setTheme={setTheme} userPubkey={userPubkey} />
 
             {/* MATCH NOTIFICATION OVERLAY */}
             {match && (
@@ -82,13 +95,27 @@ function App() {
             )}
 
             <main className="flex flex-1 w-full overflow-hidden">
-                {/* LEFT COLUMN: Campaign Logic */}
+                {/* LEFT COLUMN: Campaign Logic or Analytics */}
                 <div className="flex flex-col w-sidebar border-r border-[#333842] bg-panel p-4 gap-4 overflow-y-auto">
-                    <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">Campaign Console</h2>
-                    <PlaceBid duration={duration} setDuration={setDuration} />
-                    <div className="p-4 border border-dashed border-gray-700 rounded text-center text-gray-500 text-sm">
-                        [Escrow Manager Placeholder]
-                    </div>
+                    {showAnalytics ? (
+                        <>
+                            <button
+                                onClick={() => window.location.hash = ''}
+                                className="text-left text-sm text-gray-400 hover:text-white transition-colors mb-2"
+                            >
+                                ← Back to Campaign Console
+                            </button>
+                            <CampaignAnalytics agentPubkey="mock-agent-pubkey" />
+                        </>
+                    ) : (
+                        <>
+                            <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">Campaign Console</h2>
+                            <PlaceBid duration={duration} setDuration={setDuration} />
+                            <div className="p-4 border border-dashed border-gray-700 rounded text-center text-gray-500 text-sm">
+                                [Escrow Manager Placeholder]
+                            </div>
+                        </>
+                    )}
                 </div>
 
                 {/* CENTER COLUMN: The Market */}
@@ -121,7 +148,7 @@ function App() {
                 {/* RIGHT COLUMN: Analytics */}
                 <div className="flex flex-col w-analytics border-l border-[#333842] bg-panel p-4 gap-4 overflow-y-auto">
                     <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">Ask Settings</h2>
-                    <PriceFloorSetter duration={duration} setDuration={setDuration} setSessionToken={setSessionToken} />
+                    <PriceFloorSetter duration={duration} setDuration={setDuration} setSessionToken={setSessionToken} setUserPubkey={setUserPubkey} />
 
                     <div className="p-4 border border-dashed border-gray-700 rounded text-center text-gray-500 text-sm mt-4">
                         [Heatmap Placeholder]

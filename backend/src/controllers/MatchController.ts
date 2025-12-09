@@ -7,33 +7,42 @@ export const completeMatch = async (req: Request, res: Response) => {
     const { answer, actualDuration, exitedEarly } = req.body;
 
     try {
+        // STUB: Auto-approve all sessions (engagementScore = 1.0)
+        // TODO: Replace with real ML scoring in Phase 3
+        const engagementScore = 1.0;
+        const threshold = 0.7;
+        const approved = engagementScore >= threshold;
+
         // Update match with completion data
         const match = await prisma.match.update({
             where: { id: matchId },
             data: {
-                status: 'completed',
+                status: approved ? 'completed' : 'rejected',
                 validationAnswer: answer || null,
                 validationSubmittedAt: answer ? new Date() : null,
                 completedAt: new Date(),
                 actualDuration: actualDuration || null,
                 humanExitedEarly: exitedEarly || false,
-                validationResult: answer ? 'pending' : null, // Awaiting agent review
+                validationResult: approved ? 'approved' : 'rejected',
                 endTime: new Date()
             },
             include: {
-                bid: {
-                    include: { agent: true }
-                },
+                bid: true,
                 session: {
                     include: { user: true }
                 }
             }
         });
 
-        console.log(`Match ${matchId} completed. Answer: "${answer || 'N/A'}"`);
+        // Calculate earnings
+        const pricePerSecond = match.bid.maxPricePerSecond / 1_000_000;
+        const duration = actualDuration || match.bid.durationPerUser;
+        const earnedAmount = approved ? pricePerSecond * duration : 0;
 
-        // Publish completion event to agent via WebSocket/Redis
-        if (redis.isOpen) {
+        console.log(`Match ${matchId} completed. Approved: ${approved}, Earned: $${earnedAmount.toFixed(4)}`);
+
+        // Publish completion event to agent for analytics
+        if (redis.isOpen && approved) {
             await redis.publish('marketplace_events', JSON.stringify({
                 type: 'MATCH_COMPLETED',
                 agentPubkey: match.bid.agentPubkey,
@@ -46,14 +55,21 @@ export const completeMatch = async (req: Request, res: Response) => {
                     validationAnswer: answer,
                     actualDuration,
                     exitedEarly,
-                    price: match.bid.maxPricePerSecond / 1_000_000,
+                    earned: earnedAmount,
                     timestamp: new Date().toISOString()
                 }
             }));
-            console.log(`MATCH_COMPLETED event published for agent ${match.bid.agentPubkey}`);
         }
 
-        res.status(200).json({ success: true, matchId: match.id });
+        // Return immediate payment confirmation to frontend
+        res.status(200).json({
+            success: true,
+            matchId: match.id,
+            approved,
+            earnedAmount: Number(earnedAmount.toFixed(4)),
+            engagementScore,
+            threshold
+        });
 
     } catch (error) {
         console.error('Complete Match Error:', error);

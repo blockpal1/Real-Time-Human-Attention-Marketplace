@@ -41,5 +41,29 @@ export const api = {
         });
         if (!response.ok) throw new Error('Match completion failed');
         return response.json();
+    },
+
+    async getUserEarnings(pubkey: string) {
+        const response = await fetch(`${API_URL}/users/${pubkey}/earnings`);
+        if (!response.ok) throw new Error('Failed to fetch earnings');
+        return response.json();
+    },
+
+    async getSessionHistory(pubkey: string, limit = 50) {
+        const response = await fetch(`${API_URL}/users/${pubkey}/sessions?limit=${limit}`);
+        if (!response.ok) throw new Error('Failed to fetch session history');
+        return response.json();
+    },
+
+    async getAgentCampaigns(pubkey: string) {
+        const response = await fetch(`${API_URL}/agents/${pubkey}/campaigns`);
+        if (!response.ok) throw new Error('Failed to fetch campaigns');
+        return response.json();
+    },
+
+    async getCampaignResponses(bidId: string) {
+        const response = await fetch(`${API_URL}/campaigns/${bidId}/responses`);
+        if (!response.ok) throw new Error('Failed to fetch campaign responses');
+        return response.json();
     }
 };

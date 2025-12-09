@@ -19,6 +19,12 @@ export const PlaceBid: React.FC<PlaceBidProps> = ({ duration, setDuration }) => 
     const totalEscrowUSDC = price * totalSeconds;
 
     const handleSubmit = async () => {
+        // Validate required fields
+        if (!question.trim()) {
+            alert('Validation Question is required!');
+            return;
+        }
+
         setLoading(true);
         try {
             await api.submitBid({
@@ -30,7 +36,7 @@ export const PlaceBid: React.FC<PlaceBidProps> = ({ duration, setDuration }) => 
                 target_url: 'https://example.com/ad',
                 duration_per_user: duration,
                 target_quantity: targetUsers,
-                validation_question: question || undefined,
+                validation_question: question,
             });
             console.log("Bid Submitted Successfully");
             alert('Bid Placed Successfully!');
@@ -63,14 +69,18 @@ export const PlaceBid: React.FC<PlaceBidProps> = ({ duration, setDuration }) => 
 
             {/* 2. Validation */}
             <div className="glass-panel p-4 rounded">
-                <div className="text-secondary text-xs uppercase tracking-wide mb-2 font-bold">2. Validation Question</div>
+                <div className="text-secondary text-xs uppercase tracking-wide mb-2 font-bold">
+                    2. Validation Question <span className="text-red-500">*</span>
+                </div>
                 <input
                     type="text"
                     placeholder="e.g. Did you see the logo?"
                     value={question}
                     onChange={(e) => setQuestion(e.target.value)}
+                    required
                     className="w-full bg-dark border border-gray-700 rounded p-3 text-sm focus:border-green-500 transition-colors text-white placeholder-gray-600"
                 />
+                <div className="text-[10px] text-gray-600 mt-1">This question will be shown to humans after viewing your content</div>
             </div>
 
             {/* 3. Targeting & Budget - Stack Layout (Fixed Overflow) */}
@@ -155,6 +165,13 @@ export const PlaceBid: React.FC<PlaceBidProps> = ({ duration, setDuration }) => 
                         }`}
                 >
                     {loading ? 'Processing...' : 'Place Bid'}
+                </button>
+
+                <button
+                    onClick={() => window.location.hash = '#analytics'}
+                    className="w-full py-2 mt-2 rounded font-bold uppercase tracking-wider text-xs transition-all bg-transparent border border-green-500/30 text-green-500 hover:bg-green-500/10"
+                >
+                    📊 VIEW CAMPAIGN ANALYTICS
                 </button>
             </div>
         </div>

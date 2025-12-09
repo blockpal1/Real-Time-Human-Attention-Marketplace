@@ -1,0 +1,109 @@
+import React, { useState, useEffect } from 'react';
+import { api } from '../services/api';
+
+interface EarningsDashboardProps {
+    userPubkey: string;
+    isOpen: boolean;
+    onClose: () => void;
+}
+
+export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({ userPubkey, isOpen, onClose }) => {
+    const [earnings, setEarnings] = useState<any>(null);
+    const [history, setHistory] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        if (isOpen && userPubkey) {
+            loadData();
+        }
+    }, [isOpen, userPubkey]);
+
+    const loadData = async () => {
+        setLoading(true);
+        try {
+            const [earningsData, historyData] = await Promise.all([
+                api.getUserEarnings(userPubkey),
+                api.getSessionHistory(userPubkey, 20)
+            ]);
+            setEarnings(earningsData);
+            setHistory(historyData);
+        } catch (error) {
+            console.error('Failed to load earnings data:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    if (!isOpen) return null;
+
+    return (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.9)' }} onClick={onClose}>
+            <div style={{ backgroundColor: '#0a0a0a', border: '1px solid #333', borderRadius: '12px', padding: '24px', maxWidth: '600px', width: '90%', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 0 40px rgba(0,255,65,0.2)' }} onClick={(e) => e.stopPropagation()}>
+                {/* Header */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                    <h2 style={{ color: 'white', fontSize: '20px', fontWeight: 'bold', margin: 0 }}>💰 YOUR EARNINGS</h2>
+                    <button onClick={onClose} style={{ backgroundColor: 'transparent', color: '#666', border: 'none', fontSize: '24px', cursor: 'pointer' }}>×</button>
+                </div>
+
+                {loading ? (
+                    <div style={{ textAlign: 'center', padding: '40px', color: '#888' }}>Loading...</div>
+                ) : earnings ? (
+                    <>
+                        {/* Summary Cards */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '24px' }}>
+                            <div style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid #222', borderRadius: '8px', padding: '16px', textAlign: 'center' }}>
+                                <div style={{ color: '#888', fontSize: '10px', letterSpacing: '1px', marginBottom: '8px' }}>TODAY</div>
+                                <div style={{ color: '#00FF41', fontSize: '18px', fontFamily: 'monospace', fontWeight: 'bold' }}>${earnings.today.toFixed(4)}</div>
+                                <div style={{ color: '#666', fontSize: '10px', marginTop: '4px' }}>{earnings.sessionsToday} sessions</div>
+                            </div>
+                            <div style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid #222', borderRadius: '8px', padding: '16px', textAlign: 'center' }}>
+                                <div style={{ color: '#888', fontSize: '10px', letterSpacing: '1px', marginBottom: '8px' }}>THIS WEEK</div>
+                                <div style={{ color: '#00FF41', fontSize: '18px', fontFamily: 'monospace', fontWeight: 'bold' }}>${earnings.week.toFixed(4)}</div>
+                                <div style={{ color: '#666', fontSize: '10px', marginTop: '4px' }}>{earnings.sessionsWeek} sessions</div>
+                            </div>
+                            <div style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid #222', borderRadius: '8px', padding: '16px', textAlign: 'center' }}>
+                                <div style={{ color: '#888', fontSize: '10px', letterSpacing: '1px', marginBottom: '8px' }}>ALL TIME</div>
+                                <div style={{ color: '#00FF41', fontSize: '18px', fontFamily: 'monospace', fontWeight: 'bold' }}>${earnings.allTime.toFixed(4)}</div>
+                                <div style={{ color: '#666', fontSize: '10px', marginTop: '4px' }}>{earnings.sessionsAllTime} sessions</div>
+                            </div>
+                        </div>
+
+                        {/* Session History */}
+                        <div style={{ marginTop: '24px' }}>
+                            <h3 style={{ color: 'white', fontSize: '14px', marginBottom: '12px', letterSpacing: '1px' }}>RECENT SESSIONS</h3>
+                            {history.length === 0 ? (
+                                <div style={{ textAlign: 'center', padding: '40px', color: '#666', fontSize: '14px' }}>
+                                    No sessions yet. Start earning by accepting matches!
+                                </div>
+                            ) : (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                    {history.map((session) => (
+                                        <div key={session.matchId} style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid #222', borderRadius: '6px', padding: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <div style={{ flex: 1 }}>
+                                                <div style={{ color: 'white', fontSize: '12px', marginBottom: '4px' }}>{session.question}</div>
+                                                <div style={{ color: '#666', fontSize: '10px' }}>
+                                                    Your answer: "{session.answer.slice(0, 40)}{session.answer.length > 40 ? '...' : ''}"
+                                                </div>
+                                                <div style={{ color: '#555', fontSize: '10px', marginTop: '2px' }}>
+                                                    {new Date(session.completedAt).toLocaleString()}
+                                                </div>
+                                            </div>
+                                            <div style={{ textAlign: 'right', marginLeft: '12px' }}>
+                                                <div style={{ color: '#00FF41', fontSize: '14px', fontFamily: 'monospace', fontWeight: 'bold' }}>
+                                                    +${session.earned.toFixed(4)}
+                                                </div>
+                                                <div style={{ color: '#00FF41', fontSize: '10px', marginTop: '2px' }}>✅ Paid</div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </>
+                ) : (
+                    <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>Failed to load earnings data</div>
+                )}
+            </div>
+        </div>
+    );
+};
