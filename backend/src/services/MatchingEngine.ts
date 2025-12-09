@@ -39,7 +39,8 @@ export class MatchingEngine {
             const availableSessions = await prisma.session.findMany({
                 where: {
                     active: true,
-                    // connected: true, // Relaxed for Demo/Dashboard flow
+                    // Note: connected check removed for demo reliability
+                    // Ghost sessions prevented by server startup cleanup in server.ts
                     matches: {
                         none: {
                             status: { in: ['active', 'offered'] }
@@ -107,6 +108,12 @@ export class MatchingEngine {
             }
         });
 
+        // 3. Mark session as consumed (prevents re-matching after stale cleanup)
+        await prisma.session.update({
+            where: { id: session.id },
+            data: { active: false }
+        });
+
         // 3. Publish Granular Events
         if (redis.isOpen) {
             // A. Update Order Book (The "100 -> 99" visual)
@@ -151,21 +158,44 @@ export class MatchingEngine {
     }
 
     private async cleanupStaleOffers() {
-        const thirtySecondsAgo = new Date(Date.now() - 30 * 1000);
+        // Reduced to 10s for snappier UX during demo/testing
+        const timeThreshold = new Date(Date.now() - 10 * 1000);
 
         const expired = await prisma.match.findMany({
             where: {
                 status: 'offered',
-                startTime: { lt: thirtySecondsAgo }
-            }
+                startTime: { lt: timeThreshold }
+            },
+            include: { bid: true } // Include bid data for quantity restoration
         });
 
-        if (expired.length > 0) {
-            console.log(`Cleaning up ${expired.length} stale offers`);
-            await prisma.match.updateMany({
-                where: { id: { in: expired.map(e => e.id) } },
-                data: { status: 'failed' } // Release session
+        for (const match of expired) {
+            console.log(`Stale offer cleanup: Match ${match.id}`);
+
+            // 1. Mark match as failed
+            await prisma.match.update({
+                where: { id: match.id },
+                data: { status: 'failed' }
             });
+
+            // 2. Restore bid quantity (bid returns to book)
+            const updatedBid = await prisma.bid.update({
+                where: { id: match.bidId },
+                data: { targetQuantity: { increment: 1 } }
+            });
+
+            // 3. Publish BID_UPDATED to restore bid in order book
+            if (redis.isOpen) {
+                await redis.publish('marketplace_events', JSON.stringify({
+                    type: 'BID_UPDATED',
+                    payload: {
+                        bidId: match.bidId,
+                        remainingQuantity: updatedBid.targetQuantity
+                    }
+                }));
+            }
+
+            // Note: Session is already marked inactive on match creation, so it won't re-match
         }
     }
 }

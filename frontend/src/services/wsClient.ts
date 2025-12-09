@@ -28,6 +28,7 @@ class WSClient {
                 try {
                     const data = JSON.parse(event.data);
                     if (data.type) {
+                        console.log(`WS Received type: ${data.type}`, data);
                         this.notify(data.type, data.payload || data);
                     }
                 } catch (e) {

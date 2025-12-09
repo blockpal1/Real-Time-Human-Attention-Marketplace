@@ -117,27 +117,26 @@ export class WebSocketManager {
 
                     // 1. MATCH FOUND (Targeted + Broadcast for Demo)
                     if (event.type === 'MATCH_CREATED') {
-                        // Original Targeted Logic (Optional, keep for future auth)
-                        // const ws = this.sessions.get(event.sessionId);
-                        // if (ws === client) ... 
-
                         // BROADCAST VERSION
+                        console.log('WS Broadcasting MATCH_FOUND to client');
                         client.send(JSON.stringify({
                             type: 'MATCH_FOUND',
                             matchId: event.matchId,
                             price: event.price,
                             duration: event.payload?.duration || 30,
-                            quantity: 1, // Logic handled in backend
+                            quantity: 1,
                             topic: typeof event.payload?.topic === 'string' ? event.payload.topic : 'New Match'
                         }));
                     }
                     // 2. BID CREATED
                     else if (event.type === 'BID_CREATED') {
-                        client.send(JSON.stringify({ type: 'bid', payload: event.payload }));
+                        console.log('WS Broadcasting BID_CREATED');
+                        client.send(JSON.stringify({ type: 'BID_CREATED', payload: event.payload }));
                     }
                     // 3. ASK CREATED
                     else if (event.type === 'ASK_CREATED') {
-                        client.send(JSON.stringify({ type: 'ask', payload: event.payload }));
+                        console.log('WS Broadcasting ASK_CREATED');
+                        client.send(JSON.stringify({ type: 'ASK_CREATED', payload: event.payload }));
                     }
                     // 4. BID UPDATED
                     else if (event.type === 'BID_UPDATED') {

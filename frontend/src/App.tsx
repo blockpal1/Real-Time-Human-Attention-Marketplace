@@ -42,12 +42,18 @@ function App() {
             setLiveFeed(prev => [`[MATCH] ${topicStr} @ $${(data.price || 0).toFixed(4)}/s`, ...prev].slice(0, 10));
         });
 
-        // Removed Bid/Ask from Live Feed to reduce noise as per user request
-
         return () => {
             unsubMatch();
         };
     }, []);
+
+    // Authenticate WS when session token changes (User places Ask/Start Session)
+    React.useEffect(() => {
+        if (sessionToken) {
+            console.log("Authenticating WS with token...");
+            wsClient.send({ type: 'AUTH', token: sessionToken });
+        }
+    }, [sessionToken]);
 
     const handleAcceptMatch = () => {
         if (match) {

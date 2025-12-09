@@ -43,14 +43,17 @@ export const startSession = async (req: Request, res: Response) => {
 
         // Publish ASK_CREATED event
         if (!redis.isOpen) await redis.connect();
-        await redis.publish('marketplace_events', JSON.stringify({
+
+        const eventPayload = {
             type: 'ASK_CREATED',
             payload: {
                 id: session.id, // Use session ID as Ask ID
                 pricePerSecond: price_floor_micros,
                 status: 'active'
             }
-        }));
+        };
+        console.log('Publishing ASK_CREATED:', JSON.stringify(eventPayload));
+        await redis.publish('marketplace_events', JSON.stringify(eventPayload));
 
         res.json({ session_token: token });
 

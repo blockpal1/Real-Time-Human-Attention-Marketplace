@@ -52,7 +52,7 @@ export const OrderBook: React.FC<OrderBookProps> = ({ filterDuration }) => {
         };
         fetchState();
 
-        const unsubBid = wsClient.subscribe('bid', (data: any) => {
+        const unsubBid = wsClient.subscribe('BID_CREATED', (data: any) => {
             // Priority: Normalized 'price' field -> Raw 'max_price_per_second' / 1e6 -> 0
             let price = data.price;
             // Check if price is undefined OR if it looks like raw micros (e.g. integer > 100)
@@ -106,7 +106,8 @@ export const OrderBook: React.FC<OrderBookProps> = ({ filterDuration }) => {
             setBids(prev => prev.filter(o => o.id !== data.bidId));
         });
 
-        const unsubAsk = wsClient.subscribe('ask', (data: any) => {
+        const unsubAsk = wsClient.subscribe('ASK_CREATED', (data: any) => {
+            console.log("OrderBook received ASK_CREATED:", data);
             let price = 0;
             if (data.pricePerSecond) {
                 // Asks come in as micros
@@ -169,28 +170,39 @@ export const OrderBook: React.FC<OrderBookProps> = ({ filterDuration }) => {
     const filteredAsks = asks.filter(a => Math.abs(a.size - filterDuration) < 5 || a.size >= filterDuration);
     const filteredBids = bids.filter(b => Math.abs(b.size - filterDuration) < 5);
 
-    // Aggregation Logic
-    const aggregate = (orders: Order[]) => {
-        const groups = new Map<string, Order>();
+    // Aggregation Logic for DISPLAY ONLY
+    // Note: State updates (BID_UPDATED, etc.) operate on raw `bids`/`asks` arrays with real IDs
+    const aggregateForDisplay = (orders: Order[]) => {
+        const groups = new Map<string, { quantity: number; total: number; size: number; price: number; type: 'bid' | 'ask' }>();
         orders.forEach(o => {
-            const priceKey = o.price.toFixed(4); // Use fixed string key to group
+            const priceKey = o.price.toFixed(4);
             const existing = groups.get(priceKey);
             if (existing) {
-                // Must create new object to avoid mutating state directly in some cases, though here it's derived
-                const updated = { ...existing };
-                updated.size += o.size;
-                updated.quantity += o.quantity;
-                updated.total += o.total;
-                groups.set(priceKey, updated);
+                existing.quantity += o.quantity;
+                existing.total += o.total;
+                existing.size += o.size;
             } else {
-                groups.set(priceKey, { ...o, id: `agg_${priceKey}` });
+                groups.set(priceKey, {
+                    price: o.price,
+                    quantity: o.quantity,
+                    total: o.total,
+                    size: o.size,
+                    type: o.type
+                });
             }
         });
-        return Array.from(groups.values());
+        return Array.from(groups.entries()).map(([priceKey, agg]) => ({
+            id: `agg_${priceKey}`,
+            price: agg.price,
+            size: agg.size,
+            quantity: agg.quantity,
+            total: agg.total,
+            type: agg.type
+        }));
     };
 
-    const aggregatedAsks = aggregate(filteredAsks);
-    const aggregatedBids = aggregate(filteredBids);
+    const aggregatedAsks = aggregateForDisplay(filteredAsks);
+    const aggregatedBids = aggregateForDisplay(filteredBids);
 
     const asksToRender = aggregatedAsks.sort((a, b) => b.price - a.price).slice(0, 15);
     const bidsToRender = aggregatedBids.sort((a, b) => b.price - a.price).slice(0, 15);
