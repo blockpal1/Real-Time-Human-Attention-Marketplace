@@ -33,15 +33,7 @@ export const Header: React.FC<HeaderProps> = ({ setView, theme, setTheme }) => {
                     {theme === 'quantum' ? '🔮' : '🌑'}
                 </button>
 
-                {/* Focus Mode Button */}
-                {setView && (
-                    <button
-                        onClick={() => setView('human')}
-                        className="text-xs font-bold uppercase tracking-wider text-gray-400 hover:text-white transition-colors border border-gray-700 px-3 py-1 rounded hover:border-gray-500"
-                    >
-                        Enter Focus Portal
-                    </button>
-                )}
+                {/* Focus Mode Button - REMOVED: Focus experience now handled by match modal */}
 
                 {/* Balance Pill - HIDDEN FOR WEB 2.5 (Focus on USDC in Portal) */}
                 {/* <div className="flex items-center gap-2 px-3 py-1 bg-white/5 rounded-full border border-white/10 text-xs text-gray-400">

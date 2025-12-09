@@ -5,7 +5,6 @@ import { OrderBook } from './components/OrderBook';
 import { PriceFloorSetter } from './components/PriceFloorSetter';
 import { PlaceBid } from './components/PlaceBid';
 import { wsClient } from './services/wsClient';
-import FocusPortal from './pages/FocusPortal';
 import { MatchNotificationModal } from './components/MatchNotificationModal';
 
 interface MatchNotification {
@@ -16,7 +15,6 @@ interface MatchNotification {
 }
 
 function App() {
-    const [view, setView] = React.useState<'agent' | 'human'>('agent');
     const [duration, setDuration] = React.useState(10);
     const [theme, setTheme] = React.useState<'quantum' | 'classic'>('quantum');
     const [match, setMatch] = React.useState<MatchNotification | null>(null);
@@ -55,35 +53,20 @@ function App() {
         }
     }, [sessionToken]);
 
+    // Called when user finishes focus session (either completes or exits)
     const handleAcceptMatch = () => {
-        if (match) {
-            console.log('Accepting match:', match.matchId);
-            // Switch to Focus Portal, passing the match and token
-            setView('human');
-            // Do not clear match here, let FocusPortal hold it (it accepts initialMatch)
-        }
+        // Session ended - just clear the match to dismiss the modal
+        setMatch(null);
+        console.log('Focus session ended');
     };
 
     const handleDismissMatch = () => {
         setMatch(null);
     };
 
-    if (view === 'human') {
-        return (
-            <div className={`h-screen bg-black ${theme}`}>
-                <div className="absolute top-0 left-0 p-4 z-50">
-                    <button onClick={() => setView('agent')} className="text-gray-500 hover:text-white text-xs uppercase tracking-widest border border-gray-800 px-3 py-1 rounded bg-black/50 backdrop-blur">
-                        &larr; Exit Focus Portal
-                    </button>
-                </div>
-                <FocusPortal initialMatch={match} initialToken={sessionToken} />
-            </div>
-        );
-    }
-
     return (
         <div className={`flex flex-col h-screen text-main bg-dark overflow-hidden ${theme}`}>
-            <Header setView={setView} theme={theme} setTheme={setTheme} />
+            <Header theme={theme} setTheme={setTheme} />
 
             {/* MATCH NOTIFICATION OVERLAY */}
             {match && (
