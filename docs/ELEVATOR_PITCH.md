@@ -39,7 +39,7 @@ No intermediaries. No data harvesting. No surveillance capitalism.
 │                                                                 │
 │                              ↓                                  │
 │                                                                 │
-│   Your Chrome Extension:                                        │
+│   Your Focus Portal:                                            │
 │   "You're offering $0.018/second. A match is found!             │
 │    Looking... Looking... You earned $1.08!"                     │
 │                                                                 │

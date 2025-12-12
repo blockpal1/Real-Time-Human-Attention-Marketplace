@@ -1,66 +1,88 @@
-# Attentium (MVP v0.1)
+# Attentium: Real-Time Human Attention Marketplace
+> **The world's first decentralized marketplace for verified human attention.**
+> Humans sell seconds of focused attention to AI agents in real-time.
 
-> **Privacy-First Marketplace** where humans sell verified seconds of attention to AI agents.
+## 🚀 Overview
 
-## Quick Start
+Attentium is a **privacy-first** web platform where users (Attention Providers) verify their focus via on-device AI and earn crypto for every second of attention they provide to matched tasks.
 
+**Core Features:**
+- **Focus Portal**: Futuristic "Quantum Glass" web interface for users.
+- **Privacy-First**: Facial analysis runs **entirely on-device** (MediaPipe). No raw video ever leaves the browser.
+- **Real-Time Matching**: Low-latency engine matches AI bids ($/sec) with available human attention.
+- **Instant Settlement**: Simulated high-speed payments (Solana/micropayments architecture).
+
+## 🛠️ Quick Start
+
+### Prerequisites
+- Node.js (v18+)
+- npm
+
+### 1. Frontend (Focus Portal)
+The user interface for Attention Providers.
 ```bash
-# 1. Chrome Extension
-cd chrome-extension && npm install && npm run build
-# Load `dist/` as unpacked extension in Chrome
-
-# 2. Backend Gateway
-cd backend/gateway && npm install && npx ts-node src/index.ts
-
-# 3. Matcher (Separate Terminal)
-cd backend/matcher && npx ts-node src/index.ts
-
-# 4. Payment Simulation
-cd payments/simulation && npx ts-node src/main.ts
+cd frontend
+npm install
+npm run dev
+# Open http://localhost:5173
 ```
 
-## Architecture
-
-```
-┌─────────────────┐      ┌─────────────────┐      ┌─────────────────┐
-│ Chrome Extension│ WSS  │    Gateway      │      │    Matcher      │
-│  (Attention     │─────▶│   (Node.js)     │─────▶│   (Node.js)     │
-│   Provider)     │      │   Port 3000     │      │   [OrderBook]   │
-└─────────────────┘      └─────────────────┘      └────────┬────────┘
-                                                           │
-                          ┌────────────────────────────────▼────────┐
-                          │        Payment Router (Simulation)       │
-                          │   Escrow -> Settle -> User Wallet        │
-                          └──────────────────────────────────────────┘
+### 2. Backend (API & Matcher)
+Handles user sessions, order book, and matching logic.
+```bash
+cd backend
+npm install
+npm run dev
+# API running on http://localhost:3000
 ```
 
-## Key Privacy Guarantees
+### 3. Monitoring (Optional)
+Debug dashboard to view real-time system state.
+```bash
+node serve_monitor.js
+# Open http://localhost:8080/monitor.html
+```
 
-| Data Type          | Leaves Device? | Notes                              |
-|--------------------|----------------|------------------------------------|
-| Raw Video/Audio    | **NO**         | Processed entirely on-device       |
-| Face Mesh Coords   | **NO**         | Used only for local score compute  |
-| Engagement Score   | Yes (0-1)      | Transmitted via WebSocket          |
-| Wallet Address     | Yes            | For payment settlement             |
+## 🏗️ Architecture
 
-## Modules
+```mermaid
+graph TD
+    User[User (Browser)] -->|1. Connect Wallet| WebApp[Focus Portal (React/Vite)]
+    WebApp -->|2. Liveness & Focus (MediaPipe)| OnDeviceAI[On-Device AI]
+    OnDeviceAI -->|3. Verified Attention Signals| Gateway[Backend API]
+    
+    Gateway -->|4. Attention Supply| Matcher[Matching Engine]
+    AI_Agent[AI Agent / Advertiser] -->|5. Bids ($/sec)| Matcher
+    
+    Matcher -->|6. Match Created| Gateway
+    Gateway -->|7. Content & Settlement| WebApp
+```
 
-| Path                      | Description                        |
-|---------------------------|------------------------------------|
-| `/chrome-extension`       | Manifest V3 Extension (React)      |
-| `/backend/gateway`        | WebSocket + REST Gateway (Fastify) |
-| `/backend/matcher`        | Greedy OrderBook Matcher           |
-| `/payments/simulation`    | Mock Solana Ledger & Router        |
-| `/specs`                  | OpenAPI + Anchor IDL Definitions   |
+## 🔒 Privacy & Security
+| Data Point | Storage/Transmission | Description |
+|------------|----------------------|-------------|
+| **Video Feed** | **Local Only** | Processed in browser memory (MediaPipe). Never transmitted. |
+| **Face Landmarks** | **Local Only** | Used to calculate head pose and attention score. |
+| **Attention Score** | Transmitted | boolean/float (0-1) sent to backend to proof work. |
+| **Punt/Answer** | Transmitted | User interactions with content are recorded for validation. |
 
-## Integration Checklist for PM
+## 📂 Project Structure
 
-- [ ] Load Chrome Extension and grant camera permission
-- [ ] Start Gateway (`npm run dev` or `ts-node`)
-- [ ] Start Matcher
-- [ ] Open Extension Popup -> Connect Wallet -> Start Earning
-- [ ] Run `payments/simulation` to verify settlement math
+| Directory | Purpose |
+|-----------|---------|
+| `/frontend` | **Focus Portal**: React/Vite web app with "Quantum Glass" UI & MediaPipe integration. |
+| `/backend` | **Core Services**: Node.js API, Order Book, and Matching Engine. |
+| `/solana-program` | **Smart Contracts**: Anchor program for escrow and settlement (Reference). |
+| `/specs` | **API Definitions**: OpenAPI specs for backend limits. |
 
-## License
+## ✅ Verification Flow
+1.  **Connect Wallet** (Phantom/Mock).
+2.  **Liveness Check**: Verify user is a real human (Smile/Blink/Head Tilt challenges).
+3.  **Focus Session**:
+    -   Camera tracks head pose (Pitch/Yaw).
+    -   User watches content/tasks.
+    -   Earnings accumulate in real-time ($/sec).
+4.  **Completion**: Submit answer/verification to claim funds.
 
+## 📄 License
 MIT
