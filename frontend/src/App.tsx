@@ -7,6 +7,7 @@ import { PlaceBid } from './components/PlaceBid';
 import { wsClient } from './services/wsClient';
 import { MatchNotificationModal } from './components/MatchNotificationModal';
 import { CampaignAnalytics } from './components/CampaignAnalytics';
+import { HeroSection } from './components';
 
 interface MatchNotification {
     matchId: string;
@@ -25,11 +26,15 @@ function App() {
     const [sessionToken, setSessionToken] = React.useState<string | null>(null);
     const [userPubkey, setUserPubkey] = React.useState<string | null>(null);
     const [showAnalytics, setShowAnalytics] = React.useState(false);
+    const [showLanding, setShowLanding] = React.useState(true);
 
-    // Listen for hash changes to show analytics
+    // Listen for hash changes to show analytics or landing
     React.useEffect(() => {
         const handleHashChange = () => {
-            setShowAnalytics(window.location.hash === '#analytics');
+            const hash = window.location.hash;
+            setShowAnalytics(hash === '#analytics');
+            // Show landing page if no hash, #landing, or on initial load
+            setShowLanding(hash === '' || hash === '#landing' || hash === '#');
         };
         handleHashChange(); // Check initial hash
         window.addEventListener('hashchange', handleHashChange);
@@ -82,82 +87,90 @@ function App() {
     };
 
     return (
-        <div className={`flex flex-col h-screen text-main bg-dark overflow-hidden ${theme}`}>
-            <Header theme={theme} setTheme={setTheme} userPubkey={userPubkey} />
+        <>
+            {/* Landing Page */}
+            {showLanding && <HeroSection />}
 
-            {/* MATCH NOTIFICATION OVERLAY */}
-            {match && (
-                <MatchNotificationModal
-                    match={match}
-                    onAccept={handleAcceptMatch}
-                    onDismiss={handleDismissMatch}
-                />
-            )}
+            {/* Main App Dashboard */}
+            {!showLanding && (
+                <div className={`flex flex-col h-screen text-main bg-dark overflow-hidden ${theme}`}>
+                    <Header theme={theme} setTheme={setTheme} userPubkey={userPubkey} />
 
-            <main className="flex flex-1 w-full overflow-hidden">
-                {/* LEFT COLUMN: Campaign Logic or Analytics */}
-                <div className="flex flex-col w-sidebar border-r border-[#333842] bg-panel p-4 gap-4 overflow-y-auto">
-                    {showAnalytics ? (
-                        <>
-                            <button
-                                onClick={() => window.location.hash = ''}
-                                className="text-left text-sm text-gray-400 hover:text-white transition-colors mb-2"
-                            >
-                                ← Back to Campaign Console
-                            </button>
-                            <CampaignAnalytics agentPubkey="mock-agent-pubkey" />
-                        </>
-                    ) : (
-                        <>
-                            <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">Campaign Console</h2>
-                            <PlaceBid duration={duration} setDuration={setDuration} />
-                            <div className="p-4 border border-dashed border-gray-700 rounded text-center text-gray-500 text-sm">
-                                [Escrow Manager Placeholder]
-                            </div>
-                        </>
+                    {/* MATCH NOTIFICATION OVERLAY */}
+                    {match && (
+                        <MatchNotificationModal
+                            match={match}
+                            onAccept={handleAcceptMatch}
+                            onDismiss={handleDismissMatch}
+                        />
                     )}
-                </div>
 
-                {/* CENTER COLUMN: The Market */}
-                <div className="flex-1 flex flex-col min-w-0 bg-dark p-4 gap-4 items-center overflow-y-auto">
-                    {/* Live Feed Section */}
-                    <div className="w-full max-w-2xl h-[120px] border-b border-[#333842] mb-2 overflow-hidden flex-shrink-0">
-                        <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">Live Match Feed</h2>
-                        <div className="text-xs font-mono space-y-1 overflow-y-auto h-[80px]">
-                            {liveFeed.length === 0 ? (
-                                <div className="text-gray-600">Waiting for events...</div>
+                    <main className="flex flex-1 w-full overflow-hidden">
+                        {/* LEFT COLUMN: Campaign Logic or Analytics */}
+                        <div className="flex flex-col w-sidebar border-r border-[#333842] bg-panel p-4 gap-4 overflow-y-auto">
+                            {showAnalytics ? (
+                                <>
+                                    <button
+                                        onClick={() => window.location.hash = '#app'}
+                                        className="text-left text-sm text-gray-400 hover:text-white transition-colors mb-2"
+                                    >
+                                        ← Back to Campaign Console
+                                    </button>
+                                    <CampaignAnalytics agentPubkey="mock-agent-pubkey" />
+                                </>
                             ) : (
-                                liveFeed.map((event, i) => (
-                                    <div key={i} className={`${event.includes('[BID]') ? 'text-green-400' : event.includes('[ASK]') ? 'text-red-400' : 'text-yellow-400'}`}>
-                                        {event}
+                                <>
+                                    <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">Campaign Console</h2>
+                                    <PlaceBid duration={duration} setDuration={setDuration} />
+                                    <div className="p-4 border border-dashed border-gray-700 rounded text-center text-gray-500 text-sm">
+                                        [Escrow Manager Placeholder]
                                     </div>
-                                ))
+                                </>
                             )}
                         </div>
-                    </div>
 
-                    {/* Order Book */}
-                    <div className="flex-1 flex flex-col overflow-hidden w-full max-w-2xl min-w-[350px]">
-                        <h2 className="text-sm font-bold text-white uppercase tracking-wider mb-2">
-                            {`<${duration} Second Order Book`}
-                        </h2>
-                        <OrderBook filterDuration={duration} />
-                    </div>
+                        {/* CENTER COLUMN: The Market */}
+                        <div className="flex-1 flex flex-col min-w-0 bg-dark p-4 gap-4 items-center overflow-y-auto">
+                            {/* Live Feed Section */}
+                            <div className="w-full max-w-2xl h-[120px] border-b border-[#333842] mb-2 overflow-hidden flex-shrink-0">
+                                <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">Live Match Feed</h2>
+                                <div className="text-xs font-mono space-y-1 overflow-y-auto h-[80px]">
+                                    {liveFeed.length === 0 ? (
+                                        <div className="text-gray-600">Waiting for events...</div>
+                                    ) : (
+                                        liveFeed.map((event, i) => (
+                                            <div key={i} className={`${event.includes('[BID]') ? 'text-green-400' : event.includes('[ASK]') ? 'text-red-400' : 'text-yellow-400'}`}>
+                                                {event}
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Order Book */}
+                            <div className="flex-1 flex flex-col overflow-hidden w-full max-w-2xl min-w-[350px]">
+                                <h2 className="text-sm font-bold text-white uppercase tracking-wider mb-2">
+                                    {`<${duration} Second Order Book`}
+                                </h2>
+                                <OrderBook filterDuration={duration} />
+                            </div>
+                        </div>
+
+                        {/* RIGHT COLUMN: Analytics */}
+                        <div className="flex flex-col w-analytics border-l border-[#333842] bg-panel p-4 gap-4 overflow-y-auto">
+                            <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">Ask Settings</h2>
+                            <PriceFloorSetter duration={duration} setDuration={setDuration} setSessionToken={setSessionToken} setUserPubkey={setUserPubkey} />
+
+                            <div className="p-4 border border-dashed border-gray-700 rounded text-center text-gray-500 text-sm mt-4">
+                                [Heatmap Placeholder]
+                            </div>
+                        </div>
+                    </main>
+
+                    <Footer />
                 </div>
-
-                {/* RIGHT COLUMN: Analytics */}
-                <div className="flex flex-col w-analytics border-l border-[#333842] bg-panel p-4 gap-4 overflow-y-auto">
-                    <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">Ask Settings</h2>
-                    <PriceFloorSetter duration={duration} setDuration={setDuration} setSessionToken={setSessionToken} setUserPubkey={setUserPubkey} />
-
-                    <div className="p-4 border border-dashed border-gray-700 rounded text-center text-gray-500 text-sm mt-4">
-                        [Heatmap Placeholder]
-                    </div>
-                </div>
-            </main>
-
-            <Footer />
-        </div>
+            )}
+        </>
     );
 }
 
