@@ -129,7 +129,7 @@ const ButtonCTA = () => {
                 className="absolute -inset-[2px] rounded-full opacity-100"
                 style={{
                     background: 'conic-gradient(from var(--angle), transparent 0%, transparent 70%, #0EA5E9 85%, transparent 100%)',
-                    animation: 'spin 3s linear infinite',
+                    animation: 'spin 6s linear infinite',
                     filter: 'blur(1px)',
                 }}
             />
@@ -137,13 +137,14 @@ const ButtonCTA = () => {
                 className="absolute -inset-[2px] rounded-full"
                 style={{
                     background: 'conic-gradient(from var(--angle), transparent 0%, transparent 75%, #0EA5E9 87%, #38BDF8 93%, transparent 100%)',
-                    animation: 'spin 3s linear infinite',
+                    animation: 'spin 6s linear infinite',
                 }}
             />
 
             {/* Button with gray border */}
             <button
                 className="relative rounded-full bg-black"
+                onClick={() => window.location.hash = '#app'}
                 style={{
                     padding: '24px 64px',
                     border: '2px solid #444',

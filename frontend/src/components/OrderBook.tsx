@@ -150,8 +150,8 @@ export const OrderBook: React.FC<OrderBookProps> = ({ filterDuration }) => {
         const depthPercent = Math.min(100, (order.quantity / 50) * 100); // Visualizing based on quantity depth
         const tvps = order.price * order.quantity;
 
-        const colorClass = type === 'bid' ? 'text-green-400' : 'text-red-400';
-        const bgClass = type === 'bid' ? 'bg-green-500/10' : 'bg-red-500/10';
+        const colorClass = type === 'bid' ? 'text-[#0EA5E9]' : 'text-white';
+        const bgClass = type === 'bid' ? 'bg-[#0EA5E9]/10' : 'bg-white/10';
 
         return (
             <div key={order.id} className="relative grid grid-cols-4 px-2 py-1 text-sm font-mono cursor-pointer hover:bg-white/5 transition-colors items-center">
@@ -231,7 +231,7 @@ export const OrderBook: React.FC<OrderBookProps> = ({ filterDuration }) => {
 
             {/* Price Indicator */}
             <div className="py-2 flex items-center justify-center border-y border-gray-800 bg-black/20 backdrop-blur">
-                <span className={`text-lg font-bold font-mono tracking-wider ${lastPrice > 0 ? 'text-green-400' : 'text-gray-600'}`}>
+                <span className={`text-lg font-bold font-mono tracking-wider ${lastPrice > 0 ? 'text-[#0EA5E9]' : 'text-gray-600'}`}>
                     {lastPrice > 0 ? lastPrice.toFixed(4) : '0.0000'} <span className="text-xs text-gray-600">$</span>
                 </span>
             </div>

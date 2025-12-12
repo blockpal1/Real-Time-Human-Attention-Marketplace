@@ -139,7 +139,7 @@ function App() {
                                         <div className="text-gray-600">Waiting for events...</div>
                                     ) : (
                                         liveFeed.map((event, i) => (
-                                            <div key={i} className={`${event.includes('[BID]') ? 'text-green-400' : event.includes('[ASK]') ? 'text-red-400' : 'text-yellow-400'}`}>
+                                            <div key={i} className={`${event.includes('[BID]') ? 'text-[#0EA5E9]' : event.includes('[ASK]') ? 'text-white' : 'text-yellow-400'}`}>
                                                 {event}
                                             </div>
                                         ))
@@ -149,7 +149,7 @@ function App() {
 
                             {/* Order Book */}
                             <div className="flex-1 flex flex-col overflow-hidden w-full max-w-2xl min-w-[350px]">
-                                <h2 className="text-sm font-bold text-white uppercase tracking-wider mb-2">
+                                <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">
                                     {`<${duration} Second Order Book`}
                                 </h2>
                                 <OrderBook filterDuration={duration} />

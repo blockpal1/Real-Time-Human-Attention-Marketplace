@@ -46,7 +46,7 @@ export const PriceFloorSetter: React.FC<PriceFloorSetterProps> = ({ duration, se
                                 key={s}
                                 onClick={() => setDuration(s)}
                                 className={`flex-1 py-2 text-xs border rounded transition-all font-mono ${duration === s
-                                    ? 'border-green-500 bg-green-500/10 text-green-400 shadow-[0_0_10px_rgba(0,255,65,0.2)]'
+                                    ? 'border-white/50 bg-white/10 text-white shadow-[0_0_10px_rgba(255,255,255,0.1)]'
                                     : 'border-gray-700 hover:border-gray-600 text-gray-400'
                                     }`}
                             >
@@ -59,7 +59,7 @@ export const PriceFloorSetter: React.FC<PriceFloorSetterProps> = ({ duration, se
                 {/* Ask Price Input */}
                 <div>
                     <label className="block text-secondary text-[10px] uppercase mb-1">
-                        Ask Price <span className="text-cyan-900">(USDC/s)</span>
+                        Ask Price <span className="text-white/40">(USDC/s)</span>
                     </label>
                     <div className="relative flex items-center">
                         <input
@@ -68,7 +68,7 @@ export const PriceFloorSetter: React.FC<PriceFloorSetterProps> = ({ duration, se
                             min="0.0001"
                             value={price}
                             onChange={(e) => setPrice(Number(e.target.value))}
-                            className="w-full bg-dark border border-gray-700 rounded p-2 text-sm text-center font-mono text-cyan-400 transition-colors focus:border-cyan-500"
+                            className="w-full bg-dark border border-gray-700 rounded p-2 text-sm text-center font-mono text-white transition-colors focus:border-white/50"
                         />
                     </div>
                 </div>
@@ -81,7 +81,7 @@ export const PriceFloorSetter: React.FC<PriceFloorSetterProps> = ({ duration, se
                 className={`w-full py-3 rounded font-bold uppercase tracking-wider text-sm transition-all
                     ${loading
                         ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
-                        : 'bg-cyan-500 hover:bg-cyan-400 text-black shadow-[0_0_20px_rgba(0,170,255,0.3)] hover:shadow-[0_0_30px_rgba(0,170,255,0.5)]'
+                        : 'bg-white hover:bg-gray-200 text-black shadow-[0_0_20px_rgba(255,255,255,0.2)] hover:shadow-[0_0_30px_rgba(255,255,255,0.3)]'
                     }`}
             >
                 {loading ? 'Posting...' : 'Place Ask'}
@@ -90,7 +90,7 @@ export const PriceFloorSetter: React.FC<PriceFloorSetterProps> = ({ duration, se
             {/* Accept Highest Bid Button */}
             <button
                 onClick={() => alert('Feature coming soon: Auto-match with best bid')}
-                className="w-full py-2 rounded border border-gray-700 text-gray-400 text-xs hover:border-green-500 hover:text-green-400 transition-colors uppercase tracking-widest"
+                className="w-full py-2 rounded border border-gray-700 text-gray-400 text-xs hover:border-white/50 hover:text-white transition-colors uppercase tracking-widest"
             >
                 Accept Highest Bid
             </button>

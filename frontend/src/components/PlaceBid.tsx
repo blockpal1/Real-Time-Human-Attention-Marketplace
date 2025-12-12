@@ -96,7 +96,7 @@ export const PlaceBid: React.FC<PlaceBidProps> = ({ duration, setDuration }) => 
                                 key={s}
                                 onClick={() => setDuration(s)}
                                 className={`flex-1 py-2 text-xs border rounded transition-all font-mono ${duration === s
-                                    ? 'border-green-500 bg-green-500/10 text-green-400 shadow-[0_0_10px_rgba(0,255,65,0.2)]'
+                                    ? 'border-[#0EA5E9] bg-[#0EA5E9]/10 text-[#0EA5E9] shadow-[0_0_10px_rgba(14,165,233,0.2)]'
                                     : 'border-gray-700 hover:border-gray-600 text-gray-400'
                                     }`}
                             >
@@ -118,7 +118,7 @@ export const PlaceBid: React.FC<PlaceBidProps> = ({ duration, setDuration }) => 
                                 min="1"
                                 value={targetUsers}
                                 onChange={(e) => setTargetUsers(Math.max(1, Number(e.target.value)))}
-                                className="w-full bg-dark border border-gray-700 rounded p-2 text-sm text-center font-mono text-white transition-colors focus:border-green-500"
+                                className="w-full bg-dark border border-gray-700 rounded p-2 text-sm text-center font-mono text-white transition-colors focus:border-[#0EA5E9]"
                             />
                         </div>
                     </div>
@@ -126,7 +126,7 @@ export const PlaceBid: React.FC<PlaceBidProps> = ({ duration, setDuration }) => 
                     {/* Price */}
                     <div>
                         <label className="block text-secondary text-[10px] uppercase mb-1">
-                            Bid Price <span className="text-green-900">(USDC/s)</span>
+                            Bid Price <span className="text-[#0EA5E9]/50">(USDC/s)</span>
                         </label>
                         <div className="relative flex items-center">
                             <input
@@ -135,22 +135,22 @@ export const PlaceBid: React.FC<PlaceBidProps> = ({ duration, setDuration }) => 
                                 min="0.0001"
                                 value={price}
                                 onChange={(e) => setPrice(Number(e.target.value))}
-                                className="w-full bg-dark border border-gray-700 rounded p-2 text-sm text-center font-mono text-green-400 transition-colors focus:border-green-500"
+                                className="w-full bg-dark border border-gray-700 rounded p-2 text-sm text-center font-mono text-[#0EA5E9] transition-colors focus:border-[#0EA5E9]"
                             />
                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* 4. Cost Summary & Action */}
-            <div className="p-4 bg-green-900/5 border border-green-500/20 rounded text-center">
+            {/* 4. Cost Summary & Action - Agent Blue Theme */}
+            <div className="p-4 bg-[#0EA5E9]/5 border border-[#0EA5E9]/20 rounded text-center">
                 <div className="flex justify-between items-center mb-2 px-2">
                     <span className="text-xs text-gray-500">Total Attention</span>
                     <span className="text-xs text-white font-mono">{targetUsers * duration}s</span>
                 </div>
-                <div className="flex justify-between items-center mb-4 px-2 border-b border-green-500/20 pb-2">
+                <div className="flex justify-between items-center mb-4 px-2 border-b border-[#0EA5E9]/20 pb-2">
                     <span className="text-xs text-gray-500">Est. Cost</span>
-                    <span className="text-xl font-bold text-green-400 font-mono text-shadow-neon">
+                    <span className="text-xl font-bold text-[#0EA5E9] font-mono drop-shadow-[0_0_10px_rgba(14,165,233,0.4)]">
                         ${totalEscrowUSDC.toFixed(4)}
                     </span>
                 </div>
@@ -161,7 +161,7 @@ export const PlaceBid: React.FC<PlaceBidProps> = ({ duration, setDuration }) => 
                     className={`w-full py-3 rounded font-bold uppercase tracking-wider text-sm transition-all
                         ${loading
                             ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
-                            : 'bg-green-500 hover:bg-green-400 text-black shadow-[0_0_20px_rgba(0,255,65,0.3)] hover:shadow-[0_0_30px_rgba(0,255,65,0.5)]'
+                            : 'bg-[#0EA5E9] hover:bg-[#38BDF8] text-black shadow-[0_0_20px_rgba(14,165,233,0.3)] hover:shadow-[0_0_30px_rgba(14,165,233,0.5)]'
                         }`}
                 >
                     {loading ? 'Processing...' : 'Place Bid'}
@@ -169,7 +169,7 @@ export const PlaceBid: React.FC<PlaceBidProps> = ({ duration, setDuration }) => 
 
                 <button
                     onClick={() => window.location.hash = '#analytics'}
-                    className="w-full py-2 mt-2 rounded font-bold uppercase tracking-wider text-xs transition-all bg-transparent border border-green-500/30 text-green-500 hover:bg-green-500/10"
+                    className="w-full py-2 mt-2 rounded font-bold uppercase tracking-wider text-xs transition-all bg-transparent border border-[#0EA5E9]/30 text-[#0EA5E9] hover:bg-[#0EA5E9]/10"
                 >
                     📊 VIEW CAMPAIGN ANALYTICS
                 </button>

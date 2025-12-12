@@ -37,25 +37,25 @@ export const Header: React.FC<HeaderProps> = ({ setView, theme, setTheme, userPu
         <>
             <header className="flex justify-between items-center px-6 py-4 border-b border-[var(--border-neon)] bg-[var(--bg-glass)] backdrop-blur-md z-50 shadow-[var(--shadow-neon)] transition-all duration-500">
                 {/* Logo */}
-                <div className="flex items-center gap-3 cursor-pointer" onClick={() => setView && setView('agent')}>
-                    <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_10px_#00FF41] animate-pulse"></div>
+                <div className="flex items-center gap-3 cursor-pointer" onClick={() => window.location.hash = '#landing'}>
+                    <div className="w-2 h-2 rounded-full bg-[#0EA5E9] shadow-[0_0_10px_#0EA5E9] animate-pulse"></div>
                     <h1 className="text-xl font-bold text-white tracking-widest uppercase">
-                        Attentium <span className="text-xs text-green-500 font-mono align-top ml-1">BETA</span>
+                        Attentium <span className="text-xs text-[#0EA5E9] font-mono align-top ml-1">BETA</span>
                     </h1>
                 </div>
 
                 {/* Right Side: Stats & Wallet */}
                 <div className="flex items-center gap-6">
 
-                    {/* Earnings Pill (if user has pubkey) */}
+                    {/* Earnings Pill - Human (white accents) */}
                     {userPubkey && (
                         <button
                             onClick={() => setShowEarnings(true)}
-                            className="flex items-center gap-2 px-3 py-1 bg-green-500/10 rounded-full border border-green-500/30 hover:border-green-500 transition-all text-xs"
+                            className="flex items-center gap-2 px-3 py-1 bg-white/5 rounded-full border border-white/20 hover:border-white/50 transition-all text-xs"
                             title="View Earnings"
                         >
                             <span className="text-gray-400">💰 EARNED</span>
-                            <span className="text-green-400 font-mono font-bold">${totalEarnings.toFixed(4)}</span>
+                            <span className="text-white font-mono font-bold">${totalEarnings.toFixed(4)}</span>
                         </button>
                     )}
 
@@ -71,7 +71,7 @@ export const Header: React.FC<HeaderProps> = ({ setView, theme, setTheme, userPu
                     {/* Privy Auth */}
                     {authenticated && user ? (
                         <div className="flex items-center gap-3">
-                            <div className="px-3 py-1 rounded-full bg-green-500/10 border border-green-500 text-xs text-green-400 font-mono">
+                            <div className="px-3 py-1 rounded-full bg-white/5 border border-white/30 text-xs text-white font-mono">
                                 {user.email ? user.email.address : 'User'}
                             </div>
                             <button
