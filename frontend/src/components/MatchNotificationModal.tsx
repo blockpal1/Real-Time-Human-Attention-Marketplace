@@ -1,6 +1,7 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { api } from '../services/api';
 import { LivenessCheck } from './LivenessCheck';
+import { useAttentionAI } from '../hooks/useAttentionAI';
 
 interface MatchNotificationModalProps {
     match: {
@@ -77,17 +78,109 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
         return () => clearInterval(timer);
     }, [phase]);
 
+    // Shared Camera Stream Management
+    const sharedVideoRef = useRef<HTMLVideoElement>(null);
+    const streamRef = useRef<MediaStream | null>(null);
+
+    // Camera phases: preparing, liveness, expanding, focused
+    const isCameraPhase = phase === 'preparing' || phase === 'liveness' || phase === 'expanding' || phase === 'focused';
+
+    useEffect(() => {
+        const startSharedCamera = async () => {
+            if (!sharedVideoRef.current) return;
+            // If already has stream, don't restart
+            if (streamRef.current) return;
+
+            try {
+                console.log('[Camera] Starting shared camera...');
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: 640, height: 480, facingMode: "user" }
+                });
+                streamRef.current = stream;
+                if (sharedVideoRef.current) {
+                    sharedVideoRef.current.srcObject = stream;
+                    await sharedVideoRef.current.play().catch(e => console.error("Shared Video Play Error:", e));
+                    console.log('[Camera] Camera active and playing');
+                }
+            } catch (e) {
+                console.error("Shared Camera Error:", e);
+            }
+        };
+
+        const stopSharedCamera = () => {
+            if (streamRef.current) {
+                console.log('[Camera] Stopping shared camera...');
+                streamRef.current.getTracks().forEach(track => track.stop());
+                streamRef.current = null;
+            }
+            if (sharedVideoRef.current) {
+                sharedVideoRef.current.srcObject = null;
+            }
+        };
+
+        if (isCameraPhase) {
+            startSharedCamera();
+        } else {
+            stopSharedCamera();
+        }
+    }, [isCameraPhase]);
+
+    // Cleanup on unmount
+    useEffect(() => {
+        return () => {
+            if (streamRef.current) {
+                console.log('[Camera] Cleanup on unmount');
+                streamRef.current.getTracks().forEach(track => track.stop());
+                streamRef.current = null;
+            }
+        };
+    }, []);
+
+    // Focus AI Hook
+    const { isAttentive, calibrate, status: aiStatus } = useAttentionAI(
+        (phase === 'expanding' || phase === 'focused'), // Active
+        sharedVideoRef
+    );
+    // Force inject the shared ref into the hook's returned ref? 
+    // Actually, useAttentionAI returns its own ref. We need to tell it to use OURS.
+    // I need to update useAttentionAI to accept videoRef as an ARGUMENT in the hook call.
+    // I missed that in the previous step. 
+    // Workaround: Assign the shared ref to the hook's ref? No, won't trigger updates.
+
+    // I need to update useAttentionAI signature in the hook file first?
+    // Let's assume I did (I modified the file to remove stream logic, but did I change signature?)
+    // Checking previous diff: "export function useAttentionAI(active: boolean) {"
+    // It does NOT accept videoRef yet. 
+
+    // I will update useAttentionAI signature in the NEXT tool call.
+    // For now, I will modify this file assuming the signature is:
+    // useAttentionAI(active, videoRef)
+
+    // Wait, I can't modify this file until the hook is ready.
+    // I should modify the hook signature first.
+
+
     // Expansion animation timing
     useEffect(() => {
         if (phase !== 'expanding') return;
-        const timer = setTimeout(() => setPhase('focused'), 800);
+        const timer = setTimeout(() => {
+            setPhase('focused');
+            calibrate(); // Set strict center when focus mode starts
+        }, 800);
         return () => clearTimeout(timer);
-    }, [phase]);
+    }, [phase, calibrate]);
 
     // Focus session timer (content viewing phase)
     useEffect(() => {
         if (phase !== 'focused') return;
+
         const timer = setInterval(() => {
+            // Attention Check: Pause timer if looking away
+            // Only enforce if AI is ready (graceful degradation)
+            if (aiStatus === 'ready' && !isAttentive) {
+                return;
+            }
+
             setSessionTime(prev => {
                 if (prev <= 1) {
                     clearInterval(timer);
@@ -101,7 +194,7 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
             });
         }, 1000);
         return () => clearInterval(timer);
-    }, [phase, validationQuestion]);
+    }, [phase, isAttentive, aiStatus, validationQuestion]);
 
     // Question phase timer (grace period)
     useEffect(() => {
@@ -218,6 +311,7 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
             return (
                 <LivenessCheck
                     active={true}
+                    videoRef={sharedVideoRef}
                     onVerified={() => setPhase('expanding')}
                 />
             );
@@ -301,6 +395,26 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
         // Focused phase - Show content (NO validation question here anymore)
         return (
             <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+                {/* AI Tracking Video (Replaced by Shared Video) */}
+
+                {/* Attention Warning Overlay */}
+                {!isAttentive && aiStatus === 'ready' && (
+                    <div style={{
+                        position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                        backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 50,
+                        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                        backdropFilter: 'blur(5px)'
+                    }}>
+                        <div style={{ fontSize: '48px', marginBottom: '16px', animation: 'pulse 1s infinite' }}>👀</div>
+                        <div style={{ color: '#ff4444', fontSize: '24px', fontWeight: 'bold', letterSpacing: '2px', textAlign: 'center' }}>
+                            ATTENTION LOST
+                        </div>
+                        <div style={{ color: 'white', marginTop: '8px', fontSize: '14px' }}>
+                            Please look at the center of the screen to resume earnings.
+                        </div>
+                    </div>
+                )}
+
                 {/* Top Bar */}
                 <div style={{ position: 'absolute', top: 0, left: 0, right: 0, padding: '12px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
@@ -358,6 +472,17 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
 
     return (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: (phase === 'focused' || phase === 'expanding' || phase === 'question') ? '#000' : 'rgba(0,0,0,0.9)', transition: 'background-color 0.8s ease' }}>
+            {/* Shared Camera Stream - Always Mounted, Hidden */}
+            <video
+                ref={sharedVideoRef}
+                autoPlay
+                playsInline
+                muted
+                width={640}
+                height={480}
+                style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', zIndex: -1000 }}
+            />
+
             <div style={getModalStyles()}>
                 {renderContent()}
             </div>

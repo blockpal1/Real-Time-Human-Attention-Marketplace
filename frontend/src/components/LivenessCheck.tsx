@@ -4,10 +4,14 @@ import { useFaceLiveness } from '../hooks/useFaceLiveness';
 interface LivenessCheckProps {
     onVerified: () => void;
     active: boolean;
+    videoRef?: React.RefObject<HTMLVideoElement>; // Accept external ref
 }
 
-export const LivenessCheck: React.FC<LivenessCheckProps> = ({ onVerified, active }) => {
-    const videoRef = useRef<HTMLVideoElement>(null);
+export const LivenessCheck: React.FC<LivenessCheckProps> = ({ onVerified, active, videoRef: externalVideoRef }) => {
+    // Use external ref if provided, otherwise fallback to local (though local won't start stream anymore)
+    const localVideoRef = useRef<HTMLVideoElement>(null);
+    const videoRef = externalVideoRef || localVideoRef;
+
     const { status, challenge, progress, isVerified } = useFaceLiveness({
         videoRef,
         onVerified,
@@ -36,15 +40,18 @@ export const LivenessCheck: React.FC<LivenessCheckProps> = ({ onVerified, active
             position: 'relative'
         }}>
             {/* Hidden Video Feed - Privacy First */}
-            <video
-                ref={videoRef}
-                style={{ opacity: 0, position: 'absolute', pointerEvents: 'none', zIndex: -1 }}
-                playsInline
-                autoPlay
-                muted
-                width={640}
-                height={480}
-            />
+            {/* Only render local video if no external ref provided */}
+            {!externalVideoRef && (
+                <video
+                    ref={localVideoRef}
+                    style={{ opacity: 0, position: 'absolute', pointerEvents: 'none', zIndex: -1 }}
+                    playsInline
+                    autoPlay
+                    muted
+                    width={640}
+                    height={480}
+                />
+            )}
 
             {/* Status & Instructions */}
             <div style={{ textAlign: 'center', zIndex: 10 }}>
