@@ -8,6 +8,7 @@ import { wsClient } from './services/wsClient';
 import { MatchNotificationModal } from './components/MatchNotificationModal';
 import { CampaignAnalytics } from './components/CampaignAnalytics';
 import { HeroSection } from './components';
+import { MobileNav } from './components/MobileNav';
 
 interface MatchNotification {
     matchId: string;
@@ -27,6 +28,7 @@ function App() {
     const [userPubkey, setUserPubkey] = React.useState<string | null>(null);
     const [showAnalytics, setShowAnalytics] = React.useState(false);
     const [showLanding, setShowLanding] = React.useState(true);
+    const [activePanel, setActivePanel] = React.useState<'bid' | 'book' | 'ask'>('book');
 
     // Listen for hash changes to show analytics or landing
     React.useEffect(() => {
@@ -105,9 +107,9 @@ function App() {
                         />
                     )}
 
-                    <main className="flex flex-1 w-full overflow-hidden">
+                    <main className="flex flex-col md:flex-row flex-1 w-full overflow-hidden">
                         {/* LEFT COLUMN: Campaign Logic or Analytics */}
-                        <div className="flex flex-col w-sidebar border-r border-[#333842] bg-panel p-4 gap-4 overflow-y-auto">
+                        <div className={`panel-left bg-panel p-4 gap-4 overflow-y-auto pb-20 md:pb-4 ${activePanel === 'bid' ? 'active' : ''}`}>
                             {showAnalytics ? (
                                 <>
                                     <button
@@ -130,7 +132,7 @@ function App() {
                         </div>
 
                         {/* CENTER COLUMN: The Market */}
-                        <div className="flex-1 flex flex-col min-w-0 bg-dark p-4 gap-4 items-center overflow-y-auto">
+                        <div className={`panel-center bg-dark p-4 gap-4 items-center overflow-y-auto pb-20 md:pb-4 ${activePanel === 'book' ? 'active' : ''}`}>
                             {/* Live Feed Section */}
                             <div className="w-full max-w-2xl h-[120px] border-b border-[#333842] mb-2 overflow-hidden flex-shrink-0">
                                 <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">Live Match Feed</h2>
@@ -148,7 +150,7 @@ function App() {
                             </div>
 
                             {/* Order Book */}
-                            <div className="flex-1 flex flex-col overflow-hidden w-full max-w-2xl min-w-[350px]">
+                            <div className="flex-1 flex flex-col overflow-hidden w-full max-w-2xl min-w-0 md:min-w-[350px]">
                                 <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">
                                     {`<${duration} Second Order Book`}
                                 </h2>
@@ -156,8 +158,8 @@ function App() {
                             </div>
                         </div>
 
-                        {/* RIGHT COLUMN: Analytics */}
-                        <div className="flex flex-col w-analytics border-l border-[#333842] bg-panel p-4 gap-4 overflow-y-auto">
+                        {/* RIGHT COLUMN: Ask Settings */}
+                        <div className={`panel-right bg-panel p-4 gap-4 overflow-y-auto pb-20 md:pb-4 ${activePanel === 'ask' ? 'active' : ''}`}>
                             <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">Ask Settings</h2>
                             <PriceFloorSetter duration={duration} setDuration={setDuration} setSessionToken={setSessionToken} setUserPubkey={setUserPubkey} />
 
@@ -166,6 +168,9 @@ function App() {
                             </div>
                         </div>
                     </main>
+
+                    {/* Mobile Navigation */}
+                    <MobileNav activePanel={activePanel} setActivePanel={setActivePanel} />
 
                     <Footer />
                 </div>
