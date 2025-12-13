@@ -8,7 +8,7 @@ import { wsClient } from './services/wsClient';
 import { api } from './services/api';
 import { MatchNotificationModal } from './components/MatchNotificationModal';
 import { CampaignAnalytics } from './components/CampaignAnalytics';
-import { HeroSection, ManifestoSection } from './components';
+import { HeroSection, ManifestoSection, HowItWorks, PrivacyGuarantee, FinalCTA } from './components';
 import { MobileNav } from './components/MobileNav';
 
 interface MatchNotification {
@@ -105,6 +105,9 @@ function App() {
                 <div className="h-screen overflow-y-scroll bg-black">
                     <HeroSection />
                     <ManifestoSection />
+                    <HowItWorks />
+                    <PrivacyGuarantee />
+                    <FinalCTA />
                 </div>
             )}
 
