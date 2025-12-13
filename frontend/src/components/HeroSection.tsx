@@ -181,7 +181,7 @@ const ButtonCTA = () => {
 
 export default function AttentiumLanding() {
     return (
-        <div className="relative w-full h-screen bg-black text-white overflow-visible font-sans selection:bg-[#0EA5E9]/30">
+        <div className="relative w-full min-h-screen pb-24 bg-black text-white overflow-visible font-sans selection:bg-[#0EA5E9]/30">
 
             {/* Background Layer */}
             <DataLiquidityBackground />
@@ -189,13 +189,15 @@ export default function AttentiumLanding() {
             {/* Navigation Layer */}
             <nav className="relative z-10 w-full p-8 flex justify-between items-center max-w-7xl mx-auto">
                 <div className="flex items-center gap-3">
-                    <AttentiumLogo className="w-10 h-10" />
-                    <span className="font-bold text-xl tracking-tight hidden sm:block">Attentium</span>
+                    <div className="w-2 h-2 rounded-full bg-[#0EA5E9] shadow-[0_0_10px_#0EA5E9] animate-pulse"></div>
+                    <span className="text-xl font-bold text-white tracking-widest uppercase">
+                        Attentium <span className="text-xs text-[#0EA5E9] font-mono align-top ml-1">BETA</span>
+                    </span>
                 </div>
 
                 <div className="flex gap-4">
                     <NavBadge>PROTOCOL v1.0</NavBadge>
-                    <NavBadge>STATUS: LIVE</NavBadge>
+                    <NavBadge>STATUS: BETA</NavBadge>
                 </div>
             </nav>
 
@@ -226,7 +228,7 @@ export default function AttentiumLanding() {
                     className="max-w-4xl mx-auto"
                 >
                     <blockquote className="text-2xl md:text-4xl lg:text-5xl font-light leading-tight text-white tracking-tight">
-                        "Welcome to the first settlement layer where <span className="text-[#0EA5E9] font-semibold drop-shadow-[0_0_15px_rgba(14,165,233,0.4)]">artificial intelligence</span> pays <span className="font-semibold">biological intelligence</span> for ground truth."
+                        "Attentium is the first interspecies settlement protocol— where <span className="text-[#0EA5E9] font-semibold drop-shadow-[0_0_15px_rgba(14,165,233,0.4)]">artificial intelligence</span> pays <span className="font-semibold">biological intelligence</span> for ground truth."
                     </blockquote>
                 </motion.div>
 
@@ -269,6 +271,6 @@ export default function AttentiumLanding() {
           animation: shimmer 2s infinite linear;
         }
       `}</style>
-        </div>
+        </div >
     );
 }

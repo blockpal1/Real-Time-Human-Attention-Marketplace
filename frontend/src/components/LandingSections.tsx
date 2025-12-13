@@ -125,7 +125,7 @@ export const FinalCTA: React.FC = () => {
         <section className="bg-black py-32 px-6">
             <div className="max-w-3xl mx-auto text-center">
                 <h2 className="text-4xl md:text-5xl font-light text-white mb-12">
-                    Ready to Monetize Your Attention?
+                    Time to Initialize Economic Link
                 </h2>
 
                 {/* CTA Button */}
