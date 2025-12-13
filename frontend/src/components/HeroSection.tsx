@@ -206,9 +206,9 @@ export default function AttentiumLanding() {
 
                 {/* Animated Headline */}
                 <motion.div
-                    initial={{ opacity: 0, y: 30 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.8, ease: "easeOut" }}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.6, ease: "easeOut" }}
                 >
                     <h1 className="text-5xl md:text-7xl lg:text-8xl font-medium tracking-tight leading-[1.1]">
                         <span className="block text-transparent bg-clip-text bg-gradient-to-b from-white to-gray-400">
@@ -222,9 +222,9 @@ export default function AttentiumLanding() {
 
                 {/* Featured Quote */}
                 <motion.div
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ duration: 0.8, delay: 0.2 }}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.6, delay: 0.15 }}
                     className="max-w-4xl mx-auto"
                 >
                     <blockquote className="text-2xl md:text-4xl lg:text-5xl font-light leading-tight text-white tracking-tight">
@@ -236,7 +236,7 @@ export default function AttentiumLanding() {
                 <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    transition={{ duration: 0.8, delay: 0.4 }}
+                    transition={{ duration: 0.6, delay: 0.3 }}
                     className="max-w-2xl mx-auto text-lg md:text-xl text-gray-400 font-light leading-relaxed text-left"
                 >
                     <p>
@@ -246,9 +246,9 @@ export default function AttentiumLanding() {
 
                 {/* CTA Section */}
                 <motion.div
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ duration: 0.5, delay: 0.6 }}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.6, delay: 0.45 }}
                 >
                     <ButtonCTA />
                 </motion.div>

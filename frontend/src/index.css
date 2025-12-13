@@ -375,6 +375,21 @@ body {
     background-color: var(--bg-panel);
 }
 
+/* Quantum Theme - Subtle lighter dark mode */
+.quantum {
+    --bg-dark: #0f1115;
+    --bg-panel: #14161c;
+    --bg-glass: rgba(20, 22, 28, 0.85);
+}
+
+.quantum .bg-dark {
+    background-color: #0f1115;
+}
+
+.quantum .bg-panel {
+    background-color: #14161c;
+}
+
 .text-main {
     color: var(--text-main);
 }
