@@ -68,5 +68,14 @@ export const api = {
         const response = await fetch(`${API_URL}/campaigns/${bidId}/responses`);
         if (!response.ok) throw new Error('Failed to fetch campaign responses');
         return response.json();
+    },
+
+    async dismissMatch(matchId: string) {
+        const response = await fetch(`${API_URL}/matches/${matchId}/dismiss`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        if (!response.ok) throw new Error('Failed to dismiss match');
+        return response.json();
     }
 };

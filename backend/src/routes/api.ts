@@ -3,7 +3,7 @@ import { getStatus } from '../controllers/StatusController';
 import { createChallenge } from '../controllers/AttestationController';
 import { startSession, getActiveSessions } from '../controllers/UserController';
 import { createBid, getActiveBids } from '../controllers/AgentController';
-import { completeMatch, submitValidationResult } from '../controllers/MatchController';
+import { completeMatch, submitValidationResult, dismissMatch } from '../controllers/MatchController';
 import { getUserEarnings, getSessionHistory } from '../controllers/UserEarningsController';
 import { getCampaignResponses, getAgentCampaigns } from '../controllers/AgentCampaignController';
 
@@ -29,6 +29,7 @@ router.post('/agents/bids', createBid);
 
 // Match Lifecycle Routes
 router.post('/matches/:matchId/complete', completeMatch); // Human completes match
+router.post('/matches/:matchId/dismiss', dismissMatch);   // Human dismisses/declines match
 router.post('/matches/:matchId/validation', submitValidationResult); // Agent validates answer
 
 export default router;

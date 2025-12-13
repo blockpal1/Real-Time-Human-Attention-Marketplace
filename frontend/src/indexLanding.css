@@ -181,3 +181,166 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.05);
   border-radius: 16px;
 }
+
+/* ===================================
+   MANIFESTO SECTION - Editorial Layout
+   =================================== */
+
+.manifesto-section {
+  background-color: #000;
+  padding: 10rem 2rem;
+  min-height: 100vh;
+}
+
+.manifesto-container {
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+/* Hero Title */
+.manifesto-hero {
+  margin-bottom: 8rem;
+}
+
+.manifesto-title {
+  font-family: 'Inter', -apple-system, sans-serif;
+  font-size: clamp(2.5rem, 6vw, 4rem);
+  font-weight: 300;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  color: #fff;
+}
+
+/* Article Sections */
+.manifesto-article {
+  margin-bottom: 6rem;
+}
+
+.manifesto-heading {
+  font-family: 'Inter', sans-serif;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: #6b7280;
+  margin-bottom: 2rem;
+}
+
+.manifesto-subheading {
+  font-family: 'Inter', sans-serif;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #9ca3af;
+  margin-bottom: 1rem;
+}
+
+.manifesto-text {
+  font-family: 'Inter', sans-serif;
+  font-size: 1.125rem;
+  font-weight: 400;
+  line-height: 1.8;
+  color: #d1d5db;
+  margin-bottom: 1.5rem;
+}
+
+.manifesto-text:last-child {
+  margin-bottom: 0;
+}
+
+.manifesto-text strong {
+  font-weight: 600;
+  color: #fff;
+}
+
+/* The Inversion - Isolated Statement */
+.manifesto-inversion {
+  font-family: 'Inter', sans-serif;
+  font-size: 1.5rem;
+  font-weight: 400;
+  line-height: 1.6;
+  color: #fff;
+  padding: 3rem 0;
+  border-top: 1px solid #1f2937;
+  border-bottom: 1px solid #1f2937;
+}
+
+/* Before/After Comparison */
+.manifesto-comparison {
+  display: grid;
+  gap: 3rem;
+}
+
+@media (min-width: 640px) {
+  .manifesto-comparison {
+    grid-template-columns: 1fr 1fr;
+    gap: 4rem;
+  }
+}
+
+.manifesto-before,
+.manifesto-after {
+  padding-top: 1.5rem;
+}
+
+.manifesto-before {
+  border-top: 1px solid #374151;
+}
+
+.manifesto-after {
+  border-top: 1px solid #fff;
+}
+
+/* Closing Creed */
+.manifesto-closing {
+  margin-top: 8rem;
+  padding-top: 4rem;
+  border-top: 1px solid #1f2937;
+}
+
+.manifesto-creed {
+  font-family: 'Inter', sans-serif;
+  font-size: 1.25rem;
+  font-weight: 400;
+  line-height: 1.6;
+  color: #9ca3af;
+  margin-bottom: 1rem;
+}
+
+.manifesto-creed-final {
+  font-family: 'Inter', sans-serif;
+  font-size: 1.5rem;
+  font-weight: 500;
+  line-height: 1.4;
+  color: #fff;
+  margin-top: 3rem;
+}
+
+/* Mobile Adjustments */
+@media (max-width: 640px) {
+  .manifesto-section {
+    padding: 6rem 1.5rem;
+  }
+
+  .manifesto-hero {
+    margin-bottom: 5rem;
+  }
+
+  .manifesto-article {
+    margin-bottom: 4rem;
+  }
+
+  .manifesto-text {
+    font-size: 1rem;
+  }
+
+  .manifesto-inversion {
+    font-size: 1.25rem;
+  }
+}
+
+/* CTA Button in Manifesto */
+.manifesto-cta {
+  margin-top: 6rem;
+  text-align: center;
+  padding-bottom: 4rem;
+}

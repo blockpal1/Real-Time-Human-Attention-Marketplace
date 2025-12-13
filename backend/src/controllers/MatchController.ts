@@ -121,3 +121,63 @@ export const submitValidationResult = async (req: Request, res: Response) => {
         res.status(500).json({ error: 'Failed to submit validation result' });
     }
 };
+
+/**
+ * Human dismisses/declines a match offer
+ * Restores bid quantity to order book
+ */
+export const dismissMatch = async (req: Request, res: Response) => {
+    const { matchId } = req.params;
+
+    try {
+        // Get the match and verify it's in 'offered' status
+        const match = await prisma.match.findUnique({
+            where: { id: matchId },
+            include: { bid: true }
+        });
+
+        if (!match) {
+            return res.status(404).json({ error: 'Match not found' });
+        }
+
+        if (match.status !== 'offered') {
+            return res.status(400).json({ error: `Cannot dismiss match with status: ${match.status}` });
+        }
+
+        // 1. Mark match as dismissed
+        await prisma.match.update({
+            where: { id: matchId },
+            data: { status: 'dismissed' }
+        });
+
+        // 2. Restore bid quantity (return to order book)
+        const updatedBid = await prisma.bid.update({
+            where: { id: match.bidId },
+            data: { targetQuantity: { increment: 1 } }
+        });
+
+        console.log(`Match ${matchId} dismissed. Bid ${match.bidId} quantity restored to ${updatedBid.targetQuantity}`);
+
+        // 3. Publish BID_UPDATED to restore bid in order book on frontend
+        if (redis.isOpen) {
+            await redis.publish('marketplace_events', JSON.stringify({
+                type: 'BID_UPDATED',
+                payload: {
+                    bidId: match.bidId,
+                    remainingQuantity: updatedBid.targetQuantity
+                }
+            }));
+        }
+
+        res.status(200).json({
+            success: true,
+            matchId,
+            bidRestored: true,
+            newBidQuantity: updatedBid.targetQuantity
+        });
+
+    } catch (error) {
+        console.error('Dismiss Match Error:', error);
+        res.status(500).json({ error: 'Failed to dismiss match' });
+    }
+};

@@ -181,7 +181,7 @@ const ButtonCTA = () => {
 
 export default function AttentiumLanding() {
     return (
-        <div className="relative w-full min-h-screen bg-black text-white overflow-hidden font-sans selection:bg-[#0EA5E9]/30">
+        <div className="relative w-full h-screen bg-black text-white overflow-visible font-sans selection:bg-[#0EA5E9]/30">
 
             {/* Background Layer */}
             <DataLiquidityBackground />

@@ -5,9 +5,10 @@ import { OrderBook } from './components/OrderBook';
 import { PriceFloorSetter } from './components/PriceFloorSetter';
 import { PlaceBid } from './components/PlaceBid';
 import { wsClient } from './services/wsClient';
+import { api } from './services/api';
 import { MatchNotificationModal } from './components/MatchNotificationModal';
 import { CampaignAnalytics } from './components/CampaignAnalytics';
-import { HeroSection } from './components';
+import { HeroSection, ManifestoSection } from './components';
 import { MobileNav } from './components/MobileNav';
 
 interface MatchNotification {
@@ -84,14 +85,28 @@ function App() {
         console.log('Focus session ended');
     };
 
-    const handleDismissMatch = () => {
+    const handleDismissMatch = async () => {
+        // Notify backend to restore bid to order book
+        if (match?.matchId) {
+            try {
+                await api.dismissMatch(match.matchId);
+                console.log('Match dismissed, bid returned to order book');
+            } catch (error) {
+                console.error('Failed to dismiss match:', error);
+            }
+        }
         setMatch(null);
     };
 
     return (
         <>
             {/* Landing Page */}
-            {showLanding && <HeroSection />}
+            {showLanding && (
+                <div className="h-screen overflow-y-scroll bg-black">
+                    <HeroSection />
+                    <ManifestoSection />
+                </div>
+            )}
 
             {/* Main App Dashboard */}
             {!showLanding && (
