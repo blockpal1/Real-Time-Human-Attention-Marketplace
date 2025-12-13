@@ -8,7 +8,7 @@ import { wsClient } from './services/wsClient';
 import { api } from './services/api';
 import { MatchNotificationModal } from './components/MatchNotificationModal';
 import { CampaignAnalytics } from './components/CampaignAnalytics';
-import { HeroSection, ManifestoSection, HowItWorks, PrivacyGuarantee, FinalCTA } from './components';
+import { HeroSection, ManifestoSection, HowItWorks, PrivacyGuarantee, FinalCTA, LandingFooter } from './components';
 import { MobileNav } from './components/MobileNav';
 
 interface MatchNotification {
@@ -108,6 +108,7 @@ function App() {
                     <HowItWorks />
                     <PrivacyGuarantee />
                     <FinalCTA />
+                    <LandingFooter />
                 </div>
             )}
 
