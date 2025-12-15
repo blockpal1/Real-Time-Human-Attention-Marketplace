@@ -10,6 +10,7 @@ import { MatchNotificationModal } from './components/MatchNotificationModal';
 import { CampaignAnalytics } from './components/CampaignAnalytics';
 import { HeroSection, ManifestoSection, HowItWorks, PrivacyGuarantee, FinalCTA, LandingFooter } from './components';
 import { MobileNav } from './components/MobileNav';
+import { AdminDashboard } from './pages/AdminDashboard';
 
 interface MatchNotification {
     matchId: string;
@@ -29,6 +30,7 @@ function App() {
     const [userPubkey, setUserPubkey] = React.useState<string | null>(null);
     const [showAnalytics, setShowAnalytics] = React.useState(false);
     const [showLanding, setShowLanding] = React.useState(true);
+    const [showAdmin, setShowAdmin] = React.useState(false);
     const [activePanel, setActivePanel] = React.useState<'bid' | 'book' | 'ask'>('book');
 
     // Listen for hash changes to show analytics or landing
@@ -36,6 +38,7 @@ function App() {
         const handleHashChange = () => {
             const hash = window.location.hash;
             setShowAnalytics(hash === '#analytics');
+            setShowAdmin(hash === '#admin');
             // Show landing page if no hash, #landing, or on initial load
             setShowLanding(hash === '' || hash === '#landing' || hash === '#');
         };
@@ -112,8 +115,11 @@ function App() {
                 </div>
             )}
 
+            {/* Admin Dashboard */}
+            {showAdmin && <AdminDashboard />}
+
             {/* Main App Dashboard */}
-            {!showLanding && (
+            {!showLanding && !showAdmin && (
                 <div className={`flex flex-col h-screen text-main bg-dark overflow-hidden ${theme}`}>
                     <Header theme={theme} setTheme={setTheme} userPubkey={userPubkey} />
 

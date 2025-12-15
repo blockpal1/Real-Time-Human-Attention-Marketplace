@@ -2,13 +2,17 @@ import { Request, Response } from 'express';
 import { prisma } from '../utils/prisma';
 import { redis } from '../utils/redis';
 import { z } from 'zod';
+import { moderationService } from '../services/ContentModerationService';
+
+// Minimum bid floor: $0.0001/second = 100 micros
+const MIN_PRICE_MICROS = 100;
 
 const createBidSchema = z.object({
     target_url: z.string().optional(),
     max_price_per_second: z.number().int().positive(),
     required_attention_score: z.number().min(0).max(1),
     expiry_seconds: z.number().optional().default(60),
-    quantity_seconds: z.number().int().positive().default(30), // Legacy check (keep for compatibility)
+    quantity_seconds: z.number().int().positive().default(30), // Legacy (keep for compatibility)
     category: z.enum(['meme', 'doc', 'video']).default('meme'),
     content_url: z.string().optional(),
 
@@ -30,23 +34,42 @@ export const createBid = async (req: Request, res: Response) => {
         required_attention_score,
         expiry_seconds,
         content_url,
-
         target_quantity,
         duration_per_user,
         validation_question
     } = result.data;
 
-    // TODO: Verify Agent Balance / Auth (Mock for now)
-    const agentPubkey = "mock-agent-pubkey";
+    // Minimum bid floor validation
+    if (max_price_per_second < MIN_PRICE_MICROS) {
+        return res.status(400).json({
+            error: `Bid below minimum floor price`,
+            minimum_micros: MIN_PRICE_MICROS,
+            minimum_usdc: MIN_PRICE_MICROS / 1_000_000,
+            provided_micros: max_price_per_second
+        });
+    }
 
-    try {
-        // Upsert Mock Agent
+    // Use authenticated agent if available, otherwise fallback to admin/UI mode
+    let agentPubkey: string;
+    let builderCode: string | null = null;
+
+    if (req.agent) {
+        // Authenticated API request
+        agentPubkey = req.agent.pubkey;
+        builderCode = req.agent.builderCode;
+    } else {
+        // Legacy UI mode - use admin agent
+        agentPubkey = "admin-ui-agent";
+
+        // Upsert admin agent if needed
         await prisma.agent.upsert({
             where: { pubkey: agentPubkey },
             update: {},
-            create: { pubkey: agentPubkey }
+            create: { pubkey: agentPubkey, name: 'Admin UI', tier: 'enterprise' }
         });
+    }
 
+    try {
         const bid = await prisma.bid.create({
             data: {
                 agentPubkey: agentPubkey,
@@ -67,15 +90,37 @@ export const createBid = async (req: Request, res: Response) => {
             type: 'BID_CREATED',
             payload: {
                 bidId: bid.id,
-                max_price_per_second: max_price_per_second, // Keep as micros or normalize? Let's send raw and normalize in frontend
-                price: max_price_per_second / 1_000_000, // Normalized for frontend
+                max_price_per_second: max_price_per_second,
+                price: max_price_per_second / 1_000_000,
                 target_url: target_url,
                 duration: duration_per_user,
-                quantity: target_quantity
+                quantity: target_quantity,
+                builder_code: builderCode
             }
         }));
 
-        res.status(201).json({ bid_id: bid.id });
+        // Get platform mode for response
+        const config = await prisma.platformConfig.findUnique({
+            where: { id: 'singleton' }
+        });
+
+        // Queue content for moderation (async)
+        if (content_url || target_url || validation_question) {
+            moderationService.queueForModeration(bid.id);
+        } else {
+            // No content to moderate, auto-approve
+            await prisma.bid.update({
+                where: { id: bid.id },
+                data: { contentStatus: 'approved' }
+            });
+        }
+
+        res.status(201).json({
+            bid_id: bid.id,
+            mode: config?.mode || 'beta',
+            agent_pubkey: agentPubkey,
+            content_status: 'pending'
+        });
 
     } catch (error) {
         console.error('Create Bid Error:', error);

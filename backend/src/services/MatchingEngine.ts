@@ -1,5 +1,6 @@
 import { prisma } from '../utils/prisma';
 import { redis } from '../utils/redis';
+import { webhookService } from './WebhookService';
 
 export class MatchingEngine {
     private isRunning = false;
@@ -170,6 +171,18 @@ export class MatchingEngine {
                     validationQuestion: bid.validationQuestion || null
                 }
             }));
+        }
+
+        // 4. Send webhook to agent
+        if (bid.agentPubkey) {
+            await webhookService.notifyMatchCreated(
+                bid.agentPubkey,
+                matchRecord.id,
+                bid.id,
+                session.id,
+                bid.maxPricePerSecond,
+                bid.durationPerUser
+            );
         }
     }
 

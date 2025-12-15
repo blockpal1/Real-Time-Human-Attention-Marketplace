@@ -6,6 +6,18 @@ import { createBid, getActiveBids } from '../controllers/AgentController';
 import { completeMatch, submitValidationResult, dismissMatch } from '../controllers/MatchController';
 import { getUserEarnings, getSessionHistory } from '../controllers/UserEarningsController';
 import { getCampaignResponses, getAgentCampaigns } from '../controllers/AgentCampaignController';
+import { registerAgent, getAgentProfile, getAgentBalance, updateWebhook } from '../controllers/AgentRegistrationController';
+import { authenticateAgent, optionalAuth } from '../middleware/auth';
+import { authenticateAdmin } from '../middleware/adminAuth';
+import {
+    getAdminStatus,
+    updatePlatformMode,
+    getBuilderCodes,
+    reviewBuilderCode,
+    createBuilderCode,
+    getFlaggedContent,
+    reviewContent
+} from '../controllers/AdminController';
 
 const router = Router();
 
@@ -25,11 +37,38 @@ router.get('/agents/:pubkey/campaigns', getAgentCampaigns);
 router.get('/campaigns/:bidId/responses', getCampaignResponses);
 
 router.post('/users/session/start', startSession);
-router.post('/agents/bids', createBid);
+
+// === Agent API (v1) ===
+
+// Public: Register new agent
+router.post('/agents/register', registerAgent);
+
+// Authenticated: Agent profile & balance
+router.get('/agents/me', authenticateAgent, getAgentProfile);
+router.get('/agents/balance', authenticateAgent, getAgentBalance);
+router.patch('/agents/webhook', authenticateAgent, updateWebhook);
+
+// Create bid - supports both auth (API) and no-auth (UI)
+router.post('/agents/bids', optionalAuth, createBid);
 
 // Match Lifecycle Routes
-router.post('/matches/:matchId/complete', completeMatch); // Human completes match
-router.post('/matches/:matchId/dismiss', dismissMatch);   // Human dismisses/declines match
-router.post('/matches/:matchId/validation', submitValidationResult); // Agent validates answer
+router.post('/matches/:matchId/complete', completeMatch);
+router.post('/matches/:matchId/dismiss', dismissMatch);
+router.post('/matches/:matchId/validation', submitValidationResult);
+
+// === Admin API ===
+// Protected by X-Admin-Secret header
+
+router.get('/admin/status', authenticateAdmin, getAdminStatus);
+router.post('/admin/mode', authenticateAdmin, updatePlatformMode);
+
+// Builder code management
+router.get('/admin/builder-codes', authenticateAdmin, getBuilderCodes);
+router.post('/admin/builder-codes', authenticateAdmin, createBuilderCode);
+router.post('/admin/builder-codes/:codeId/review', authenticateAdmin, reviewBuilderCode);
+
+// Content moderation
+router.get('/admin/content/flagged', authenticateAdmin, getFlaggedContent);
+router.post('/admin/content/:bidId/review', authenticateAdmin, reviewContent);
 
 export default router;

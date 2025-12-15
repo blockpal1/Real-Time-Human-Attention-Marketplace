@@ -17,10 +17,37 @@ model User {
 }
 
 model Agent {
-  id        String    @id @default(uuid())
-  pubkey    String    @unique
-  createdAt DateTime  @default(now())
-  bids      Bid[]
+  id            String    @id @default(uuid())
+  pubkey        String    @unique
+  apiKey        String    @unique @default(uuid())  // API key for authentication
+  name          String?                              // Display name
+  webhookUrl    String?                              // Webhook endpoint for events
+  builderCode   String?                              // Genesis builder code
+  tier          String    @default("anonymous")     // anonymous, verified, enterprise
+  escrowBalance Int       @default(0)               // Virtual escrow in micros (for sandbox)
+  active        Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  bids          Bid[]
+}
+
+// Builder code registry for genesis fee sharing
+model BuilderCode {
+  id              String    @id @default(uuid())
+  code            String    @unique                 // e.g., "langchain", "autogen"
+  builderPubkey   String                            // Payout wallet
+  revenueShareBps Int       @default(5000)          // Basis points (5000 = 50%)
+  tier            String    @default("pending")     // pending, genesis, standard
+  totalVolume     BigInt    @default(0)             // Lifetime volume in micros
+  createdAt       DateTime  @default(now())
+  approvedAt      DateTime?
+}
+
+// Platform configuration
+model PlatformConfig {
+  id        String   @id @default("singleton")
+  mode      String   @default("beta")              // beta, hybrid, live
+  updatedAt DateTime @updatedAt
 }
 
 model Session {
@@ -44,6 +71,7 @@ model Bid {
   requiredAttentionScore Float
   targetUrl           String?
   contentUrl          String?   // URL to uploaded creative asset (image/video)
+  contentStatus       String    @default("pending") // pending, approved, flagged, rejected
   expiry              DateTime
   active              Boolean   @default(true)
   createdAt           DateTime  @default(now())

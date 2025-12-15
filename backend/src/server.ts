@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { createServer } from 'http';
 import app from './app';
 import { WebSocketManager } from './websockets/WebSocketManager';
@@ -50,6 +51,14 @@ async function hydrateOrderBook() {
 // Start
 async function start() {
     await connectRedis();
+
+    // Initialize platform config (singleton)
+    await prisma.platformConfig.upsert({
+        where: { id: 'singleton' },
+        update: {},
+        create: { id: 'singleton', mode: 'beta' }
+    });
+    console.log('[Platform] Mode: beta');
 
     // Hydrate order book from persisted bids
     await hydrateOrderBook();

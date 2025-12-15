@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { prisma } from '../utils/prisma';
 import { redis } from '../utils/redis';
+import { webhookService } from '../services/WebhookService';
 
 export const completeMatch = async (req: Request, res: Response) => {
     const { matchId } = req.params;
@@ -62,6 +63,19 @@ export const completeMatch = async (req: Request, res: Response) => {
                     timestamp: new Date().toISOString()
                 }
             }));
+        }
+
+        // Send webhook to agent
+        if (match.bid.agentPubkey) {
+            const earnedMicros = Math.round(earnedAmount * 1_000_000);
+            await webhookService.notifyMatchCompleted(
+                match.bid.agentPubkey,
+                match.id,
+                match.bidId,
+                duration,
+                answer || null,
+                earnedMicros
+            );
         }
 
         // Return immediate payment confirmation to frontend
