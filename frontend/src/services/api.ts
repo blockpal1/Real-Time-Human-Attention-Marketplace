@@ -39,7 +39,7 @@ export const api = {
         return response.json();
     },
 
-    async completeMatch(matchId: string, data: { answer: string; actualDuration: number; exitedEarly: boolean }) {
+    async completeMatch(matchId: string, data: { answer: string; actualDuration: number; exitedEarly: boolean; bidId?: string }) {
         const response = await fetch(`${API_URL}/matches/${matchId}/complete`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

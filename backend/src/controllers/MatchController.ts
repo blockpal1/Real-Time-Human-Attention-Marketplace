@@ -5,9 +5,64 @@ import { webhookService } from '../services/WebhookService';
 
 export const completeMatch = async (req: Request, res: Response) => {
     const { matchId } = req.params;
-    const { answer, actualDuration, exitedEarly } = req.body;
+    const { answer, actualDuration, exitedEarly, bidId } = req.body;
 
     try {
+        // Handle in-memory match completion (these aren't stored in Prisma)
+        // Covers both: x402_match_ (from MatchingEngine) and match_ (from acceptHighestBid)
+        if (matchId.startsWith('x402_match_') || matchId.startsWith('match_')) {
+            console.log(`[x402] Match ${matchId} completed. Answer: ${answer || 'none'}`);
+
+            // Import orderStore to update x402 order status
+            const { orderStore } = await import('../middleware/x402OrderBook');
+
+            // Find and update the order if bidId provided
+            if (bidId && orderStore.has(bidId)) {
+                const order = orderStore.get(bidId)!;
+
+                // Only mark order as 'completed' when quantity reaches 0
+                // Otherwise keep it 'open' for more potential matches
+                if (order.quantity === 0) {
+                    order.status = 'completed';
+                }
+
+                // Store this match's result (supports multi-quantity orders)
+                if (!Array.isArray(order.result)) {
+                    order.result = [];
+                }
+                order.result.push({ answer, actualDuration, exitedEarly, completedAt: Date.now() });
+
+                orderStore.set(bidId, order);
+                console.log(`[x402] Order ${bidId.slice(0, 16)}... match completed. Status: ${order.status}, Qty: ${order.quantity}`);
+            }
+
+            // Publish completion event
+            if (redis.isOpen) {
+                await redis.publish('marketplace_events', JSON.stringify({
+                    type: 'MATCH_COMPLETED',
+                    payload: {
+                        matchId,
+                        bidId,
+                        validationAnswer: answer,
+                        actualDuration,
+                        exitedEarly,
+                        approved: true,
+                        timestamp: new Date().toISOString()
+                    }
+                }));
+            }
+
+            return res.status(200).json({
+                success: true,
+                matchId,
+                approved: true,
+                earnedAmount: 0, // x402 payments are handled differently
+                engagementScore: 1.0,
+                threshold: 0.7
+            });
+        }
+
+        // Prisma match completion (traditional flow)
         // STUB: Auto-approve all sessions (engagementScore = 1.0)
         // TODO: Replace with real ML scoring in Phase 3
         const engagementScore = 1.0;
@@ -156,7 +211,8 @@ export const dismissMatch = async (req: Request, res: Response) => {
             orderStore.set(bidId, order);
             console.log(`[Dismiss] Restored ${bidId.slice(0, 16)}... quantity to ${order.quantity}`);
 
-            // Broadcast BID_UPDATED to restore in frontend order book
+            // Broadcast BID_UPDATED to restore quantity in frontend order book
+            // (BID_UPDATED is simpler and the bid already exists in frontend state)
             if (redis.isOpen) {
                 await redis.publish('marketplace_events', JSON.stringify({
                     type: 'BID_UPDATED',
@@ -165,6 +221,7 @@ export const dismissMatch = async (req: Request, res: Response) => {
                         remainingQuantity: order.quantity
                     }
                 }));
+                console.log(`[Dismiss] Broadcasted BID_UPDATED to restore ${bidId.slice(0, 16)}... qty=${order.quantity}`);
             }
         }
 

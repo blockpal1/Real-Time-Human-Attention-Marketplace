@@ -110,6 +110,7 @@ export class MatchingEngine {
             const availableSessions = await prisma.session.findMany({
                 where: {
                     active: true,
+                    priceFloor: { gt: 0 }, // Exclude phantom sessions
                     matches: {
                         none: {
                             status: { in: ['active', 'offered'] }
@@ -275,10 +276,17 @@ export class MatchingEngine {
 
         console.log(`X402 MATCH: Order ${txHash.slice(0, 16)}... -> Session ${session.id}`);
 
-        // 1. Update x402 order status to in_progress
-        order.status = 'in_progress';
+        // 1. Decrement quantity
         order.quantity = Math.max(0, order.quantity - 1);
+
+        // Only change status to 'in_progress' when quantity reaches 0 (fully consumed)
+        // Orders with remaining quantity stay 'open' for more matches
+        if (order.quantity === 0) {
+            order.status = 'in_progress';
+        }
         orderStore.set(txHash, order);
+
+        console.log(`[x402] Order ${txHash.slice(0, 16)}... quantity now ${order.quantity}, status: ${order.status}`);
 
         // 2. Mark session as consumed
         await prisma.session.update({
@@ -326,6 +334,7 @@ export class MatchingEngine {
                     quantity: 1,
                     topic: 'x402 Order',
                     matchId: matchId,
+                    bidId: txHash, // Include bidId in payload for dismiss restore
                     // Content for Focus Session - THIS IS THE KEY DATA
                     contentUrl: order.content_url || null,
                     validationQuestion: order.validation_question || null

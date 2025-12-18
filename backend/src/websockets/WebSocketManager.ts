@@ -122,7 +122,7 @@ export class WebSocketManager {
                         client.send(JSON.stringify({
                             type: 'MATCH_FOUND',
                             matchId: payload.matchId || event.matchId,
-                            bidId: payload.bidId || null, // Include bidId for dismiss restore
+                            bidId: payload.bidId || event.bidId || null, // Include bidId for dismiss restore
                             price: payload.price || event.price,
                             duration: payload.duration || 30,
                             quantity: 1,
@@ -143,6 +143,7 @@ export class WebSocketManager {
                     }
                     // 4. BID UPDATED
                     else if (event.type === 'BID_UPDATED') {
+                        console.log('WS Broadcasting BID_UPDATED:', event.payload);
                         client.send(JSON.stringify({ type: 'BID_UPDATED', payload: event.payload }));
                     }
                     // 5. BID FILLED / REMOVED

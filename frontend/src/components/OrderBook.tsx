@@ -76,7 +76,16 @@ export const OrderBook: React.FC<OrderBookProps> = ({ filterDuration }) => {
         };
         fetchState();
 
+        // Listen for manual refresh events (e.g., after dismiss when WS may be disconnected)
+        const handleRefresh = () => {
+            console.log('OrderBook: Received refresh event, refetching state...');
+            fetchState();
+        };
+        window.addEventListener('orderbook-refresh', handleRefresh);
+
         const unsubBid = wsClient.subscribe('BID_CREATED', (data: any) => {
+            console.log('OrderBook received BID_CREATED:', data);
+
             // Priority: Normalized 'price' field -> Raw 'max_price_per_second' / 1e6 -> 0
             let price = data.price;
             // Check if price is undefined OR if it looks like raw micros (e.g. integer > 100)
@@ -99,10 +108,13 @@ export const OrderBook: React.FC<OrderBookProps> = ({ filterDuration }) => {
                 type: 'bid'
             };
 
+            console.log('BID_CREATED creating order:', newOrder);
+
             if (!newOrder.id) return; // Ignore if no ID
 
             setBids(prev => {
                 const exists = prev.find(o => o.id === newOrder.id);
+                console.log(`BID_CREATED: exists=${!!exists}, updating ${newOrder.id} to qty=${quantity}`);
                 if (exists) {
                     return prev.map(o => o.id === newOrder.id ? newOrder : o);
                 }
@@ -113,8 +125,10 @@ export const OrderBook: React.FC<OrderBookProps> = ({ filterDuration }) => {
 
         // Event: BID_UPDATED (Partial Fill)
         const unsubBidUpdate = wsClient.subscribe('BID_UPDATED', (data: any) => {
+            console.log('OrderBook received BID_UPDATED:', data);
             setBids(prev => prev.map(o => {
                 if (o.id === data.bidId) {
+                    console.log(`Updating bid ${data.bidId} from ${o.quantity} to ${data.remainingQuantity}`);
                     return {
                         ...o,
                         quantity: data.remainingQuantity,
@@ -127,6 +141,7 @@ export const OrderBook: React.FC<OrderBookProps> = ({ filterDuration }) => {
 
         // Event: BID_FILLED (Remove)
         const unsubBidFilled = wsClient.subscribe('BID_FILLED', (data: any) => {
+            console.log('OrderBook received BID_FILLED:', data);
             setBids(prev => prev.filter(o => o.id !== data.bidId));
         });
 
@@ -174,6 +189,7 @@ export const OrderBook: React.FC<OrderBookProps> = ({ filterDuration }) => {
             unsubAsk();
             unsubAskMatched();
             unsubAskCancelled();
+            window.removeEventListener('orderbook-refresh', handleRefresh);
         };
     }, []);
 

@@ -84,10 +84,25 @@ function App() {
     }, [sessionToken]);
 
     // Called when user finishes focus session (either completes or exits)
-    const handleAcceptMatch = () => {
-        // Session ended - just clear the match to dismiss the modal
+    const handleAcceptMatch = async () => {
+        // Cancel session in backend (match was completed, session is done)
+        if (userPubkey) {
+            try {
+                await api.cancelSession(userPubkey);
+                console.log('Session cancelled after match completion');
+            } catch (error) {
+                console.error('Failed to cancel session:', error);
+            }
+        }
+
+        // Trigger order book refresh (WS may have been disconnected during focus session)
+        window.dispatchEvent(new CustomEvent('orderbook-refresh'));
+
+        // Session ended - clear the match and reset user state
         setMatch(null);
-        console.log('Focus session ended');
+        setSessionToken(null);
+        setUserPubkey(null);
+        console.log('Focus session ended, user state reset');
     };
 
     const handleDismissMatch = async () => {
@@ -96,6 +111,10 @@ function App() {
             try {
                 await api.dismissMatch(match.matchId, match.bidId, userPubkey || undefined);
                 console.log('Match dismissed, bid returned to order book, session cancelled');
+
+                // Dispatch event to trigger order book refresh
+                // (WebSocket may be disconnected during focus session, so events could be missed)
+                window.dispatchEvent(new CustomEvent('orderbook-refresh'));
             } catch (error) {
                 console.error('Failed to dismiss match:', error);
             }

@@ -89,6 +89,7 @@ export const getActiveSessions = async (req: Request, res: Response) => {
         const sessions = await prisma.session.findMany({
             where: {
                 active: true,
+                priceFloor: { gt: 0 }, // Exclude phantom sessions with 0 price
                 matches: { none: { status: { in: ['active', 'offered'] } } } // Available only
             },
             take: 100
@@ -263,12 +264,27 @@ export const acceptHighestBid = async (req: Request, res: Response) => {
         }));
 
         // Combine and find highest
-        const allBids = [...x402Orders, ...prismaOrders].sort((a, b) => b.bid - a.bid);
+        // Combine
+        let allBids = [...x402Orders, ...prismaOrders].sort((a, b) => b.bid - a.bid);
+
+        // ========================================
+        // FILTER: Campaign Uniqueness (One per user)
+        // ========================================
+        if (redis.isOpen) {
+            const eligibleBids = [];
+            for (const bid of allBids) {
+                const alreadySeen = await redis.sIsMember(`campaign:${bid.id}:users`, pubkey);
+                if (!alreadySeen) {
+                    eligibleBids.push(bid);
+                }
+            }
+            allBids = eligibleBids;
+        }
 
         if (allBids.length === 0) {
             return res.status(404).json({
                 error: 'no_bids_available',
-                message: 'No open bids found'
+                message: 'No eligible bids found (you may have completed all available campaigns)'
             });
         }
 
@@ -304,12 +320,50 @@ export const acceptHighestBid = async (req: Request, res: Response) => {
             order.quantity -= 1;
             order.status = order.quantity === 0 ? 'in_progress' : 'open';
             orderStore.set(winner.id, order);
+
+            // Broadcast BID_UPDATED or BID_FILLED to update frontend order book
+            if (redis.isOpen) {
+                if (order.quantity > 0) {
+                    await redis.publish('marketplace_events', JSON.stringify({
+                        type: 'BID_UPDATED',
+                        payload: {
+                            bidId: winner.id,
+                            remainingQuantity: order.quantity
+                        }
+                    }));
+                    console.log(`[Accept Highest] Broadcast BID_UPDATED: ${winner.id.slice(0, 16)}... qty=${order.quantity}`);
+                } else {
+                    await redis.publish('marketplace_events', JSON.stringify({
+                        type: 'BID_FILLED',
+                        payload: { bidId: winner.id }
+                    }));
+                    console.log(`[Accept Highest] Broadcast BID_FILLED: ${winner.id.slice(0, 16)}...`);
+                }
+            }
         } else {
             // Prisma bid - decrement quantity
-            await prisma.bid.update({
+            const updatedBid = await prisma.bid.update({
                 where: { id: winner.id },
                 data: { targetQuantity: { decrement: 1 } }
             });
+
+            // Broadcast BID_UPDATED for Prisma bids too
+            if (redis.isOpen) {
+                if (updatedBid.targetQuantity > 0) {
+                    await redis.publish('marketplace_events', JSON.stringify({
+                        type: 'BID_UPDATED',
+                        payload: {
+                            bidId: winner.id,
+                            remainingQuantity: updatedBid.targetQuantity
+                        }
+                    }));
+                } else {
+                    await redis.publish('marketplace_events', JSON.stringify({
+                        type: 'BID_FILLED',
+                        payload: { bidId: winner.id }
+                    }));
+                }
+            }
         }
 
         // Generate match ID
@@ -332,6 +386,11 @@ export const acceptHighestBid = async (req: Request, res: Response) => {
         }
 
         console.log(`[Accept Highest] User ${pubkey.slice(0, 12)}... matched with ${winner.source} bid ${winner.id.slice(0, 16)}... @ $${matchedBid}/s`);
+
+        // Mark user as seen for this campaign to prevent repeat matches
+        if (redis.isOpen) {
+            await redis.sAdd(`campaign:${winner.id}:users`, pubkey);
+        }
 
         res.json({
             success: true,

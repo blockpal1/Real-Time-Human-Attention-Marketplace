@@ -71,6 +71,9 @@ export const PriceFloorSetter: React.FC<PriceFloorSetterProps> = ({
         try {
             const data = await api.acceptHighestBid(pubkey, duration);
             if (data.success) {
+                // Set user state so dismiss can properly cancel the session
+                setUserPubkey(pubkey);
+                setSessionToken(`accept-highest-${Date.now()}`); // Mark as active
                 // Match is found! The WebSocket will trigger the modal via MATCH_FOUND event
                 console.log('Matched with bid:', data.match);
             }

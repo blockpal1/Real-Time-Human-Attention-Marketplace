@@ -6,6 +6,7 @@ import { useAttentionAI } from '../hooks/useAttentionAI';
 interface MatchNotificationModalProps {
     match: {
         matchId: string;
+        bidId?: string; // tx_hash for x402 orders
         price: number;
         duration: number;
         topic?: string | object;
@@ -231,7 +232,8 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
             const result = await api.completeMatch(match.matchId, {
                 answer: answer.trim(),
                 actualDuration,
-                exitedEarly
+                exitedEarly,
+                bidId: match.bidId // Include bidId for x402 orders
             });
 
             console.log('Match completed successfully:', result);
