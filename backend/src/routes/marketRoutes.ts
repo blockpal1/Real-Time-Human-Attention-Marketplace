@@ -93,6 +93,77 @@ router.post('/orders/:tx_hash/fill', async (req, res) => {
 });
 
 /**
+ * POST /v1/orders/:tx_hash/complete
+ * Human completes an order with their answer
+ */
+router.post('/orders/:tx_hash/complete', async (req, res) => {
+    const { tx_hash } = req.params;
+    const { answer, actual_duration } = req.body;
+
+    const order = orderStore.get(tx_hash);
+
+    if (!order) {
+        return res.status(404).json({
+            error: 'order_not_found',
+            message: 'No order found with this transaction hash'
+        });
+    }
+
+    if (order.status === 'completed') {
+        return res.status(400).json({
+            error: 'already_completed',
+            message: 'This order has already been completed',
+            result: order.result
+        });
+    }
+
+    if (order.status !== 'in_progress') {
+        return res.status(400).json({
+            error: 'invalid_status',
+            message: `Order must be in_progress to complete, current status: ${order.status}`,
+            current_status: order.status
+        });
+    }
+
+    // Calculate earnings
+    const duration = actual_duration || order.duration;
+    const earnedAmount = order.bid * duration;
+
+    // Update order with completion data
+    order.status = 'completed';
+    order.result = {
+        answer: answer || null,
+        actual_duration: duration,
+        completed_at: Date.now(),
+        earned_amount: earnedAmount
+    };
+    orderStore.set(tx_hash, order);
+
+    // Broadcast completion event
+    if (redis.isOpen) {
+        await redis.publish('marketplace_events', JSON.stringify({
+            type: 'ORDER_COMPLETED',
+            payload: {
+                tx_hash,
+                answer: answer || null,
+                duration,
+                earned_amount: earnedAmount
+            }
+        }));
+        console.log(`[Market] Broadcasted ORDER_COMPLETED for ${tx_hash.slice(0, 16)}...`);
+    }
+
+    console.log(`[Market] Order completed: ${tx_hash.slice(0, 16)}... (${duration}s, $${earnedAmount.toFixed(4)})`);
+
+    res.json({
+        success: true,
+        tx_hash,
+        status: 'completed',
+        result: order.result
+    });
+});
+
+/**
  * GET /v1/orders/:tx_hash
  * Get order status by transaction hash
  */

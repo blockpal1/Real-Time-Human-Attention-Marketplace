@@ -1,18 +1,19 @@
 # Architecture Audit: Legacy vs x402 Protocol
 
+> **Last Updated:** 2025-12-18
+
 ## Executive Summary
 
-The codebase currently runs **two parallel systems** that have diverged in philosophy:
+The codebase has been **unified** around the x402 protocol:
 
-| Aspect | Legacy System | x402 Protocol |
-|--------|---------------|---------------|
-| **Authentication** | API Keys (`att_...`) | Payment-as-auth (Solana tx) |
-| **Data Storage** | Prisma database (Bid, Agent, Match) | In-memory `orderStore` Map |
-| **Matching** | `MatchingEngine` cycle (session → bid) | Manual `/fill` by human UI |
-| **Moderation** | Async queue → database `contentStatus` | Inline check → memory status |
-| **Payments** | Pre-funded escrow balance | Per-request payment |
+| Aspect | Status | Notes |
+|--------|--------|-------|
+| **Order Storage** | ✅ Unified | All orders in `orderStore` (Campaign Manager + x402 agents) |
+| **Matching** | ✅ Unified | MatchingEngine matches both Prisma sessions and x402 orders |
+| **Moderation** | ✅ Unified | Admin can review both legacy and x402 flagged content |
+| **Human UI** | ✅ Wired | `MATCH_FOUND` triggers modal with x402 order data |
 
-This creates duplicate pathways, inconsistent UX, and maintenance burden.
+**Remaining work:** Order completion API, mainnet USDC validation, order expiration.
 
 ---
 
@@ -40,22 +41,21 @@ PATCH /v1/agents/webhook    → Webhook config (x402 is polling-based)
 - `controllers/AgentController.ts` - `createBid`, `getActiveBids`
 - Prisma schema: `Bid` model
 
-**API Endpoints:**
-```
-POST /v1/agents/bids        → Creates DB bid (UI/Campaign Manager)
-GET  /v1/agents/bids        → Fetches DB bids (not x402 orders)
-```
-
-**Why Deprecated:** x402 orders live in `orderStore`, not the database. UI fetches from both sources creating confusion.
+**Status:** ⚠️ **PARTIALLY MIGRATED**
+- `createBid` now writes to x402 `orderStore` (not Prisma)
+- `getActiveBids` still queries Prisma (legacy)
+- Frontend `/v1/orderbook` uses unified `orderStore`
 
 ---
 
-### 3. Old MatchingEngine
+### 3. MatchingEngine ✅
 **Files:**
 - `services/MatchingEngine.ts` - Polls DB for bid/session matches
-- `server.ts` → `new MatchingEngine()` still runs
 
-**Why Deprecated:** x402 flow is "human clicks to fill", not automated matching. The engine runs but operates on a different data source.
+**Status:** ✅ **ADAPTED** - No longer deprecated!
+- Now creates unified bid pool from Prisma + x402 `orderStore`
+- Matches human asks (sessions) with x402 orders
+- Emits `MATCH_CREATED` → `MATCH_FOUND` to trigger human modal
 
 ---
 
@@ -178,32 +178,32 @@ POST /v1/orders/:tx_hash/complete
 
 ## 📊 Priority Matrix
 
-| Item | Priority | Effort | Risk |
-|------|----------|--------|------|
-| Wire human completion UI | 🔴 Critical | Medium | Blocking UX |
-| Add order completion API | 🔴 Critical | Low | Blocking flow |
-| Remove MatchingEngine | 🟡 High | Low | Cleanup |
-| Add x402 flagged content admin | 🟡 High | Low | Compliance |
-| Remove legacy agent routes | 🟢 Medium | Low | Cleanup |
-| Mainnet USDC validation | 🟡 High | Medium | Launch blocker |
-| Order expiration TTL | 🟢 Medium | Medium | Data hygiene |
-| SplitterProgram deploy | 🟢 Medium | High | Revenue share |
+| Item | Priority | Effort | Status |
+|------|----------|--------|--------|
+| Wire human completion UI | 🔴 Critical | Medium | ✅ DONE |
+| Add order completion API | 🔴 Critical | Low | ✅ DONE |
+| Adapt MatchingEngine for x402 | 🟡 High | Low | ✅ DONE |
+| Add x402 flagged content admin | 🟡 High | Low | ✅ DONE |
+| Remove legacy agent routes | 🟢 Medium | Low | 🔄 Optional |
+| Mainnet USDC validation | 🟡 High | Medium | 🔄 TODO |
+| Order expiration TTL | 🟢 Medium | Medium | 🔄 TODO |
+| SplitterProgram deploy | 🟢 Medium | High | 🔄 Future |
 
 ---
 
 ## Recommended Action Plan
 
-### Phase 1: Critical Path (Now)
-1. Wire human completion UI to show x402 order content
-2. Add `POST /orders/:tx_hash/complete` endpoint
-3. Update result in orderStore
+### ✅ Phase 1: Critical Path (COMPLETED)
+1. ~~Wire human completion UI to show x402 order content~~ ✅
+2. ~~Adapt MatchingEngine for unified bid pool~~ ✅
+3. ~~Add x402 flagged content admin endpoints~~ ✅
 
-### Phase 2: Cleanup (This Week)
-4. Stop MatchingEngine (or delete)
-5. Remove/deprecate legacy agent registration routes
-6. Update admin dashboard for x402 flagged orders
+### ✅ Phase 2: Order Flow (COMPLETED)
+4. ~~Add `POST /orders/:tx_hash/complete` endpoint~~ ✅
+5. ~~Store result in `orderStore` with answer/duration~~ ✅
+6. ~~Expose result in `GET /orders/:tx_hash` for agent polling~~ ✅
 
-### Phase 3: Launch Prep
+### Phase 3: Launch Prep (TODO)
 7. Implement mainnet USDC validation
 8. Add order expiration job
 9. Deploy SplitterProgram for referrer revenue
@@ -214,19 +214,17 @@ POST /v1/orders/:tx_hash/complete
 
 ```
 ❌ controllers/AgentRegistrationController.ts (or archive)
-❌ controllers/AgentController.ts (createBid part)
-❌ services/MatchingEngine.ts (or disable)
-❌ services/WebhookService.ts (or keep for future)
-❌ middleware/auth.ts (agent parts only)
+⚠️ controllers/AgentController.ts:getActiveBids (deprecated, uses Prisma)
+⚠️ services/WebhookService.ts (keep for future, unused by x402)
+⚠️ middleware/auth.ts (agent parts only)
 ```
 
-## Files to Keep
+## Files Updated (This Session)
 
 ```
-✓ controllers/AdminController.ts (needs x402 additions)
-✓ controllers/MatchController.ts (may be repurposed)
-✓ controllers/UserController.ts (session start still used)
-✓ services/ContentModerationService.ts (actively used)
-✓ middleware/x402OrderBook.ts (core)
-✓ routes/marketRoutes.ts (core)
+✓ services/MatchingEngine.ts - Unified bid pool + executeX402Match
+✓ controllers/AgentController.ts - createBid writes to orderStore
+✓ controllers/AdminController.ts - x402 flagged content endpoints
+✓ middleware/x402OrderBook.ts - Admin bypass for Campaign Manager
+✓ routes/api.ts - Added x402 admin routes
 ```
