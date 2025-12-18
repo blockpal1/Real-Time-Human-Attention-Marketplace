@@ -97,7 +97,6 @@ Even without real payments:
 
 ### Agent Registration in Beta
 
-```typescript
 POST /v1/agents/register
 {
   pubkey: "...",
@@ -123,6 +122,279 @@ GET /v1/agents/:pubkey/balance
   note: "Sandbox mode - no real funds required"
 }
 ```
+
+---
+
+## x402 Payment Protocol (Agent Authentication Pivot)
+
+> [!IMPORTANT]
+> **PIVOT:** We are replacing API key authentication with the **x402 Payment Protocol** (HTTP 402) for agent verification endpoints. This creates a pay-per-request model tied directly to the order book.
+
+### Why x402?
+
+| Old Approach (API Keys) | New Approach (x402) |
+|-------------------------|---------------------|
+| Pre-register, get key | Pay-per-request |
+| Static rate limits | Dynamic pricing via bids |
+| Separate escrow deposit | Inline payment proof |
+| Manual key management | Wallet-native UX |
+
+### Core Concept
+
+Agents submit payment proof alongside their verification request. No registration required — just a valid Solana transaction.
+
+### Pricing Model: Dynamic Order Book
+
+Unlike static endpoint prices, our pricing is **agent-driven**:
+
+```
+Required Payment = duration × bid_per_second
+```
+
+| Duration | Min Bid | Example Total |
+|----------|---------|---------------|
+| 10s | $0.0001/s | $0.001 |
+| 30s | $0.0001/s | $0.003 |
+| 60s | $0.0001/s | $0.006 |
+
+---
+
+### Middleware: `middleware/x402OrderBook.ts`
+
+#### Request Flow
+
+```
+Agent Request
+     │
+     ▼
+┌─────────────────────────────────┐
+│ 1. PARSE REQUEST BODY           │
+│    - Extract duration, bid      │
+│    - Validate duration ∈ [10,30,60] │
+│    - Validate bid >= 0.0001     │
+└───────────────┬─────────────────┘
+                │
+                ▼
+┌─────────────────────────────────┐
+│ 2. CALCULATE TOTAL              │
+│    total = duration × bid       │
+└───────────────┬─────────────────┘
+                │
+                ▼
+┌─────────────────────────────────┐
+│ 3. CHECK X-Solana-Tx-Signature  │
+│                                 │
+│    IF MISSING:                  │
+│    → 402 Payment Required       │
+│    → WWW-Authenticate header    │
+│                                 │
+│    IF PRESENT:                  │
+│    → Fetch tx via RPC           │
+│    → Validate amount ≥ total    │
+│    → Validate recipient = Vault │
+│    → Attach req.order, next()   │
+└─────────────────────────────────┘
+```
+
+#### Step 1: Request Body Validation
+
+```typescript
+// Request body schema
+interface VerifyRequest {
+  duration: 10 | 30 | 60;      // Allowed durations only
+  bid_per_second: number;       // >= 0.0001 USDC
+}
+
+// Validation
+if (![10, 30, 60].includes(duration)) {
+  return res.status(400).json({ error: "Duration must be 10, 30, or 60" });
+}
+
+if (bid_per_second < 0.0001) {
+  return res.status(400).json({ error: "Bid must be >= $0.0001/second" });
+}
+```
+
+#### Step 2: Calculate Total Escrow
+
+```typescript
+const total_escrow = duration * bid_per_second;
+// Example: 30s × $0.05/s = $1.50 USDC
+```
+
+#### Step 3: Payment Header Check
+
+**If `X-Solana-Tx-Signature` is MISSING:**
+
+```http
+HTTP/1.1 402 Payment Required
+WWW-Authenticate: x402 chain=solana token=USDC amount=1.50
+Content-Type: application/json
+
+{
+  "error": "payment_required",
+  "message": "Escrow required: 1.50 USDC for 30s slot",
+  "payment": {
+    "chain": "solana",
+    "token": "USDC",
+    "amount": 1.50,
+    "recipient": "AttVault...xyz",
+    "duration": 30,
+    "bid_per_second": 0.05
+  }
+}
+```
+
+**If `X-Solana-Tx-Signature` is PRESENT:**
+
+```typescript
+// 1. Fetch transaction from Solana RPC
+const tx = await connection.getParsedTransaction(signature);
+
+// 2. Critical validations
+if (tx.amount < total_escrow) {
+  return res.status(402).json({ error: "Insufficient payment" });
+}
+
+if (tx.recipient !== VAULT_ADDRESS) {
+  return res.status(402).json({ error: "Invalid recipient" });
+}
+
+// 3. Attach order to request and continue
+req.order = {
+  duration,
+  bid: bid_per_second,
+  txHash: signature,
+  payer: tx.signer
+};
+
+next();
+```
+
+---
+
+### Builder Revenue Share via x402
+
+#### X-Referrer-Agent Header
+
+Agents can include a referrer address to enable revenue sharing:
+
+```http
+POST /api/verify
+X-Solana-Tx-Signature: 5abc...xyz
+X-Referrer-Agent: RefWallet123...abc
+Content-Type: application/json
+
+{
+  "duration": 30,
+  "bid_per_second": 0.05
+}
+```
+
+#### Revenue Share Logic
+
+**If `X-Referrer-Agent` is PRESENT and valid:**
+
+```
+Payment flows to SplitterProgram:
+  ├── 80% → Attentium Treasury
+  └── 20% → Referrer Agent wallet
+```
+
+The 402 response includes splitter instructions:
+
+```json
+{
+  "payment": {
+    "recipient": "SplitterProgram...xyz",
+    "instruction_data": {
+      "treasury": "AttTreasury...abc",
+      "referrer": "RefWallet123...abc",
+      "referrer_bps": 2000
+    }
+  }
+}
+```
+
+**If `X-Referrer-Agent` is MISSING:**
+
+```
+Payment flows directly to Treasury:
+  └── 100% → Attentium Treasury
+```
+
+---
+
+### Python Client Script Updates
+
+The agent client script needs to support dynamic pricing:
+
+```bash
+# Basic usage
+python attentium_client.py \
+  --duration 30 \
+  --bid 0.05
+
+# With referrer for revenue share
+python attentium_client.py \
+  --duration 30 \
+  --bid 0.05 \
+  --referrer RefWallet123...abc
+```
+
+#### Client Flow
+
+```python
+def verify_attention(duration: int, bid: float, referrer: str = None):
+    # 1. Calculate total locally
+    total = duration * bid
+    
+    # 2. Create and sign Solana transaction
+    tx = create_usdc_transfer(
+        amount=total,
+        recipient=SPLITTER_ADDRESS if referrer else TREASURY_ADDRESS
+    )
+    signature = wallet.sign_and_send(tx)
+    
+    # 3. Build headers
+    headers = {
+        "X-Solana-Tx-Signature": signature,
+        "Content-Type": "application/json"
+    }
+    if referrer:
+        headers["X-Referrer-Agent"] = referrer
+    
+    # 4. Make request
+    response = requests.post(
+        f"{API_URL}/api/verify",
+        headers=headers,
+        json={"duration": duration, "bid_per_second": bid}
+    )
+    
+    return response.json()
+```
+
+---
+
+### Updated Phase 1 Checklist
+
+- [x] ~~API key authentication~~ → **DEPRECATED**
+- [ ] **x402 Payment Protocol middleware**
+  - [ ] Request body validation (duration, bid)
+  - [ ] Total escrow calculation
+  - [ ] 402 response generation
+  - [ ] Solana transaction verification
+  - [ ] Vault address validation
+- [ ] **Builder Revenue Share**
+  - [ ] X-Referrer-Agent header parsing
+  - [ ] SplitterProgram integration
+  - [ ] Referrer validation (valid Solana pubkey)
+- [ ] **Python Client Script**
+  - [ ] `--duration` argument
+  - [ ] `--bid` argument  
+  - [ ] `--referrer` argument (optional)
+  - [ ] Local total calculation
+  - [ ] Transaction signing
 
 ---
 
@@ -198,11 +470,15 @@ CREATE TABLE user_points (
 
 | Question | Decision |
 |----------|----------|
+| **Agent authentication** | **x402 Payment Protocol** (HTTP 402) — pay-per-request, no API keys |
 | Escrow currency | USDC only (auto-convert portion to SOL for gas) |
 | Cross-chain deposits | Solana-only for v1 (CCTP considered for v2) |
 | Minimum bid floor | $0.0001 per second |
+| **Allowed durations** | 10, 30, or 60 seconds only |
 | Content moderation | Automated solutions (see section below) |
 | KYB | Tiered approach (see section below) |
+| **Builder revenue share** | 20% to referrer via `X-Referrer-Agent` header |
+| **Payment routing** | SplitterProgram if referrer present, else direct to Treasury |
 
 ---
 
@@ -423,26 +699,57 @@ let platform_share = fee - builder_share;
 
 ## Updated Implementation Phases
 
-### Phase 1: MVP (2 weeks)
-- [ ] API key authentication
-- [ ] Agent registration with optional builder_code
-- [ ] Minimum bid validation ($0.0001/s)
-- [ ] Basic webhook delivery
-- [ ] Content URL scanning (OpenAI Moderation)
-- [ ] Admin Console (mode toggle, Genesis key approval, content review)
+### Phase 1: MVP (Completed + x402 Pivot)
 
-### Phase 2: Production (4 weeks)
-- [ ] Solana escrow integration (deposit/withdraw API)
+**Completed (API Key Era):**
+- [x] ~~API key authentication~~ → **DEPRECATED**
+- [x] Agent registration with optional builder_code
+- [x] Minimum bid validation ($0.0001/s)
+- [x] Basic webhook delivery
+- [x] Content URL scanning (OpenAI Moderation)
+- [x] Admin Console (mode toggle, Genesis key approval, content review)
+
+**New (x402 Pivot):**
+- [ ] **x402 Payment Protocol middleware** (`middleware/x402OrderBook.ts`)
+  - [ ] Parse request body (duration, bid_per_second)
+  - [ ] Validate duration ∈ [10, 30, 60]
+  - [ ] Validate bid >= $0.0001/s
+  - [ ] Calculate total escrow (duration × bid)
+  - [ ] Return 402 with `WWW-Authenticate` header if no payment
+  - [ ] Fetch and validate Solana transaction via RPC
+  - [ ] Verify tx.amount >= total_escrow
+  - [ ] Verify tx.recipient == Vault Address
+  - [ ] Attach `req.order` and call `next()`
+
+### Phase 2: Revenue Sharing (2 weeks)
+
+- [ ] **X-Referrer-Agent Header Support**
+  - [ ] Parse optional `X-Referrer-Agent` header
+  - [ ] Validate referrer is valid Solana pubkey
+  - [ ] Route to SplitterProgram if referrer present
+  - [ ] Include referrer in 402 payment invoice
+- [ ] **SplitterProgram Contract**
+  - [ ] Deploy splitter program on Solana
+  - [ ] 80/20 split logic (Treasury / Referrer)
+  - [ ] Audit and test
+- [ ] **Python Client Script**
+  - [ ] Accept `--duration` argument
+  - [ ] Accept `--bid` argument
+  - [ ] Accept `--referrer` argument (optional)
+  - [ ] Calculate total locally before signing
+  - [ ] Sign and send USDC transfer
+  - [ ] Inject `X-Solana-Tx-Signature` header
+  - [ ] Inject `X-Referrer-Agent` header if provided
+
+### Phase 3: Production Hardening (4 weeks)
+
 - [ ] Gas station for user transactions
 - [ ] Full content moderation pipeline
-- [ ] SDK (TypeScript)
-- [ ] Rate limiting tiers
-
-### Phase 3: Scale (6 weeks)
-- [ ] Builder revenue sharing (contract upgrade)
+- [ ] TypeScript SDK with x402 support
+- [ ] Transaction replay protection (nonce tracking)
+- [ ] Rate limiting by wallet address
 - [ ] KYB integration for Enterprise tier
-- [ ] WebSocket streaming
-- [ ] Multi-content-type support (video analysis)
+- [ ] WebSocket streaming for real-time order book
 
 ---
 

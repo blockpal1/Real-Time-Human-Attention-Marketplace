@@ -71,4 +71,27 @@ router.post('/admin/builder-codes/:codeId/review', authenticateAdmin, reviewBuil
 router.get('/admin/content/flagged', authenticateAdmin, getFlaggedContent);
 router.post('/admin/content/:bidId/review', authenticateAdmin, reviewContent);
 
+// === x402 Payment Protocol ===
+// Agent verification with HTTP 402 payment required
+import { x402OrderBook } from '../middleware/x402OrderBook';
+
+router.post('/verify', x402OrderBook, (req, res) => {
+    // If we reach here, payment was verified
+    const order = req.order!;
+
+    res.json({
+        success: true,
+        message: `Verification slots reserved: ${order.quantity}x ${order.duration}s @ $${order.bid_per_second}/s`,
+        order: {
+            duration: order.duration,
+            quantity: order.quantity,
+            bid_per_second: order.bid_per_second,
+            total_escrow: order.total_escrow,
+            tx_hash: order.txHash,
+            payer: order.payer,
+            referrer: order.referrer || null
+        }
+    });
+});
+
 export default router;
