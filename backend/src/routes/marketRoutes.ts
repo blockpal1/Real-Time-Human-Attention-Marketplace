@@ -95,10 +95,11 @@ router.post('/orders/:tx_hash/fill', async (req, res) => {
 /**
  * POST /v1/orders/:tx_hash/complete
  * Human completes an order with their answer
+ * Supports multi-quantity: appends to results array
  */
 router.post('/orders/:tx_hash/complete', async (req, res) => {
     const { tx_hash } = req.params;
-    const { answer, actual_duration } = req.body;
+    const { answer, actual_duration, session_id } = req.body;
 
     const order = orderStore.get(tx_hash);
 
@@ -109,57 +110,67 @@ router.post('/orders/:tx_hash/complete', async (req, res) => {
         });
     }
 
-    if (order.status === 'completed') {
-        return res.status(400).json({
-            error: 'already_completed',
-            message: 'This order has already been completed',
-            result: order.result
-        });
-    }
-
-    if (order.status !== 'in_progress') {
+    // Allow completion for 'in_progress' or 'open' (MatchingEngine may not have updated status yet)
+    if (order.status !== 'in_progress' && order.status !== 'open') {
         return res.status(400).json({
             error: 'invalid_status',
-            message: `Order must be in_progress to complete, current status: ${order.status}`,
+            message: `Order cannot accept completions in status: ${order.status}`,
             current_status: order.status
         });
     }
 
-    // Calculate earnings
+    // Calculate earnings for this response
     const duration = actual_duration || order.duration;
     const earnedAmount = order.bid * duration;
 
-    // Update order with completion data
-    order.status = 'completed';
-    order.result = {
+    // Initialize results array if needed
+    if (!Array.isArray(order.result)) {
+        order.result = [];
+    }
+
+    // Append this response to results
+    const responseEntry = {
         answer: answer || null,
         actual_duration: duration,
         completed_at: Date.now(),
-        earned_amount: earnedAmount
+        earned_amount: earnedAmount,
+        session_id: session_id || null
     };
+    order.result.push(responseEntry);
+
+    // Track how many have been completed
+    const completedCount = order.result.length;
+    const originalQuantity = order.quantity + completedCount; // quantity decrements on match
+
+    // Update status: 'completed' only when all fills are done
+    if (order.quantity === 0) {
+        order.status = 'completed';
+    }
     orderStore.set(tx_hash, order);
 
     // Broadcast completion event
     if (redis.isOpen) {
         await redis.publish('marketplace_events', JSON.stringify({
-            type: 'ORDER_COMPLETED',
+            type: 'ORDER_RESPONSE',
             payload: {
                 tx_hash,
                 answer: answer || null,
                 duration,
-                earned_amount: earnedAmount
+                earned_amount: earnedAmount,
+                response_count: completedCount,
+                remaining: order.quantity
             }
         }));
-        console.log(`[Market] Broadcasted ORDER_COMPLETED for ${tx_hash.slice(0, 16)}...`);
+        console.log(`[Market] Response ${completedCount} for ${tx_hash.slice(0, 16)}... (${order.quantity} remaining)`);
     }
-
-    console.log(`[Market] Order completed: ${tx_hash.slice(0, 16)}... (${duration}s, $${earnedAmount.toFixed(4)})`);
 
     res.json({
         success: true,
         tx_hash,
-        status: 'completed',
-        result: order.result
+        status: order.status,
+        response_count: completedCount,
+        remaining: order.quantity,
+        this_response: responseEntry
     });
 });
 

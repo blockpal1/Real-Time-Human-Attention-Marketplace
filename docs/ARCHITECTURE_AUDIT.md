@@ -185,8 +185,8 @@ POST /v1/orders/:tx_hash/complete
 | Adapt MatchingEngine for x402 | 🟡 High | Low | ✅ DONE |
 | Add x402 flagged content admin | 🟡 High | Low | ✅ DONE |
 | Remove legacy agent routes | 🟢 Medium | Low | 🔄 Optional |
-| Mainnet USDC validation | 🟡 High | Medium | 🔄 TODO |
-| Order expiration TTL | 🟢 Medium | Medium | 🔄 TODO |
+| Mainnet USDC validation | 🟡 High | Medium | ✅ DONE |
+| Order expiration TTL | 🟢 Medium | Medium | ✅ DONE |
 | SplitterProgram deploy | 🟢 Medium | High | 🔄 Future |
 
 ---
@@ -203,10 +203,10 @@ POST /v1/orders/:tx_hash/complete
 5. ~~Store result in `orderStore` with answer/duration~~ ✅
 6. ~~Expose result in `GET /orders/:tx_hash` for agent polling~~ ✅
 
-### Phase 3: Launch Prep (TODO)
-7. Implement mainnet USDC validation
-8. Add order expiration job
-9. Deploy SplitterProgram for referrer revenue
+### ✅ Phase 3: Launch Prep (COMPLETED)
+7. ~~Implement mainnet USDC validation (Option A: Agent pays gas)~~ ✅
+8. ~~Add order expiration job (10m TTL)~~ ✅
+9. Deploy SplitterProgram for referrer revenue (Deferred to post-launch)
 
 ---
 
@@ -219,12 +219,13 @@ POST /v1/orders/:tx_hash/complete
 ⚠️ middleware/auth.ts (agent parts only)
 ```
 
-## Files Updated (This Session)
+## Files Updated (Matches x402 Unification)
 
 ```
 ✓ services/MatchingEngine.ts - Unified bid pool + executeX402Match
-✓ controllers/AgentController.ts - createBid writes to orderStore
+✓ controllers/AgentController.ts - createBid writes to orderStore + expires_at
 ✓ controllers/AdminController.ts - x402 flagged content endpoints
-✓ middleware/x402OrderBook.ts - Admin bypass for Campaign Manager
+✓ middleware/x402OrderBook.ts - Admin bypass, USDC validation, Cleanup job
 ✓ routes/api.ts - Added x402 admin routes
+✓ server.ts - Added expiration job
 ```

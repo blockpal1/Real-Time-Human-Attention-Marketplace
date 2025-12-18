@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { createServer } from 'http';
 import app from './app';
 import { WebSocketManager } from './websockets/WebSocketManager';
+import { startExpirationJob } from './middleware/x402OrderBook';
 import { MatchingEngine } from './services/MatchingEngine';
 import { connectRedis, redis } from './utils/redis';
 import { prisma } from './utils/prisma';
@@ -64,6 +65,7 @@ async function start() {
     await hydrateOrderBook();
 
     matchingEngine.start();
+    startExpirationJob(); // Start x402 cleanup job
 
     server.listen(port, () => {
         console.log(`Backend running on http://localhost:${port}`);

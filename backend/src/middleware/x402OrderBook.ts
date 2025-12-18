@@ -26,9 +26,38 @@ export interface OrderRecord {
     referrer: string | null;
     content_url: string | null;
     validation_question: string;
-    status: 'open' | 'in_progress' | 'completed' | 'rejected_tos';
+    status: 'open' | 'in_progress' | 'completed' | 'rejected_tos' | 'expired';
     created_at: number;
+    expires_at: number;
     result: any | null;
+}
+
+// Cleanup Job: Runs every 60s to expire old open orders
+export function startExpirationJob() {
+    setInterval(() => {
+        const now = Date.now();
+        let expiredCount = 0;
+
+        orderStore.forEach((order, txHash) => {
+            if (order.status === 'open' && now > order.expires_at) {
+                order.status = 'expired';
+                orderStore.set(txHash, order);
+                expiredCount++;
+
+                // Broadcast expiration
+                if (redis.isOpen) {
+                    redis.publish('marketplace_events', JSON.stringify({
+                        type: 'ORDER_EXPIRED',
+                        payload: { tx_hash: txHash }
+                    }));
+                }
+            }
+        });
+
+        if (expiredCount > 0) {
+            console.log(`[x402] Cleanup: Expired ${expiredCount} stale orders`);
+        }
+    }, 60000); // Check every minute
 }
 
 // Extend Express Request type
@@ -74,11 +103,15 @@ export async function x402Middleware(req: Request, res: Response, next: NextFunc
                 tx_hash,
                 referrer: null,
                 content_url: content_url || null,
-                validation_question,
+                validation_question: validation_question,
                 status: 'open',
                 created_at: Date.now(),
+                expires_at: Date.now() + (10 * 60 * 1000), // 10 minutes TTL
                 result: null
             };
+
+            req.order = orderRecord;
+            orderStore.set(tx_hash, orderRecord);
 
             req.order = orderRecord;
             orderStore.set(tx_hash, orderRecord);
@@ -186,10 +219,58 @@ export async function x402Middleware(req: Request, res: Response, next: NextFunc
 
         // Check 3: Mainnet Strict (USDC Token Transfer)
         if (!isValidPayment) {
-            // TODO: Parse innerInstructions for Token Program transfer to TREASURY >= totalEscrow
-            // For now, accept any tx that reached this point on mainnet
-            console.log('[x402] Mainnet mode: Assuming USDC transfer is valid');
-            isValidPayment = true;
+            // Parse for SPL Token transfers to treasury USDC account
+            const meta = txStatus.meta;
+            if (meta && meta.preTokenBalances && meta.postTokenBalances) {
+                // Find treasury's USDC token account changes
+                const treasuryBase58 = TREASURY.toBase58();
+
+                for (const postBalance of meta.postTokenBalances) {
+                    // Check if this is USDC (mainnet mint)
+                    if (postBalance.mint !== USDC_MINT.toBase58()) continue;
+
+                    // Check if owner is treasury
+                    if (postBalance.owner !== treasuryBase58) continue;
+
+                    // Find matching preBalance to calculate delta
+                    const preBalance = meta.preTokenBalances.find(
+                        pre => pre.accountIndex === postBalance.accountIndex
+                    );
+
+                    const preBal = preBalance?.uiTokenAmount?.uiAmount || 0;
+                    const postBal = postBalance.uiTokenAmount?.uiAmount || 0;
+                    const transferAmount = postBal - preBal;
+
+                    console.log(`[x402] USDC transfer detected: ${transferAmount} USDC to treasury`);
+
+                    // Validate amount (allow small rounding tolerance)
+                    if (transferAmount >= totalEscrow * 0.999) {
+                        console.log(`[x402] Mainnet: Valid USDC payment of ${transferAmount} (required: ${totalEscrow})`);
+                        isValidPayment = true;
+                        break;
+                    } else {
+                        console.log(`[x402] Mainnet: USDC amount too low: ${transferAmount} < ${totalEscrow}`);
+                    }
+                }
+
+                if (!isValidPayment) {
+                    return res.status(402).json({
+                        error: "insufficient_payment",
+                        message: `No valid USDC transfer to treasury found. Required: ${totalEscrow} USDC`,
+                        invoice: {
+                            amount: totalEscrow,
+                            destination: treasuryBase58,
+                            token: "USDC",
+                            mint: USDC_MINT.toBase58()
+                        }
+                    });
+                }
+            } else {
+                return res.status(400).json({
+                    error: "invalid_transaction",
+                    message: "Transaction does not contain token balance metadata"
+                });
+            }
         }
 
         if (isValidPayment) {
@@ -211,6 +292,7 @@ export async function x402Middleware(req: Request, res: Response, next: NextFunc
                 validation_question: validation_question,
                 status: orderStatus,
                 created_at: Date.now(),
+                expires_at: Date.now() + (10 * 60 * 1000), // 10 minutes TTL
                 result: null
             };
 

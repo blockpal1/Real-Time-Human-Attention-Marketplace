@@ -79,6 +79,7 @@ export const createBid = async (req: Request, res: Response) => {
             validation_question: validation_question || 'Did you view this content?',
             status: 'open' as const,
             created_at: Date.now(),
+            expires_at: Date.now() + (10 * 60 * 1000), // 10 minutes TTL
             result: null
         };
 
