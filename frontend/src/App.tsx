@@ -186,7 +186,7 @@ function App() {
                         {/* RIGHT COLUMN: Ask Settings */}
                         <div className={`panel-right bg-panel p-4 gap-4 overflow-y-auto pb-20 md:pb-4 ${activePanel === 'ask' ? 'active' : ''}`}>
                             <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">Ask Settings</h2>
-                            <PriceFloorSetter duration={duration} setDuration={setDuration} setSessionToken={setSessionToken} setUserPubkey={setUserPubkey} />
+                            <PriceFloorSetter duration={duration} setDuration={setDuration} setSessionToken={setSessionToken} setUserPubkey={setUserPubkey} sessionToken={sessionToken} />
 
                             <div className="p-4 border border-dashed border-gray-700 rounded text-center text-gray-500 text-sm mt-4">
                                 [Heatmap Placeholder]

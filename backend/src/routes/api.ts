@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { getStatus } from '../controllers/StatusController';
 import { createChallenge } from '../controllers/AttestationController';
-import { startSession, getActiveSessions } from '../controllers/UserController';
+import { startSession, getActiveSessions, cancelSession, updateSession, acceptHighestBid } from '../controllers/UserController';
 import { createBid, getActiveBids } from '../controllers/AgentController';
 import { completeMatch, submitValidationResult, dismissMatch } from '../controllers/MatchController';
 import { getUserEarnings, getSessionHistory } from '../controllers/UserEarningsController';
@@ -38,7 +38,11 @@ router.get('/users/:pubkey/sessions', getSessionHistory);
 router.get('/agents/:pubkey/campaigns', getAgentCampaigns);
 router.get('/campaigns/:bidId/responses', getCampaignResponses);
 
+// Human Session (Ask) Management
 router.post('/users/session/start', startSession);
+router.delete('/users/session/cancel', cancelSession);
+router.patch('/users/session/update', updateSession);
+router.post('/users/session/accept-highest', acceptHighestBid);
 
 // === Agent API (v1) ===
 

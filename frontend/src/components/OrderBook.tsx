@@ -173,12 +173,19 @@ export const OrderBook: React.FC<OrderBookProps> = ({ filterDuration }) => {
             setAsks(prev => prev.filter(o => o.id !== data.askId));
         });
 
+        // Event: ASK_CANCELLED (Remove)
+        const unsubAskCancelled = wsClient.subscribe('ASK_CANCELLED', (data: any) => {
+            console.log("OrderBook received ASK_CANCELLED:", data);
+            setAsks(prev => prev.filter(o => o.id !== data.id));
+        });
+
         return () => {
             unsubBid();
             unsubBidUpdate();
             unsubBidFilled();
             unsubAsk();
             unsubAskMatched();
+            unsubAskCancelled();
         };
     }, []);
 

@@ -9,7 +9,7 @@ const MIN_PRICE_MICROS = 100;
 
 const createBidSchema = z.object({
     target_url: z.string().optional(),
-    max_price_per_second: z.number().int().positive(),
+    max_price_per_second: z.number().int().nonnegative(), // Allow 0 for admin testing
     required_attention_score: z.number().min(0).max(1),
     expiry_seconds: z.number().optional().default(60),
     quantity_seconds: z.number().int().positive().default(30), // Legacy (keep for compatibility)
@@ -39,8 +39,11 @@ export const createBid = async (req: Request, res: Response) => {
         validation_question
     } = result.data;
 
-    // Minimum bid floor validation
-    if (max_price_per_second < MIN_PRICE_MICROS) {
+    // Check for admin bypass
+    const isAdmin = req.headers['x-admin-key'] === process.env.ADMIN_SECRET;
+
+    // Minimum bid floor validation (skip for admin)
+    if (!isAdmin && max_price_per_second < MIN_PRICE_MICROS) {
         return res.status(400).json({
             error: `Bid below minimum floor price`,
             minimum_micros: MIN_PRICE_MICROS,

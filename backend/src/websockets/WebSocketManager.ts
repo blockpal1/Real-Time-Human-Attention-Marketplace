@@ -153,6 +153,11 @@ export class WebSocketManager {
                     else if (event.type === 'ASK_MATCHED') {
                         client.send(JSON.stringify({ type: 'ASK_MATCHED', payload: event.payload }));
                     }
+                    // 6b. ASK CANCELLED
+                    else if (event.type === 'ASK_CANCELLED') {
+                        console.log('WS Broadcasting ASK_CANCELLED');
+                        client.send(JSON.stringify({ type: 'ASK_CANCELLED', payload: event.payload }));
+                    }
                     // 7. MATCH COMPLETED (Human submitted answer)
                     else if (event.type === 'MATCH_COMPLETED') {
                         console.log('WS Broadcasting MATCH_COMPLETED to agent');

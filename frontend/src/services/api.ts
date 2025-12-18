@@ -4,7 +4,10 @@ export const api = {
     async submitBid(bid: any) {
         const response = await fetch(`${API_URL}/agents/bids`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Admin-Key': 'dev-admin-secret'  // Admin bypass for demo
+            },
             body: JSON.stringify(bid)
         });
         if (!response.ok) {
@@ -94,6 +97,29 @@ export const api = {
         if (!response.ok) {
             const error = await response.json();
             throw new Error(error.message || 'Failed to fill order');
+        }
+        return response.json();
+    },
+
+    async cancelSession(pubkey: string) {
+        const response = await fetch(`${API_URL}/users/session/cancel`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pubkey })
+        });
+        if (!response.ok) throw new Error('Failed to cancel session');
+        return response.json();
+    },
+
+    async acceptHighestBid(pubkey: string, duration?: number) {
+        const response = await fetch(`${API_URL}/users/session/accept-highest`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pubkey, duration })
+        });
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.message || 'No bids available');
         }
         return response.json();
     }
