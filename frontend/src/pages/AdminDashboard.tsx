@@ -34,12 +34,24 @@ interface FlaggedBid {
     created_at: string;
 }
 
+interface X402FlaggedOrder {
+    tx_hash: string;
+    content_url: string | null;
+    validation_question: string;
+    status: string;
+    bid_per_second: number;
+    duration: number;
+    quantity: number;
+    created_at: number;
+}
+
 export const AdminDashboard: React.FC = () => {
     const [adminSecret, setAdminSecret] = useState('');
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [status, setStatus] = useState<PlatformStatus | null>(null);
     const [builderCodes, setBuilderCodes] = useState<BuilderCode[]>([]);
     const [flaggedBids, setFlaggedBids] = useState<FlaggedBid[]>([]);
+    const [x402FlaggedOrders, setX402FlaggedOrders] = useState<X402FlaggedOrder[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
@@ -76,11 +88,19 @@ export const AdminDashboard: React.FC = () => {
         if (res.ok) setFlaggedBids(await res.json());
     };
 
+    const fetchX402FlaggedContent = async () => {
+        const res = await fetch(`${API_URL}/admin/content/x402-flagged`, { headers });
+        if (res.ok) {
+            const data = await res.json();
+            setX402FlaggedOrders(data.orders || []);
+        }
+    };
+
     const handleLogin = async () => {
         setLoading(true);
         await fetchStatus();
         if (isAuthenticated) {
-            await Promise.all([fetchBuilderCodes(), fetchFlaggedContent()]);
+            await Promise.all([fetchBuilderCodes(), fetchFlaggedContent(), fetchX402FlaggedContent()]);
         }
         setLoading(false);
     };
@@ -143,6 +163,7 @@ export const AdminDashboard: React.FC = () => {
         if (isAuthenticated) {
             fetchBuilderCodes();
             fetchFlaggedContent();
+            fetchX402FlaggedContent();
         }
     }, [isAuthenticated]);
 
@@ -421,6 +442,63 @@ export const AdminDashboard: React.FC = () => {
                                             >
                                                 Reject
                                             </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
+                </div>
+
+                {/* x402 Flagged Content */}
+                <div style={cardStyle}>
+                    <h2 style={{ marginBottom: '20px', fontSize: '20px' }}>⚠️ x402 Flagged Orders (ToS Rejected)</h2>
+
+                    {x402FlaggedOrders.length === 0 ? (
+                        <p style={{ color: '#666', textAlign: 'center', padding: '24px' }}>
+                            ✅ No x402 orders flagged for ToS violations
+                        </p>
+                    ) : (
+                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <thead>
+                                <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                                    <th style={{ textAlign: 'left', padding: '12px', color: '#888' }}>TX Hash</th>
+                                    <th style={{ textAlign: 'left', padding: '12px', color: '#888' }}>Content</th>
+                                    <th style={{ textAlign: 'left', padding: '12px', color: '#888' }}>Bid</th>
+                                    <th style={{ textAlign: 'left', padding: '12px', color: '#888' }}>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {x402FlaggedOrders.map((order) => (
+                                    <tr key={order.tx_hash} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                        <td style={{ padding: '12px', fontFamily: 'monospace', fontSize: '12px' }}>
+                                            {order.tx_hash.slice(0, 16)}...
+                                        </td>
+                                        <td style={{ padding: '12px', maxWidth: '400px' }}>
+                                            {order.content_url && (
+                                                <a href={order.content_url} target="_blank" rel="noreferrer"
+                                                    style={{ color: '#6366f1' }}>
+                                                    {order.content_url.slice(0, 50)}...
+                                                </a>
+                                            )}
+                                            {order.validation_question && (
+                                                <p style={{ fontSize: '12px', color: '#888', margin: '4px 0' }}>
+                                                    Q: {order.validation_question}
+                                                </p>
+                                            )}
+                                        </td>
+                                        <td style={{ padding: '12px', fontFamily: 'monospace' }}>
+                                            ${order.bid_per_second.toFixed(4)}/s
+                                        </td>
+                                        <td style={{ padding: '12px' }}>
+                                            <span style={{
+                                                padding: '4px 8px',
+                                                borderRadius: '4px',
+                                                fontSize: '12px',
+                                                background: '#ef4444'
+                                            }}>
+                                                {order.status}
+                                            </span>
                                         </td>
                                     </tr>
                                 ))}
