@@ -11,6 +11,9 @@ const IS_DEVNET = RPC_URL.includes('devnet');
 
 const connection = new Connection(RPC_URL, 'confirmed');
 
+// Admin Bypass Configuration
+const ADMIN_KEY = process.env.ADMIN_SECRET;
+
 // In-memory order storage (for status polling)
 export const orderStore = new Map<string, OrderRecord>();
 
@@ -39,6 +42,68 @@ declare global {
 
 export async function x402Middleware(req: Request, res: Response, next: NextFunction) {
     try {
+        // ========================================
+        // ADMIN BYPASS: Skip payment for privileged requests
+        // ========================================
+        const adminKeyHeader = req.headers['x-admin-key'];
+        if (ADMIN_KEY && adminKeyHeader === ADMIN_KEY) {
+            const { duration, quantity = 1, bid_per_second, content_url, validation_question } = req.body;
+
+            if (!duration || !bid_per_second) {
+                return res.status(400).json({ error: "Missing required fields: duration, bid_per_second" });
+            }
+
+            if (!validation_question) {
+                return res.status(400).json({ error: "Missing validation_question" });
+            }
+
+            // Validate duration
+            if (![10, 30, 60].includes(duration)) {
+                return res.status(400).json({ error: "Invalid duration. Must be 10, 30, or 60." });
+            }
+
+            // Generate random tx_hash for admin orders
+            const tx_hash = `admin_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+            const totalEscrow = duration * quantity * bid_per_second;
+
+            const orderRecord: OrderRecord = {
+                duration,
+                quantity,
+                bid: bid_per_second,
+                total_escrow: totalEscrow,
+                tx_hash,
+                referrer: null,
+                content_url: content_url || null,
+                validation_question,
+                status: 'open',
+                created_at: Date.now(),
+                result: null
+            };
+
+            req.order = orderRecord;
+            orderStore.set(tx_hash, orderRecord);
+
+            // Emit socket event via Redis
+            if (redis.isOpen) {
+                await redis.publish('marketplace_events', JSON.stringify({
+                    type: 'BID_CREATED',
+                    payload: {
+                        bidId: tx_hash,
+                        price: bid_per_second,
+                        max_price_per_second: bid_per_second * 1_000_000,
+                        duration,
+                        quantity,
+                        contentUrl: content_url || null,
+                        validationQuestion: validation_question
+                    }
+                }));
+                console.log('[x402] Admin bypass: Broadcasted BID_CREATED via WebSocket');
+            }
+
+            console.log(`[x402] Admin bypass: Created order ${tx_hash} for ${quantity}x ${duration}s @ $${bid_per_second}/s`);
+            return next();
+        }
+
         // 1. EXTRACT ORDER DETAILS
         const { duration, quantity = 1, bid_per_second, content_url, validation_question } = req.body;
 

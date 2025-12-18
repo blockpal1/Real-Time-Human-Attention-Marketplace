@@ -16,7 +16,9 @@ import {
     reviewBuilderCode,
     createBuilderCode,
     getFlaggedContent,
-    reviewContent
+    reviewContent,
+    getX402FlaggedContent,
+    reviewX402Content
 } from '../controllers/AdminController';
 
 const router = Router();
@@ -67,9 +69,13 @@ router.get('/admin/builder-codes', authenticateAdmin, getBuilderCodes);
 router.post('/admin/builder-codes', authenticateAdmin, createBuilderCode);
 router.post('/admin/builder-codes/:codeId/review', authenticateAdmin, reviewBuilderCode);
 
-// Content moderation
+// Content moderation (Legacy Prisma bids)
 router.get('/admin/content/flagged', authenticateAdmin, getFlaggedContent);
 router.post('/admin/content/:bidId/review', authenticateAdmin, reviewContent);
+
+// Content moderation (x402 orders)
+router.get('/admin/content/x402-flagged', authenticateAdmin, getX402FlaggedContent);
+router.post('/admin/content/x402/:tx_hash/review', authenticateAdmin, reviewX402Content);
 
 // === x402 Payment Protocol ===
 // Agent verification with HTTP 402 payment required

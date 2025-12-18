@@ -49,82 +49,70 @@ export const createBid = async (req: Request, res: Response) => {
         });
     }
 
-    // Use authenticated agent if available, otherwise fallback to admin/UI mode
-    let agentPubkey: string;
-    let builderCode: string | null = null;
-
-    if (req.agent) {
-        // Authenticated API request
-        agentPubkey = req.agent.pubkey;
-        builderCode = req.agent.builderCode;
-    } else {
-        // Legacy UI mode - use admin agent
-        agentPubkey = "admin-ui-agent";
-
-        // Upsert admin agent if needed
-        await prisma.agent.upsert({
-            where: { pubkey: agentPubkey },
-            update: {},
-            create: { pubkey: agentPubkey, name: 'Admin UI', tier: 'enterprise' }
-        });
+    // Validate duration
+    if (![10, 30, 60].includes(duration_per_user)) {
+        return res.status(400).json({ error: "Invalid duration. Must be 10, 30, or 60." });
     }
 
+    // ========================================
+    // ROUTE THROUGH x402 SYSTEM (UNIFIED ORDER STORE)
+    // ========================================
     try {
-        const bid = await prisma.bid.create({
-            data: {
-                agentPubkey: agentPubkey,
-                targetUrl: target_url || '',
-                contentUrl: content_url || null,
-                maxPricePerSecond: max_price_per_second,
-                requiredAttentionScore: required_attention_score,
-                expiry: new Date(Date.now() + (expiry_seconds || 60) * 1000),
-                targetQuantity: target_quantity,
-                durationPerUser: duration_per_user,
-                validationQuestion: validation_question,
-                active: true,
-            }
-        });
+        // Import orderStore directly
+        const { orderStore } = await import('../middleware/x402OrderBook');
 
-        // Publish to Matcher & Monitor
-        await redis.publish('marketplace_events', JSON.stringify({
-            type: 'BID_CREATED',
-            payload: {
-                bidId: bid.id,
-                max_price_per_second: max_price_per_second,
-                price: max_price_per_second / 1_000_000,
-                target_url: target_url,
-                duration: duration_per_user,
-                quantity: target_quantity,
-                builder_code: builderCode
-            }
-        }));
+        // Convert price from micros to USDC
+        const bid_per_second = max_price_per_second / 1_000_000;
 
-        // Get platform mode for response
-        const config = await prisma.platformConfig.findUnique({
-            where: { id: 'singleton' }
-        });
+        // Generate admin tx_hash
+        const tx_hash = `admin_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+        const totalEscrow = duration_per_user * target_quantity * bid_per_second;
 
-        // Queue content for moderation (async)
-        if (content_url || target_url || validation_question) {
-            moderationService.queueForModeration(bid.id);
-        } else {
-            // No content to moderate, auto-approve
-            await prisma.bid.update({
-                where: { id: bid.id },
-                data: { contentStatus: 'approved' }
-            });
+        const orderRecord = {
+            duration: duration_per_user,
+            quantity: target_quantity,
+            bid: bid_per_second,
+            total_escrow: totalEscrow,
+            tx_hash,
+            referrer: null,
+            content_url: content_url || null,
+            validation_question: validation_question || 'Did you view this content?',
+            status: 'open' as const,
+            created_at: Date.now(),
+            result: null
+        };
+
+        // Save to x402 orderStore (unified source)
+        orderStore.set(tx_hash, orderRecord);
+
+        // Emit WebSocket event
+        if (redis.isOpen) {
+            await redis.publish('marketplace_events', JSON.stringify({
+                type: 'BID_CREATED',
+                payload: {
+                    bidId: tx_hash,
+                    price: bid_per_second,
+                    max_price_per_second,
+                    duration: duration_per_user,
+                    quantity: target_quantity,
+                    contentUrl: content_url || null,
+                    validationQuestion: validation_question
+                }
+            }));
         }
 
-        res.status(201).json({
-            bid_id: bid.id,
-            mode: config?.mode || 'beta',
-            agent_pubkey: agentPubkey,
-            content_status: 'pending'
+        console.log(`[Campaign] Created x402 order: ${tx_hash} for ${target_quantity}x ${duration_per_user}s @ $${bid_per_second}/s`);
+
+        return res.status(201).json({
+            bid_id: tx_hash,
+            tx_hash,
+            mode: 'x402',
+            content_status: 'approved'  // Admin bypass skips moderation
         });
 
     } catch (error) {
         console.error('Create Bid Error:', error);
-        res.status(500).json({ error: 'Internal Server Error' });
+        return res.status(500).json({ error: 'Internal Server Error' });
     }
 };
 
