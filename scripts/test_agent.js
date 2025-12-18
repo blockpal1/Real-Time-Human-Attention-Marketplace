@@ -6,6 +6,9 @@ const CONNECTION = new Connection("https://api.devnet.solana.com", "confirmed");
 const API_URL = "http://localhost:3000/v1/verify";
 const WALLET_FILE = 'agent_wallet.json';
 
+// BUILDER/REFERRER WALLET (for revenue share testing)
+const BUILDER_WALLET = Keypair.generate();
+
 async function getOrCreateWallet() {
     if (fs.existsSync(WALLET_FILE)) {
         const secret = JSON.parse(fs.readFileSync(WALLET_FILE));
@@ -21,7 +24,8 @@ async function getOrCreateWallet() {
 async function main() {
     const AGENT_WALLET = await getOrCreateWallet();
     console.log("🤖 Agent Starting...");
-    console.log(`   Wallet: ${AGENT_WALLET.publicKey.toBase58()}`);
+    console.log(`   Agent Wallet: ${AGENT_WALLET.publicKey.toBase58()}`);
+    console.log(`   Builder (Referrer): ${BUILDER_WALLET.publicKey.toBase58()}`);
 
     // 1. CHECK BALANCE
     const balance = await CONNECTION.getBalance(AGENT_WALLET.publicKey);
@@ -46,10 +50,13 @@ async function main() {
 
     console.log("\n🔒 Attempt 1: Requesting Access (Expect 402)...");
 
-    // Initial Request
+    // Initial Request WITH REFERRER HEADER
     const resp = await fetch(API_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+            "Content-Type": "application/json",
+            "X-Referrer-Agent": BUILDER_WALLET.publicKey.toBase58()
+        },
         body: JSON.stringify(payload)
     });
 
@@ -66,8 +73,12 @@ async function main() {
 
         const price = paymentInfo.amount;
         const vault = paymentInfo.recipient || paymentInfo.destination;
+        const invoiceReferrer = paymentInfo.referrer;
 
         console.log(`\n💸 Invoice Received: ${price} USDC -> Vault: ${vault}`);
+        if (invoiceReferrer) {
+            console.log(`   📣 Referrer in invoice: ${invoiceReferrer}`);
+        }
 
         // 3. PAY THE INVOICE
         console.log("✍️  Signing Transaction...");
@@ -95,13 +106,14 @@ async function main() {
         console.log("⏳ Waiting 25s for RPC propagation...");
         await new Promise(r => setTimeout(r, 25000));
 
-        // 4. RETRY WITH PROOF
+        // 4. RETRY WITH PROOF + REFERRER
         console.log("\n🔓 Attempt 2: Retrying with Proof...");
         const validResp = await fetch(API_URL, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
-                "X-Solana-Tx-Signature": txHash
+                "X-Solana-Tx-Signature": txHash,
+                "X-Referrer-Agent": BUILDER_WALLET.publicKey.toBase58()
             },
             body: JSON.stringify(payload)
         });
@@ -109,8 +121,16 @@ async function main() {
         const finalData = await validResp.json();
 
         if (validResp.status === 200) {
-            console.log("🎉 SUCCESS! Access Granted.");
-            console.log("Server Response:", finalData);
+            console.log("\n🎉 SUCCESS! Access Granted.");
+            console.log("Server Response:", JSON.stringify(finalData, null, 2));
+
+            // Show referrer attribution
+            if (finalData.order && finalData.order.referrer) {
+                console.log(`\n📣 YIELD HEADER WORKING!`);
+                console.log(`   Referrer: ${finalData.order.referrer}`);
+            } else {
+                console.log("\n⚠️  No referrer in response (check middleware)");
+            }
         } else {
             console.log("❌ Failed:", finalData);
         }

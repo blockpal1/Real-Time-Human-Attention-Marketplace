@@ -3,9 +3,9 @@ import { Connection, PublicKey } from '@solana/web3.js';
 
 // Configuration
 const VAULT_ADDRESS = process.env.ATTENTIUM_VAULT_ADDRESS || '2kDpvEhgoLkUbqFJqxMpUXMtr2gVYbfqNF8kGrfoZMAV';
-const SPLITTER_ADDRESS = process.env.ATTENTIUM_SPLITTER_ADDRESS || 'AttSp1itXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX';
 const SOLANA_RPC_URL = process.env.SOLANA_RPC_URL || 'https://api.devnet.solana.com';
 const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'; // Mainnet USDC
+const IS_DEVNET = SOLANA_RPC_URL.includes('devnet');
 
 // Allowed durations (in seconds)
 const ALLOWED_DURATIONS = [10, 30, 60] as const;
@@ -28,7 +28,7 @@ declare global {
                 total_escrow: number;
                 txHash: string;
                 payer: string;
-                referrer?: string;
+                referrer: string | null;
             };
         }
     }
@@ -114,21 +114,22 @@ export const x402OrderBook = async (
     const referrerAgent = req.headers['x-referrer-agent'] as string | undefined;
 
     // Validate referrer if provided (must be valid Solana pubkey)
-    let validatedReferrer: string | undefined;
+    // Invalid referrers are silently ignored (not rejected)
+    let validatedReferrer: string | null = null;
     if (referrerAgent) {
         try {
             new PublicKey(referrerAgent); // Throws if invalid
             validatedReferrer = referrerAgent;
+            console.log(`[x402] Valid referrer detected: ${referrerAgent.slice(0, 12)}...`);
         } catch {
-            return res.status(400).json({
-                error: 'invalid_referrer',
-                message: 'X-Referrer-Agent must be a valid Solana public key'
-            });
+            console.log(`[x402] Invalid referrer header ignored: ${referrerAgent}`);
+            // Don't reject, just ignore
         }
     }
 
-    // Determine recipient based on referrer presence
-    const paymentRecipient = validatedReferrer ? SPLITTER_ADDRESS : VAULT_ADDRESS;
+    // Always use main vault - splitter not deployed yet
+    // Referrer is tracked for future manual payouts
+    const paymentRecipient = VAULT_ADDRESS;
 
     // ========================================
     // STEP 3a: No Payment Header → Return 402
@@ -145,8 +146,9 @@ export const x402OrderBook = async (
             bid_per_second
         };
 
-        // Add splitter instructions if referrer present
+        // Add referrer to invoice if present
         if (validatedReferrer) {
+            (invoice as any).referrer = validatedReferrer;
             invoice.instruction_data = {
                 treasury: VAULT_ADDRESS,
                 referrer: validatedReferrer,
@@ -197,15 +199,20 @@ export const x402OrderBook = async (
             });
         }
 
-        // Validate amount covers the escrow
-        const totalEscrowLamports = total_escrow * Math.pow(10, USDC_DECIMALS);
-        if (transferInfo.amount < totalEscrowLamports) {
-            return res.status(402).json({
-                error: 'insufficient_payment',
-                message: `Payment insufficient. Required: ${total_escrow} USDC, Received: ${transferInfo.amount / Math.pow(10, USDC_DECIMALS)} USDC`,
-                required: total_escrow,
-                received: transferInfo.amount / Math.pow(10, USDC_DECIMALS)
-            });
+        // Validate amount covers the escrow (SKIP for devnet native SOL)
+        const isDevnetSolTransfer = IS_DEVNET && transferInfo.recipient === VAULT_ADDRESS;
+        if (!isDevnetSolTransfer) {
+            const totalEscrowLamports = total_escrow * Math.pow(10, USDC_DECIMALS);
+            if (transferInfo.amount < totalEscrowLamports) {
+                return res.status(402).json({
+                    error: 'insufficient_payment',
+                    message: `Payment insufficient. Required: ${total_escrow} USDC, Received: ${transferInfo.amount / Math.pow(10, USDC_DECIMALS)} USDC`,
+                    required: total_escrow,
+                    received: transferInfo.amount / Math.pow(10, USDC_DECIMALS)
+                });
+            }
+        } else {
+            console.log('[x402] Devnet bypass: Skipping amount validation for native SOL transfer');
         }
 
         // Validate recipient matches expected vault/splitter
