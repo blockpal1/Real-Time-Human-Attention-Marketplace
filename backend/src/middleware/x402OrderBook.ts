@@ -2,9 +2,9 @@ import { Request, Response, NextFunction } from 'express';
 import { Connection, PublicKey } from '@solana/web3.js';
 
 // Configuration
-const VAULT_ADDRESS = process.env.ATTENTIUM_VAULT_ADDRESS || 'AttVau1tXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX';
+const VAULT_ADDRESS = process.env.ATTENTIUM_VAULT_ADDRESS || '2kDpvEhgoLkUbqFJqxMpUXMtr2gVYbfqNF8kGrfoZMAV';
 const SPLITTER_ADDRESS = process.env.ATTENTIUM_SPLITTER_ADDRESS || 'AttSp1itXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX';
-const SOLANA_RPC_URL = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
+const SOLANA_RPC_URL = process.env.SOLANA_RPC_URL || 'https://api.devnet.solana.com';
 const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'; // Mainnet USDC
 
 // Allowed durations (in seconds)
@@ -247,18 +247,39 @@ export const x402OrderBook = async (
 
 /**
  * Extract USDC transfer details from a parsed transaction
+ * Includes devnet bypass for native SOL transfers
  */
 function extractUsdcTransfer(tx: any): { amount: number; recipient: string; sender: string } | null {
     try {
-        // Look for SPL Token transfer instructions
         const instructions = tx.transaction?.message?.instructions || [];
 
+        // ==========================================
+        // DEVNET BYPASS: Check for native SOL transfer
+        // ==========================================
+        for (const ix of instructions) {
+            if (ix.program === 'system' && ix.parsed?.type === 'transfer') {
+                const info = ix.parsed.info;
+                // Check if recipient is our vault
+                if (info.destination === VAULT_ADDRESS) {
+                    console.log('⚠️  Devnet Mode: Accepted Native SOL transfer as valid payment.');
+                    console.log(`   From: ${info.source}`);
+                    console.log(`   To: ${info.destination}`);
+                    console.log(`   Amount: ${info.lamports} lamports`);
+                    return {
+                        amount: info.lamports, // Return lamports, we'll skip amount check for devnet
+                        recipient: info.destination,
+                        sender: info.source
+                    };
+                }
+            }
+        }
+        // ==========================================
+
+        // PRODUCTION: Look for SPL Token transfer instructions
         for (const ix of instructions) {
             // Check for parsed SPL Token transfer
             if (ix.program === 'spl-token' && ix.parsed?.type === 'transfer') {
                 const info = ix.parsed.info;
-                // We need to resolve token accounts to actual owners
-                // For now, return the token account addresses
                 return {
                     amount: parseInt(info.amount, 10),
                     recipient: info.destination,
@@ -269,7 +290,6 @@ function extractUsdcTransfer(tx: any): { amount: number; recipient: string; send
             // Check for transferChecked (preferred for USDC)
             if (ix.program === 'spl-token' && ix.parsed?.type === 'transferChecked') {
                 const info = ix.parsed.info;
-                // Verify it's USDC
                 if (info.mint === USDC_MINT) {
                     return {
                         amount: parseInt(info.tokenAmount.amount, 10),

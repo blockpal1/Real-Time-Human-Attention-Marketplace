@@ -699,57 +699,50 @@ let platform_share = fee - builder_share;
 
 ## Updated Implementation Phases
 
-### Phase 1: MVP (Completed + x402 Pivot)
+> [!IMPORTANT]
+> **PROTOCOL FIRST APPROACH:** No proprietary SDK. Agents integrate via raw HTTP + Solana transactions. Any language that can send HTTP requests and sign Solana transactions can integrate.
 
-**Completed (API Key Era):**
-- [x] ~~API key authentication~~ → **DEPRECATED**
-- [x] Agent registration with optional builder_code
-- [x] Minimum bid validation ($0.0001/s)
-- [x] Basic webhook delivery
-- [x] Content URL scanning (OpenAI Moderation)
-- [x] Admin Console (mode toggle, Genesis key approval, content review)
+### Phase 1: x402 Protocol Core ✅ COMPLETE
 
-**New (x402 Pivot):**
-- [ ] **x402 Payment Protocol middleware** (`middleware/x402OrderBook.ts`)
-  - [ ] Parse request body (duration, bid_per_second)
-  - [ ] Validate duration ∈ [10, 30, 60]
-  - [ ] Validate bid >= $0.0001/s
-  - [ ] Calculate total escrow (duration × bid)
-  - [ ] Return 402 with `WWW-Authenticate` header if no payment
-  - [ ] Fetch and validate Solana transaction via RPC
-  - [ ] Verify tx.amount >= total_escrow
-  - [ ] Verify tx.recipient == Vault Address
-  - [ ] Attach `req.order` and call `next()`
+**Backend Middleware:**
+- [x] `middleware/x402OrderBook.ts` - HTTP 402 payment gate
+- [x] Parse request body (duration, quantity, bid_per_second)
+- [x] Validate duration ∈ [10, 30, 60]
+- [x] Validate quantity ∈ [1, 1000]
+- [x] Validate bid >= $0.0001/s
+- [x] Calculate total escrow: `duration × quantity × bid`
+- [x] Return 402 with `WWW-Authenticate` header if no payment
+- [x] Solana transaction verification via RPC
+- [x] Verify tx.amount >= total_escrow
+- [x] Verify tx.recipient == Vault Address
+- [x] X-Referrer-Agent header for revenue sharing (20%)
+
+**Testing:**
+```bash
+# Get 402 invoice
+curl -X POST http://localhost:3000/v1/verify \
+  -H "Content-Type: application/json" \
+  -d '{"duration": 30, "quantity": 5, "bid_per_second": 0.05}'
+```
 
 ### Phase 2: Revenue Sharing (2 weeks)
 
-- [ ] **X-Referrer-Agent Header Support**
-  - [ ] Parse optional `X-Referrer-Agent` header
-  - [ ] Validate referrer is valid Solana pubkey
-  - [ ] Route to SplitterProgram if referrer present
-  - [ ] Include referrer in 402 payment invoice
 - [ ] **SplitterProgram Contract**
-  - [ ] Deploy splitter program on Solana
-  - [ ] 80/20 split logic (Treasury / Referrer)
-  - [ ] Audit and test
-- [ ] **Python Client Script**
-  - [ ] Accept `--duration` argument
-  - [ ] Accept `--bid` argument
-  - [ ] Accept `--referrer` argument (optional)
-  - [ ] Calculate total locally before signing
-  - [ ] Sign and send USDC transfer
-  - [ ] Inject `X-Solana-Tx-Signature` header
-  - [ ] Inject `X-Referrer-Agent` header if provided
+  - [x] Anchor program written (`payment-router/programs/fee_splitter/`)
+  - [ ] Deploy to devnet
+  - [ ] Deploy to mainnet
+  - [ ] Audit
+- [ ] **Fee Routing**
+  - [ ] Update middleware to route to SplitterProgram when referrer present
+  - [ ] 80/20 split (Treasury / Referrer)
 
 ### Phase 3: Production Hardening (4 weeks)
 
-- [ ] Gas station for user transactions
-- [ ] Full content moderation pipeline
-- [ ] TypeScript SDK with x402 support
 - [ ] Transaction replay protection (nonce tracking)
 - [ ] Rate limiting by wallet address
-- [ ] KYB integration for Enterprise tier
+- [ ] Gas station for user transactions
 - [ ] WebSocket streaming for real-time order book
+- [ ] KYB integration for Enterprise tier
 
 ---
 
