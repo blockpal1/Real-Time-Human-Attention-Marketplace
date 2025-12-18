@@ -45,24 +45,13 @@ export const OrderBook: React.FC<OrderBookProps> = ({ filterDuration }) => {
         // Initial Fetch
         const fetchState = async () => {
             try {
-                const [activeBids, activeAsks, x402Data] = await Promise.all([
-                    api.getActiveBids(),
+                const [activeAsks, x402Data] = await Promise.all([
                     api.getActiveAsks(),
                     api.getX402Orders()
                 ]);
 
-                // Legacy bids from database
-                const legacyBids = activeBids.map((b: any) => ({
-                    id: b.id,
-                    price: b.maxPricePerSecond / 1_000_000,
-                    size: b.durationPerUser,
-                    quantity: b.targetQuantity,
-                    total: (b.maxPricePerSecond / 1_000_000) * b.durationPerUser * b.targetQuantity,
-                    type: 'bid' as const
-                }));
-
-                // x402 orders from in-memory store
-                const x402Bids = (x402Data.orders || []).map((o: any) => ({
+                // x402 orders from in-memory store (single source of truth)
+                const bids = (x402Data.orders || []).map((o: any) => ({
                     id: o.tx_hash,
                     price: o.bid_per_second,
                     size: o.duration,
@@ -71,8 +60,7 @@ export const OrderBook: React.FC<OrderBookProps> = ({ filterDuration }) => {
                     type: 'bid' as const
                 }));
 
-                // Merge both sources
-                setBids([...legacyBids, ...x402Bids].sort((a, b) => b.price - a.price));
+                setBids(bids.sort((a: Order, b: Order) => b.price - a.price));
 
                 setAsks(activeAsks.map((a: any) => ({
                     id: a.id,

@@ -1,8 +1,6 @@
 import { Request, Response } from 'express';
-import { prisma } from '../utils/prisma';
 import { redis } from '../utils/redis';
 import { z } from 'zod';
-import { moderationService } from '../services/ContentModerationService';
 
 // Minimum bid floor: $0.0001/second = 100 micros
 const MIN_PRICE_MICROS = 100;
@@ -122,17 +120,35 @@ export const createBid = async (req: Request, res: Response) => {
 
 export const getActiveBids = async (req: Request, res: Response) => {
     try {
-        const bids = await prisma.bid.findMany({
-            where: {
-                active: true,
-                targetQuantity: { gt: 0 },
-                expiry: { gt: new Date() }
-            },
-            take: 100,
-            orderBy: { maxPricePerSecond: 'desc' }
+        // Query x402 orderStore (single source of truth)
+        const { orderStore } = await import('../middleware/x402OrderBook');
+
+        const now = Date.now();
+        const bids: any[] = [];
+
+        orderStore.forEach((order, txHash) => {
+            // Only include open orders that haven't expired
+            if (order.status === 'open' && order.quantity > 0 && now < order.expires_at) {
+                bids.push({
+                    id: txHash,
+                    maxPricePerSecond: Math.round(order.bid * 1_000_000), // Convert back to micros for compatibility
+                    durationPerUser: order.duration,
+                    targetQuantity: order.quantity,
+                    contentUrl: order.content_url,
+                    validationQuestion: order.validation_question,
+                    createdAt: new Date(order.created_at),
+                    expiry: new Date(order.expires_at),
+                    active: true
+                });
+            }
         });
-        res.json(bids);
+
+        // Sort by price descending
+        bids.sort((a, b) => b.maxPricePerSecond - a.maxPricePerSecond);
+
+        res.json(bids.slice(0, 100));
     } catch (error) {
+        console.error('Get Active Bids Error:', error);
         res.status(500).json({ error: 'Failed to fetch bids' });
     }
 };

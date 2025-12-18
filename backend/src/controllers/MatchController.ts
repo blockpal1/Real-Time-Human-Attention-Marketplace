@@ -138,56 +138,64 @@ export const submitValidationResult = async (req: Request, res: Response) => {
 
 /**
  * Human dismisses/declines a match offer
- * Restores bid quantity to order book
+ * Restores bid quantity to order book and cancels user session
  */
 export const dismissMatch = async (req: Request, res: Response) => {
     const { matchId } = req.params;
+    const { bidId, pubkey } = req.body; // bidId = tx_hash for x402, pubkey for session cancellation
 
     try {
-        // Get the match and verify it's in 'offered' status
-        const match = await prisma.match.findUnique({
-            where: { id: matchId },
-            include: { bid: true }
-        });
+        // Import orderStore to restore x402 order quantity
+        const { orderStore } = await import('../middleware/x402OrderBook');
 
-        if (!match) {
-            return res.status(404).json({ error: 'Match not found' });
+        // 1. Restore order quantity in x402 orderStore (if bidId provided)
+        if (bidId && orderStore.has(bidId)) {
+            const order = orderStore.get(bidId)!;
+            order.quantity += 1;
+            order.status = 'open';
+            orderStore.set(bidId, order);
+            console.log(`[Dismiss] Restored ${bidId.slice(0, 16)}... quantity to ${order.quantity}`);
+
+            // Broadcast BID_UPDATED to restore in frontend order book
+            if (redis.isOpen) {
+                await redis.publish('marketplace_events', JSON.stringify({
+                    type: 'BID_UPDATED',
+                    payload: {
+                        bidId,
+                        remainingQuantity: order.quantity
+                    }
+                }));
+            }
         }
 
-        if (match.status !== 'offered') {
-            return res.status(400).json({ error: `Cannot dismiss match with status: ${match.status}` });
-        }
+        // 2. Cancel user's session (if pubkey provided)
+        if (pubkey) {
+            const session = await prisma.session.findFirst({
+                where: { userPubkey: pubkey, active: true }
+            });
 
-        // 1. Mark match as dismissed
-        await prisma.match.update({
-            where: { id: matchId },
-            data: { status: 'dismissed' }
-        });
+            if (session) {
+                await prisma.session.update({
+                    where: { id: session.id },
+                    data: { active: false, endedAt: new Date() }
+                });
+                console.log(`[Dismiss] Cancelled session for ${pubkey.slice(0, 12)}...`);
 
-        // 2. Restore bid quantity (return to order book)
-        const updatedBid = await prisma.bid.update({
-            where: { id: match.bidId },
-            data: { targetQuantity: { increment: 1 } }
-        });
-
-        console.log(`Match ${matchId} dismissed. Bid ${match.bidId} quantity restored to ${updatedBid.targetQuantity}`);
-
-        // 3. Publish BID_UPDATED to restore bid in order book on frontend
-        if (redis.isOpen) {
-            await redis.publish('marketplace_events', JSON.stringify({
-                type: 'BID_UPDATED',
-                payload: {
-                    bidId: match.bidId,
-                    remainingQuantity: updatedBid.targetQuantity
+                // Broadcast ASK_CANCELLED
+                if (redis.isOpen) {
+                    await redis.publish('marketplace_events', JSON.stringify({
+                        type: 'ASK_CANCELLED',
+                        payload: { id: session.id }
+                    }));
                 }
-            }));
+            }
         }
 
         res.status(200).json({
             success: true,
             matchId,
-            bidRestored: true,
-            newBidQuantity: updatedBid.targetQuantity
+            bidRestored: !!bidId,
+            sessionCancelled: !!pubkey
         });
 
     } catch (error) {

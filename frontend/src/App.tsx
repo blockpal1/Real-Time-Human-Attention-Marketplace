@@ -14,6 +14,7 @@ import { AdminDashboard } from './pages/AdminDashboard';
 
 interface MatchNotification {
     matchId: string;
+    bidId?: string; // tx_hash for x402 orders
     price: number;
     duration: number;
     topic?: string;
@@ -57,6 +58,7 @@ function App() {
 
             setMatch({
                 matchId: data.matchId || data.id,
+                bidId: data.bidId || null,
                 price: data.price || 0,
                 duration: data.duration || 30,
                 topic: (typeof data.topic === 'string' ? data.topic : 'Ad Campaign'),
@@ -89,15 +91,17 @@ function App() {
     };
 
     const handleDismissMatch = async () => {
-        // Notify backend to restore bid to order book
+        // Notify backend to restore bid to order book and cancel session
         if (match?.matchId) {
             try {
-                await api.dismissMatch(match.matchId);
-                console.log('Match dismissed, bid returned to order book');
+                await api.dismissMatch(match.matchId, match.bidId, userPubkey || undefined);
+                console.log('Match dismissed, bid returned to order book, session cancelled');
             } catch (error) {
                 console.error('Failed to dismiss match:', error);
             }
         }
+        // Reset user state
+        setSessionToken(null);
         setMatch(null);
     };
 

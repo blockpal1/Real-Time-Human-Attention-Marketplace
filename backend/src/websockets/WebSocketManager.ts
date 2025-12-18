@@ -115,20 +115,20 @@ export class WebSocketManager {
             this.wss.clients.forEach(client => {
                 if (client.readyState === WebSocket.OPEN) {
 
-                    // 1. MATCH FOUND (Targeted + Broadcast for Demo)
-                    if (event.type === 'MATCH_CREATED') {
-                        // BROADCAST VERSION
+                    // 1. MATCH FOUND (Handle both MATCH_CREATED and MATCH_FOUND types)
+                    if (event.type === 'MATCH_CREATED' || event.type === 'MATCH_FOUND') {
                         console.log('WS Broadcasting MATCH_FOUND to client');
+                        const payload = event.payload || event;
                         client.send(JSON.stringify({
                             type: 'MATCH_FOUND',
-                            matchId: event.matchId,
-                            price: event.price,
-                            duration: event.payload?.duration || 30,
+                            matchId: payload.matchId || event.matchId,
+                            bidId: payload.bidId || null, // Include bidId for dismiss restore
+                            price: payload.price || event.price,
+                            duration: payload.duration || 30,
                             quantity: 1,
-                            topic: typeof event.payload?.topic === 'string' ? event.payload.topic : 'Ad Campaign',
-                            // Content for Focus Session
-                            contentUrl: event.payload?.contentUrl || null,
-                            validationQuestion: event.payload?.validationQuestion || null
+                            topic: typeof payload.topic === 'string' ? payload.topic : 'Ad Campaign',
+                            contentUrl: payload.contentUrl || null,
+                            validationQuestion: payload.validationQuestion || null
                         }));
                     }
                     // 2. BID CREATED

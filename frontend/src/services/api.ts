@@ -73,10 +73,11 @@ export const api = {
         return response.json();
     },
 
-    async dismissMatch(matchId: string) {
+    async dismissMatch(matchId: string, bidId?: string, pubkey?: string) {
         const response = await fetch(`${API_URL}/matches/${matchId}/dismiss`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ bidId, pubkey })
         });
         if (!response.ok) throw new Error('Failed to dismiss match');
         return response.json();
