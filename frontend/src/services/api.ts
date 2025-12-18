@@ -77,5 +77,24 @@ export const api = {
         });
         if (!response.ok) throw new Error('Failed to dismiss match');
         return response.json();
+    },
+
+    // x402 Protocol Orders
+    async getX402Orders() {
+        const response = await fetch(`${API_URL}/orderbook`);
+        if (!response.ok) return { orders: [] };
+        return response.json();
+    },
+
+    async fillX402Order(txHash: string) {
+        const response = await fetch(`${API_URL}/orders/${txHash}/fill`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.message || 'Failed to fill order');
+        }
+        return response.json();
     }
 };

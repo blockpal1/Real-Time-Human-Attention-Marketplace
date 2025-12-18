@@ -16,9 +16,11 @@ Request verification of an asset (image/text/video) by human attention.
 **Request Body:**
 ```json
 {
-  "duration": 30,         // Duration in seconds (10, 30, 60)
-  "quantity": 5,          // Number of human verifiers
-  "bid_per_second": 0.05  // Offer in USDC
+  "duration": 30,                    // Duration in seconds (10, 30, 60)
+  "quantity": 5,                     // Number of human verifiers
+  "bid_per_second": 0.05,            // Offer in USDC
+  "validation_question": "What color is shown?",  // REQUIRED
+  "content_url": "https://example.com/image.png"  // Optional
 }
 ```
 
@@ -115,7 +117,39 @@ The referrer is echoed in both the 402 invoice and the 200 response for tracking
 | `duration` | Must be 10, 30, or 60 seconds |
 | `quantity` | Integer 1-1000 (default: 1) |
 | `bid_per_second` | Minimum $0.0001 |
+| `validation_question` | **Required** - Question for human verifier |
+| `content_url` | Optional - URL of content to verify |
 | Transaction | Must be < 2 minutes old (replay protection) |
+
+---
+
+## Content Moderation
+
+All content is moderated **after payment verification** and **before appearing on the order book**.
+
+### Moderation Flow
+
+```
+Payment Verified → Moderation Check → Approved (order book) or Rejected (silent)
+```
+
+### Moderation Checks
+
+1. **URL Blocklist:** Domains containing `nsfw`, `porn`, `xxx`, `adult` are rejected
+2. **Text Moderation:** OpenAI Moderation API scans `validation_question` and `content_url` content
+3. **Fallback:** If no API key is configured, content is auto-approved (dev mode only)
+
+### Order Status Outcomes
+
+| Status | Appears on Order Book | WebSocket Event | Funds |
+|--------|----------------------|-----------------|-------|
+| `open` | ✅ Yes | `BID_CREATED` | Held in escrow |
+| `rejected_tos` | ❌ No | None | **Forfeited to treasury** |
+
+### Fund Treatment
+
+> [!CAUTION]
+> **TOS Violation = No Refund.** If content fails moderation, funds remain in the treasury as a deterrent against abuse. Agents should ensure content complies with Terms of Service before submitting.
 
 ---
 
@@ -167,3 +201,4 @@ curl -X POST http://localhost:3000/v1/verify \
 **Devnet (Testing):** `2kDpvEhgoLkUbqFJqxMpUXMtr2gVYbfqNF8kGrfoZMAV`
 
 *Referrer revenue share will be distributed manually until the SplitterProgram is deployed.*
+

@@ -44,8 +44,10 @@ async function main() {
     // 2. THE PAYLOAD
     const payload = {
         duration: 30,
-        quantity: 5,
-        bid_per_second: 0.05
+        quantity: 10,
+        bid_per_second: 0.02,
+        validation_question: "What is the main color shown in this image?",
+        content_url: "https://example.com/test-image.png" // Optional
     };
 
     console.log("\n🔒 Attempt 1: Requesting Access (Expect 402)...");

@@ -73,7 +73,7 @@ router.post('/admin/content/:bidId/review', authenticateAdmin, reviewContent);
 
 // === x402 Payment Protocol ===
 // Agent verification with HTTP 402 payment required
-import { x402OrderBook } from '../middleware/x402OrderBook';
+import { x402OrderBook, orderStore } from '../middleware/x402OrderBook';
 
 router.post('/verify', x402OrderBook, (req, res) => {
     // If we reach here, payment was verified
@@ -90,6 +90,30 @@ router.post('/verify', x402OrderBook, (req, res) => {
             tx_hash: order.tx_hash,
             referrer: order.referrer || null
         }
+    });
+});
+
+// Order status polling endpoint
+router.get('/orders/:tx_hash', (req, res) => {
+    const { tx_hash } = req.params;
+
+    const order = orderStore.get(tx_hash);
+
+    if (!order) {
+        return res.status(404).json({
+            error: 'order_not_found',
+            message: 'No order found with this transaction hash'
+        });
+    }
+
+    res.json({
+        status: order.status,
+        created_at: order.created_at,
+        duration: order.duration,
+        quantity: order.quantity,
+        total_escrow: order.total_escrow,
+        referrer: order.referrer,
+        result: order.result
     });
 });
 

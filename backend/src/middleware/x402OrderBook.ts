@@ -1,5 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { Connection, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
+import { redis } from '../utils/redis';
+import { moderationService } from '../services/ContentModerationService';
 
 // Configuration
 const RPC_URL = process.env.SOLANA_RPC_URL || 'https://api.devnet.solana.com';
@@ -9,18 +11,28 @@ const IS_DEVNET = RPC_URL.includes('devnet');
 
 const connection = new Connection(RPC_URL, 'confirmed');
 
+// In-memory order storage (for status polling)
+export const orderStore = new Map<string, OrderRecord>();
+
+export interface OrderRecord {
+    duration: number;
+    quantity: number;
+    bid: number;
+    total_escrow: number;
+    tx_hash: string;
+    referrer: string | null;
+    content_url: string | null;
+    validation_question: string;
+    status: 'open' | 'in_progress' | 'completed' | 'rejected_tos';
+    created_at: number;
+    result: any | null;
+}
+
 // Extend Express Request type
 declare global {
     namespace Express {
         interface Request {
-            order?: {
-                duration: number;
-                quantity: number;
-                bid: number;
-                total_escrow: number;
-                tx_hash: string;
-                referrer: string | null;
-            };
+            order?: OrderRecord;
         }
     }
 }
@@ -28,10 +40,15 @@ declare global {
 export async function x402Middleware(req: Request, res: Response, next: NextFunction) {
     try {
         // 1. EXTRACT ORDER DETAILS
-        const { duration, quantity = 1, bid_per_second } = req.body;
+        const { duration, quantity = 1, bid_per_second, content_url, validation_question } = req.body;
 
         if (!duration || !bid_per_second) {
             return res.status(400).json({ error: "Missing duration or bid_per_second" });
+        }
+
+        // Validation question is REQUIRED
+        if (!validation_question) {
+            return res.status(400).json({ error: "Missing validation_question" });
         }
 
         // Validate duration
@@ -111,16 +128,54 @@ export async function x402Middleware(req: Request, res: Response, next: NextFunc
         }
 
         if (isValidPayment) {
+            // ========================================
+            // CONTENT MODERATION CHECK
+            // ========================================
+            const moderationResult = await moderationService.moderateContentInline(content_url, validation_question);
+            const orderStatus = moderationResult.approved ? 'open' : 'rejected_tos';
+
             // ATTACH DATA TO REQUEST
-            req.order = {
+            const orderRecord: OrderRecord = {
                 duration,
                 quantity,
                 bid: bid_per_second,
                 total_escrow: totalEscrow,
                 tx_hash: txSignature,
-                referrer: referrer // SAVE THIS TO DB
+                referrer: referrer,
+                content_url: content_url || null,
+                validation_question: validation_question,
+                status: orderStatus,
+                created_at: Date.now(),
+                result: null
             };
-            console.log(`[x402] Payment verified: ${totalEscrow} USDC for ${quantity}x ${duration}s`);
+
+            req.order = orderRecord;
+
+            // Save to order store for status polling (regardless of moderation result)
+            orderStore.set(txSignature, orderRecord);
+
+            // ONLY broadcast to WebSocket if moderation passed
+            if (orderStatus === 'open') {
+                if (redis.isOpen) {
+                    await redis.publish('marketplace_events', JSON.stringify({
+                        type: 'BID_CREATED',
+                        payload: {
+                            bidId: txSignature,
+                            price: bid_per_second,
+                            max_price_per_second: bid_per_second * 1_000_000,
+                            duration: duration,
+                            quantity: quantity,
+                            contentUrl: content_url || null,
+                            validationQuestion: validation_question
+                        }
+                    }));
+                    console.log('[x402] Broadcasted BID_CREATED via WebSocket');
+                }
+                console.log(`[x402] Payment verified + Moderation PASSED: ${totalEscrow} USDC for ${quantity}x ${duration}s`);
+            } else {
+                console.log(`[x402] Payment verified + Moderation FAILED: ${totalEscrow} USDC held. Reason: ${moderationResult.reason}`);
+            }
+
             return next();
         } else {
             return res.status(402).json({ error: "invalid_payment" });

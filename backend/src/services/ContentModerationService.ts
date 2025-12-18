@@ -234,6 +234,52 @@ export class ContentModerationService {
         });
         return bid?.contentStatus === ContentStatus.APPROVED;
     }
+
+    /**
+     * Inline moderation for x402 orders (no database storage)
+     * Returns { approved: boolean, reason?: string }
+     */
+    async moderateContentInline(
+        contentUrl: string | null,
+        validationQuestion: string
+    ): Promise<{ approved: boolean; reason?: string }> {
+        // Collect text to moderate
+        const textToModerate: string[] = [validationQuestion];
+
+        if (contentUrl) {
+            // Check URL domain blocklist
+            const blockedDomains = ['nsfw', 'porn', 'xxx', 'adult'];
+            const urlLower = contentUrl.toLowerCase();
+            for (const blocked of blockedDomains) {
+                if (urlLower.includes(blocked)) {
+                    return { approved: false, reason: `blocked_domain: ${blocked}` };
+                }
+            }
+
+            // Fetch text content if not binary
+            const contentText = await this.fetchContentText(contentUrl);
+            if (contentText) textToModerate.push(contentText);
+        }
+
+        // If no OpenAI key, auto-approve (for development)
+        if (!this.openaiApiKey) {
+            console.log('[Moderation] Auto-approved (no API key)');
+            return { approved: true };
+        }
+
+        // Check each piece of text with OpenAI Moderation API
+        for (const text of textToModerate) {
+            const result = await this.moderateText(text);
+            if (result?.flagged) {
+                const flaggedCategories = Object.entries(result.categories)
+                    .filter(([, flagged]) => flagged)
+                    .map(([category]) => category);
+                return { approved: false, reason: flaggedCategories.join(', ') };
+            }
+        }
+
+        return { approved: true };
+    }
 }
 
 // Export singleton

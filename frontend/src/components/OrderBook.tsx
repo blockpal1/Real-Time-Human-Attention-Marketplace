@@ -19,24 +19,60 @@ export const OrderBook: React.FC<OrderBookProps> = ({ filterDuration }) => {
     const [bids, setBids] = useState<Order[]>([]);
     const [asks, setAsks] = useState<Order[]>([]);
     const [lastPrice, setLastPrice] = useState<number>(0);
+    const [fillingOrder, setFillingOrder] = useState<string | null>(null);
+
+    // Handle filling an x402 order
+    const handleFillOrder = async (order: Order) => {
+        // Only allow filling x402 orders (id starts with tx hash)
+        if (order.id.startsWith('agg_')) return; // Skip aggregated rows
+
+        try {
+            setFillingOrder(order.id);
+            await api.fillX402Order(order.id);
+
+            // Remove from local state immediately
+            setBids(prev => prev.filter(b => b.id !== order.id));
+            console.log(`[OrderBook] Filled order: ${order.id.slice(0, 16)}...`);
+        } catch (error: any) {
+            console.error('Failed to fill order:', error.message);
+            alert(`Failed to fill order: ${error.message}`);
+        } finally {
+            setFillingOrder(null);
+        }
+    };
 
     useEffect(() => {
         // Initial Fetch
         const fetchState = async () => {
             try {
-                const [activeBids, activeAsks] = await Promise.all([
+                const [activeBids, activeAsks, x402Data] = await Promise.all([
                     api.getActiveBids(),
-                    api.getActiveAsks()
+                    api.getActiveAsks(),
+                    api.getX402Orders()
                 ]);
 
-                setBids(activeBids.map((b: any) => ({
+                // Legacy bids from database
+                const legacyBids = activeBids.map((b: any) => ({
                     id: b.id,
                     price: b.maxPricePerSecond / 1_000_000,
                     size: b.durationPerUser,
                     quantity: b.targetQuantity,
                     total: (b.maxPricePerSecond / 1_000_000) * b.durationPerUser * b.targetQuantity,
-                    type: 'bid'
-                })));
+                    type: 'bid' as const
+                }));
+
+                // x402 orders from in-memory store
+                const x402Bids = (x402Data.orders || []).map((o: any) => ({
+                    id: o.tx_hash,
+                    price: o.bid_per_second,
+                    size: o.duration,
+                    quantity: o.quantity,
+                    total: o.total_escrow,
+                    type: 'bid' as const
+                }));
+
+                // Merge both sources
+                setBids([...legacyBids, ...x402Bids].sort((a, b) => b.price - a.price));
 
                 setAsks(activeAsks.map((a: any) => ({
                     id: a.id,
@@ -149,12 +185,19 @@ export const OrderBook: React.FC<OrderBookProps> = ({ filterDuration }) => {
     const renderRow = (order: Order, type: 'bid' | 'ask') => {
         const depthPercent = Math.min(100, (order.quantity / 50) * 100); // Visualizing based on quantity depth
         const tvps = order.price * order.quantity;
+        const isFilling = fillingOrder === order.id;
+        const isX402Order = !order.id.startsWith('agg_') && type === 'bid';
 
         const colorClass = type === 'bid' ? 'text-[#0EA5E9]' : 'text-white';
         const bgClass = type === 'bid' ? 'bg-[#0EA5E9]/10' : 'bg-white/10';
 
         return (
-            <div key={order.id} className="relative grid grid-cols-4 px-2 py-1 text-sm font-mono cursor-pointer hover:bg-white/5 transition-colors items-center">
+            <div
+                key={order.id}
+                className={`relative grid grid-cols-4 px-2 py-1 text-sm font-mono cursor-pointer hover:bg-white/5 transition-colors items-center ${isFilling ? 'opacity-50' : ''} ${isX402Order ? 'hover:bg-[#0EA5E9]/20' : ''}`}
+                onClick={() => isX402Order && !isFilling && handleFillOrder(order)}
+                title={isX402Order ? 'Click to fill this order' : ''}
+            >
                 {/* Depth Bar */}
                 <div className={`absolute top-0 bottom-0 right-0 z-0 ${bgClass}`} style={{ width: `${depthPercent}%` }} />
 
