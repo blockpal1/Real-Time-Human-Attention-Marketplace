@@ -81,14 +81,13 @@ router.post('/verify', x402OrderBook, (req, res) => {
 
     res.json({
         success: true,
-        message: `Verification slots reserved: ${order.quantity}x ${order.duration}s @ $${order.bid_per_second}/s`,
+        message: `Verification slots reserved: ${order.quantity}x ${order.duration}s @ $${order.bid}/s`,
         order: {
             duration: order.duration,
             quantity: order.quantity,
-            bid_per_second: order.bid_per_second,
+            bid_per_second: order.bid,
             total_escrow: order.total_escrow,
-            tx_hash: order.txHash,
-            payer: order.payer,
+            tx_hash: order.tx_hash,
             referrer: order.referrer || null
         }
     });
