@@ -16,7 +16,9 @@ export const getAdminStatus = async (req: Request, res: Response) => {
 
         res.json({
             platform_mode: config.mode,
-            fee_rate: config.fee_rate,
+            fee_total: config.fee_total,
+            fee_protocol: config.fee_protocol,
+            fee_builder: config.fee_builder,
             min_version: config.min_version,
             stats: {
                 active_x402_orders: x402OrderCount,
@@ -57,7 +59,7 @@ export const updatePlatformMode = async (req: Request, res: Response) => {
         res.json({
             success: true,
             mode: newConfig.mode,
-            fee_rate: newConfig.fee_rate,
+            fee_total: newConfig.fee_total,
             message: getModeDescription(newConfig.mode)
         });
     } catch (error) {

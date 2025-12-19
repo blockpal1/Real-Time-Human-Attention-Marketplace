@@ -15,7 +15,7 @@ export const getStatus = async (req: Request, res: Response) => {
             status: 'ok',
             platform: {
                 mode: config.mode,
-                fee_rate: config.fee_rate
+                fee_total: config.fee_total
             },
             stats: {
                 active_orders: openOrders.length,

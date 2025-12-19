@@ -99,7 +99,27 @@ class RedisClient {
         return results.map(r => ({ wallet: r.value, points: r.score }));
     }
 
-    // ===== User History =====
+    // ===== Builder & Protocol Revenue =====
+
+    async incrementBuilderBalance(code: string, amount: number): Promise<number> {
+        const result = await this.client.incrByFloat(`builder:${code}:balance`, amount);
+        return Number(result);
+    }
+
+    async getBuilderBalance(code: string): Promise<number> {
+        const balance = await this.client.get(`builder:${code}:balance`);
+        return balance ? parseFloat(balance) : 0;
+    }
+
+    async incrementProtocolRevenue(amount: number): Promise<number> {
+        const result = await this.client.incrByFloat('protocol:revenue', amount);
+        return Number(result);
+    }
+
+    async getProtocolRevenue(): Promise<number> {
+        const revenue = await this.client.get('protocol:revenue');
+        return revenue ? parseFloat(revenue) : 0;
+    }
 
     async addToHistory(wallet: string, matchData: object, maxItems = 50): Promise<void> {
         const key = `user:${wallet}:history`;

@@ -51,12 +51,13 @@ export const OrderBook: React.FC<OrderBookProps> = ({ filterDuration }) => {
                 ]);
 
                 // x402 orders from in-memory store (single source of truth)
+                // Use display_reward (net after fees) instead of bid_per_second (gross)
                 const bids = (x402Data.orders || []).map((o: any) => ({
                     id: o.tx_hash,
-                    price: o.bid_per_second,
+                    price: o.display_reward || o.bid_per_second, // Prefer net price for display
                     size: o.duration,
                     quantity: o.quantity,
-                    total: o.total_escrow,
+                    total: (o.display_reward || o.bid_per_second) * o.duration * o.quantity,
                     type: 'bid' as const
                 }));
 

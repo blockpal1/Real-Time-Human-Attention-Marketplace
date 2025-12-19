@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { redis, redisClient } from '../utils/redis';
+import { configService } from '../services/ConfigService';
 
 export const completeMatch = async (req: Request, res: Response) => {
     const { matchId } = req.params;
@@ -41,28 +42,53 @@ export const completeMatch = async (req: Request, res: Response) => {
                 }
             }
 
-            // 3. Calculate earnings and credit user balance
-            let earnedAmount = 0;
+            // 3. Calculate fee splits and credit balances
+            const fees = await configService.getFees();
+            let workerPay = 0;
+            let builderPay = 0;
+            let protocolPay = 0;
             let userWallet: string | null = null;
+            let referrer: string | null = null;
 
             if (bidId) {
                 const order = await redisClient.getOrder(bidId) as any;
                 if (order) {
-                    // Calculate earnings: bid price (per second) * actual duration
+                    // Calculate gross amount: bid price (per second) * actual duration
                     const duration = actualDuration || order.duration || 30;
-                    earnedAmount = order.bid * duration;
+                    const grossAmount = order.bid * duration;
 
-                    // Get user wallet from session (passed from frontend or stored during match)
-                    // For now, extract from request body or use a placeholder
+                    // Get user wallet and referrer from request body
                     userWallet = req.body.wallet || null;
+                    referrer = order.referrer || null;
 
-                    if (userWallet && earnedAmount > 0) {
-                        // Credit user balance
-                        const newBalance = await redisClient.incrementBalance(userWallet, earnedAmount);
-                        console.log(`[x402] Credited ${earnedAmount.toFixed(4)} USDC to ${userWallet.slice(0, 12)}... (new balance: ${newBalance.toFixed(4)})`);
+                    // Calculate splits
+                    workerPay = grossAmount * fees.workerMultiplier;  // 85%
+                    builderPay = grossAmount * fees.builder;          // 3%
+                    protocolPay = grossAmount * fees.protocol;        // 12%
+
+                    if (userWallet && grossAmount > 0) {
+                        // Atomic Redis operations for fee distribution
+
+                        // 1. Credit worker (human)
+                        const newBalance = await redisClient.incrementBalance(userWallet, workerPay);
+                        console.log(`[x402] Worker: ${workerPay.toFixed(4)} USDC to ${userWallet.slice(0, 12)}... (balance: ${newBalance.toFixed(4)})`);
+
+                        // 2. Credit builder (if referrer exists)
+                        if (referrer) {
+                            await redisClient.incrementBuilderBalance(referrer, builderPay);
+                            console.log(`[x402] Builder: ${builderPay.toFixed(4)} USDC to ${referrer}`);
+                        } else {
+                            // No referrer → builder share goes to protocol
+                            protocolPay += builderPay;
+                            builderPay = 0;
+                        }
+
+                        // 3. Credit protocol
+                        await redisClient.incrementProtocolRevenue(protocolPay);
+                        console.log(`[x402] Protocol: ${protocolPay.toFixed(4)} USDC`);
 
                         // Award points (1 point per 0.01 USDC earned)
-                        const pointsEarned = Math.floor(earnedAmount * 100);
+                        const pointsEarned = Math.floor(workerPay * 100);
                         if (pointsEarned > 0) {
                             await redisClient.incrementPoints(userWallet, pointsEarned);
                         }
@@ -71,18 +97,26 @@ export const completeMatch = async (req: Request, res: Response) => {
                         await redisClient.addToHistory(userWallet, {
                             matchId,
                             bidId,
-                            earnedAmount,
+                            grossAmount,
+                            workerPay,
+                            builderPay,
+                            protocolPay,
+                            referrer,
                             duration,
                             answer: answer || null,
                             completedAt: Date.now()
                         });
 
-                        // Add to match history stream for archiving
+                        // Add to match history stream for archiving (with full split details)
                         await redisClient.addMatchToStream({
                             matchId,
                             bidId,
                             wallet: userWallet,
-                            earnedAmount,
+                            grossAmount,
+                            workerPay,
+                            builderPay,
+                            protocolPay,
+                            referrer: referrer || 'none',
                             duration,
                             answer: answer || null,
                             exitedEarly: exitedEarly || false,
@@ -103,7 +137,9 @@ export const completeMatch = async (req: Request, res: Response) => {
                         actualDuration,
                         exitedEarly,
                         approved: true,
-                        earnedAmount,
+                        workerPay,
+                        builderPay,
+                        protocolPay,
                         timestamp: new Date().toISOString()
                     }
                 }));
@@ -113,7 +149,7 @@ export const completeMatch = async (req: Request, res: Response) => {
                 success: true,
                 matchId,
                 approved: true,
-                earnedAmount: Number(earnedAmount.toFixed(4)),
+                earnedAmount: Number(workerPay.toFixed(4)),
                 engagementScore: 1.0,
                 threshold: 0.7
             });
