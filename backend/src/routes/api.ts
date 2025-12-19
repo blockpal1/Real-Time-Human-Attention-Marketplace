@@ -6,17 +6,10 @@ import { createBid, getActiveBids } from '../controllers/AgentController';
 import { completeMatch, submitValidationResult, dismissMatch } from '../controllers/MatchController';
 import { getUserEarnings, getSessionHistory } from '../controllers/UserEarningsController';
 import { getCampaignResponses, getAgentCampaigns } from '../controllers/AgentCampaignController';
-import { registerAgent, getAgentProfile, getAgentBalance, updateWebhook } from '../controllers/AgentRegistrationController';
-import { authenticateAgent, optionalAuth } from '../middleware/auth';
 import { authenticateAdmin } from '../middleware/adminAuth';
 import {
     getAdminStatus,
     updatePlatformMode,
-    getBuilderCodes,
-    reviewBuilderCode,
-    createBuilderCode,
-    getFlaggedContent,
-    reviewContent,
     getX402FlaggedContent,
     reviewX402Content
 } from '../controllers/AdminController';
@@ -44,18 +37,9 @@ router.delete('/users/session/cancel', cancelSession);
 router.patch('/users/session/update', updateSession);
 router.post('/users/session/accept-highest', acceptHighestBid);
 
-// === Agent API (v1) ===
-
-// Public: Register new agent
-router.post('/agents/register', registerAgent);
-
-// Authenticated: Agent profile & balance
-router.get('/agents/me', authenticateAgent, getAgentProfile);
-router.get('/agents/balance', authenticateAgent, getAgentBalance);
-router.patch('/agents/webhook', authenticateAgent, updateWebhook);
-
-// Create bid - supports both auth (API) and no-auth (UI)
-router.post('/agents/bids', optionalAuth, createBid);
+// === Agent API (x402 - no registration needed) ===
+// Create bid - works via admin panel or direct API
+router.post('/agents/bids', createBid);
 
 // Match Lifecycle Routes
 router.post('/matches/:matchId/complete', completeMatch);
@@ -64,20 +48,10 @@ router.post('/matches/:matchId/validation', submitValidationResult);
 
 // === Admin API ===
 // Protected by X-Admin-Secret header
-
 router.get('/admin/status', authenticateAdmin, getAdminStatus);
 router.post('/admin/mode', authenticateAdmin, updatePlatformMode);
 
-// Builder code management
-router.get('/admin/builder-codes', authenticateAdmin, getBuilderCodes);
-router.post('/admin/builder-codes', authenticateAdmin, createBuilderCode);
-router.post('/admin/builder-codes/:codeId/review', authenticateAdmin, reviewBuilderCode);
-
-// Content moderation (Legacy Prisma bids)
-router.get('/admin/content/flagged', authenticateAdmin, getFlaggedContent);
-router.post('/admin/content/:bidId/review', authenticateAdmin, reviewContent);
-
-// Content moderation (x402 orders)
+// Content moderation (x402 orders only)
 router.get('/admin/content/x402-flagged', authenticateAdmin, getX402FlaggedContent);
 router.post('/admin/content/x402/:tx_hash/review', authenticateAdmin, reviewX402Content);
 
