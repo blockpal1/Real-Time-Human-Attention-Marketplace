@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { api } from '../services/api';
+import { usePrivy, useWallets } from '@privy-io/react-auth';
 
 interface PriceFloorSetterProps {
     duration: number;
@@ -19,16 +20,34 @@ export const PriceFloorSetter: React.FC<PriceFloorSetterProps> = ({
     const [price, setPrice] = useState(0.0001);
     const [loading, setLoading] = useState(false);
 
+    // Privy authentication hooks
+    const { user, authenticated, ready, login } = usePrivy();
+    const { wallets } = useWallets();
+
+    // Find the embedded wallet (created by Privy)
+    const embeddedWallet = wallets.find((wallet) => wallet.walletClientType === 'privy');
+    const userAddress = embeddedWallet?.address || user?.wallet?.address;
+
     const hasActiveSession = !!sessionToken;
-    const pubkey = 'test-user-consistent'; // Mock pubkey for demo
 
     const handlePlaceAsk = async () => {
+        // Wait for auth to be ready
+        if (!ready || !authenticated || !userAddress) {
+            if (!ready) return; // Still loading
+            if (!authenticated) {
+                login();
+                return;
+            }
+            alert('Please connect a Solana wallet to continue');
+            return;
+        }
+
         setLoading(true);
         try {
-            const data = await api.startSession(pubkey, Math.floor(price * 1_000_000));
+            const data = await api.startSession(userAddress, Math.floor(price * 1_000_000));
             if (data.session_token) {
                 setSessionToken(data.session_token);
-                setUserPubkey(pubkey);
+                setUserPubkey(userAddress);
                 if (data.existing) {
                     alert("You already have an active ask!");
                 } else {
@@ -44,9 +63,11 @@ export const PriceFloorSetter: React.FC<PriceFloorSetterProps> = ({
     };
 
     const handleCancelAsk = async () => {
+        if (!userAddress) return;
+
         setLoading(true);
         try {
-            await api.cancelSession(pubkey);
+            await api.cancelSession(userAddress);
             setSessionToken(null);
             setUserPubkey(null);
             alert("Ask Cancelled!");
@@ -67,12 +88,23 @@ export const PriceFloorSetter: React.FC<PriceFloorSetterProps> = ({
     };
 
     const handleAcceptHighest = async () => {
+        // Wait for auth to be ready
+        if (!ready || !authenticated || !userAddress) {
+            if (!ready) return; // Still loading
+            if (!authenticated) {
+                login();
+                return;
+            }
+            alert('Please connect a Solana wallet to continue');
+            return;
+        }
+
         setLoading(true);
         try {
-            const data = await api.acceptHighestBid(pubkey, duration);
+            const data = await api.acceptHighestBid(userAddress, duration);
             if (data.success) {
                 // Set user state so dismiss can properly cancel the session
-                setUserPubkey(pubkey);
+                setUserPubkey(userAddress);
                 setSessionToken(`accept-highest-${Date.now()}`); // Mark as active
                 // Match is found! The WebSocket will trigger the modal via MATCH_FOUND event
                 console.log('Matched with bid:', data.match);

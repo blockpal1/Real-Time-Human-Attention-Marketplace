@@ -99,6 +99,25 @@ class RedisClient {
         return results.map(r => ({ wallet: r.value, points: r.score }));
     }
 
+    /**
+     * Ensure user record exists in Redis (idempotent)
+     * Called on first session to initialize user metadata
+     */
+    async ensureUserExists(wallet: string): Promise<boolean> {
+        const key = `user:${wallet}:info`;
+        // HSETNX only sets if field doesn't exist (atomic)
+        const wasNew = await this.client.hSetNX(key, 'created_at', Date.now().toString());
+        if (wasNew) {
+            // Initialize other fields for new user
+            await this.client.hSet(key, {
+                first_session_at: Date.now().toString(),
+                status: 'active'
+            });
+            console.log(`[Redis] New user initialized: ${wallet.slice(0, 12)}...`);
+        }
+        return wasNew === 1;
+    }
+
     // ===== Builder & Protocol Revenue =====
 
     async incrementBuilderBalance(code: string, amount: number): Promise<number> {

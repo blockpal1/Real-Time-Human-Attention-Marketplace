@@ -38,6 +38,9 @@ export const startSession = async (req: Request, res: Response) => {
             }
         }
 
+        // Ensure user record exists in Redis (for first-time users)
+        await redisClient.ensureUserExists(pubkey);
+
         // Create new session
         const sessionId = uuidv4();
         const sessionData = {
