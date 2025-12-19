@@ -57,9 +57,9 @@ export const completeMatch = async (req: Request, res: Response) => {
                     const duration = actualDuration || order.duration || 30;
                     const grossAmount = order.bid * duration;
 
-                    // Get user wallet and referrer from request body
+                    // Get user wallet and builder_code from order
                     userWallet = req.body.wallet || null;
-                    referrer = order.referrer || null;
+                    const builderCode = order.builder_code || null;
 
                     // Calculate splits
                     workerPay = grossAmount * fees.workerMultiplier;  // 85%
@@ -73,12 +73,12 @@ export const completeMatch = async (req: Request, res: Response) => {
                         const newBalance = await redisClient.incrementBalance(userWallet, workerPay);
                         console.log(`[x402] Worker: ${workerPay.toFixed(4)} USDC to ${userWallet.slice(0, 12)}... (balance: ${newBalance.toFixed(4)})`);
 
-                        // 2. Credit builder (if referrer exists)
-                        if (referrer) {
-                            await redisClient.incrementBuilderBalance(referrer, builderPay);
-                            console.log(`[x402] Builder: ${builderPay.toFixed(4)} USDC to ${referrer}`);
+                        // 2. Credit builder (if builder_code exists on order)
+                        if (builderCode) {
+                            await redisClient.incrementBuilderBalance(builderCode, builderPay);
+                            console.log(`[x402] Builder: ${builderPay.toFixed(4)} USDC to ${builderCode}`);
                         } else {
-                            // No referrer → builder share goes to protocol
+                            // No builder info → builder share goes to protocol
                             protocolPay += builderPay;
                             builderPay = 0;
                         }

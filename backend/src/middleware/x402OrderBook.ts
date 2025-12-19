@@ -22,7 +22,8 @@ export interface OrderRecord {
     gross_bid: number;        // GROSS amount (what agent paid)
     total_escrow: number;
     tx_hash: string;
-    referrer: string | null;
+    referrer: string | null;  // User who referred the campaign (web2 link)
+    builder_code: string | null; // Developer who built the agent (x-builder-code)
     content_url: string | null;
     validation_question: string;
     status: 'open' | 'in_progress' | 'completed' | 'rejected_tos' | 'expired';
@@ -106,6 +107,9 @@ export async function x402Middleware(req: Request, res: Response, next: NextFunc
             const fees = await configService.getFees();
             const netBid = bid_per_second * fees.workerMultiplier;  // 85% of gross
 
+            // Capture Builder Code
+            const builderCodeHeader = req.headers['x-builder-code'];
+            const builderCode = typeof builderCodeHeader === 'string' ? builderCodeHeader : null;
 
             const orderRecord: OrderRecord = {
                 duration,
@@ -115,6 +119,7 @@ export async function x402Middleware(req: Request, res: Response, next: NextFunc
                 total_escrow: totalEscrow,
                 tx_hash,
                 referrer: null,
+                builder_code: builderCode,
                 content_url: content_url || null,
                 validation_question: validation_question,
                 status: 'open',
@@ -298,6 +303,10 @@ export async function x402Middleware(req: Request, res: Response, next: NextFunc
             const fees = await configService.getFees();
             const netBid = bid_per_second * fees.workerMultiplier;  // 85% of gross
 
+            // Capture Builder Code
+            const builderCodeHeader = req.headers['x-builder-code'];
+            const builderCode = typeof builderCodeHeader === 'string' ? builderCodeHeader : null;
+
             // ATTACH DATA TO REQUEST
             const orderRecord: OrderRecord = {
                 duration,
@@ -307,6 +316,7 @@ export async function x402Middleware(req: Request, res: Response, next: NextFunc
                 total_escrow: totalEscrow,
                 tx_hash: txSignature,
                 referrer: referrer,
+                builder_code: builderCode,
                 content_url: content_url || null,
                 validation_question: validation_question,
                 status: orderStatus,

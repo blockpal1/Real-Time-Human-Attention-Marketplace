@@ -12,6 +12,7 @@ export const PlaceBid: React.FC<PlaceBidProps> = ({ duration, setDuration }) => 
     const [targetUsers, setTargetUsers] = useState(100);
     const [question, setQuestion] = useState('');
     const [contentUrl, setContentUrl] = useState('');
+    const [builderCode, setBuilderCode] = useState(''); // New State for Builder Code
     const [loading, setLoading] = useState(false);
 
     // Derived
@@ -37,6 +38,7 @@ export const PlaceBid: React.FC<PlaceBidProps> = ({ duration, setDuration }) => 
                 duration_per_user: duration,
                 target_quantity: targetUsers,
                 validation_question: question,
+                builder_code: builderCode.trim() || undefined // Pass builder code
             });
             console.log("Bid Submitted Successfully");
             alert('Bid Placed Successfully!');
@@ -83,7 +85,7 @@ export const PlaceBid: React.FC<PlaceBidProps> = ({ duration, setDuration }) => 
                 <div className="text-[10px] text-gray-600 mt-1">This question will be shown to humans after viewing your content</div>
             </div>
 
-            {/* 3. Targeting & Budget - Stack Layout (Fixed Overflow) */}
+            {/* 3. Campaign Parameters */}
             <div className="glass-panel p-4 rounded flex flex-col gap-4">
                 <div className="text-secondary text-xs uppercase tracking-wide font-bold border-b border-gray-800 pb-2 mb-2">3. Campaign Parameters</div>
 
@@ -140,6 +142,19 @@ export const PlaceBid: React.FC<PlaceBidProps> = ({ duration, setDuration }) => 
                         </div>
                     </div>
                 </div>
+            </div>
+
+            {/* 4. Builder Attribution */}
+            <div className="glass-panel p-4 rounded">
+                <div className="text-secondary text-xs uppercase tracking-wide mb-2 font-bold">4. Builder Code (Optional)</div>
+                <input
+                    type="text"
+                    placeholder="ENTER_BUILDER_CODE"
+                    value={builderCode}
+                    onChange={(e) => setBuilderCode(e.target.value.toUpperCase())}
+                    className="w-full bg-dark border border-gray-700 rounded p-3 text-sm focus:border-purple-500 transition-colors text-white placeholder-gray-600 font-mono tracking-wider"
+                />
+                <div className="text-[10px] text-gray-600 mt-1">Enter your Agent Builder code to earn 3% kickback</div>
             </div>
 
             {/* 4. Cost Summary & Action - Agent Blue Theme */}

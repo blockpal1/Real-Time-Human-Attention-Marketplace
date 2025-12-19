@@ -3,12 +3,18 @@ const API_URL = 'http://localhost:3000/v1';
 export const api = {
     async submitBid(bid: any) {
         // Route through x402 middleware which applies spread at creation time
+        const headers: any = {
+            'Content-Type': 'application/json',
+            'X-Admin-Key': 'attentium-chicken-parm-delish-thankskara'  // Match backend env ADMIN_SECRET
+        };
+
+        if (bid.builder_code) {
+            headers['X-Builder-Code'] = bid.builder_code;
+        }
+
         const response = await fetch(`${API_URL}/verify`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Admin-Key': 'attentium-chicken-parm-delish-thankskara'  // Match backend env ADMIN_SECRET
-            },
+            headers,
             body: JSON.stringify({
                 duration: bid.duration_per_user,
                 quantity: bid.target_quantity,
