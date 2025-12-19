@@ -1,7 +1,6 @@
 import { prisma } from '../utils/prisma';
 import { redis } from '../utils/redis';
-import { webhookService } from './WebhookService';
-import { orderStore, OrderRecord } from '../middleware/x402OrderBook';
+import { orderStore } from '../middleware/x402OrderBook';
 
 export class MatchingEngine {
     private isRunning = false;
@@ -24,36 +23,24 @@ export class MatchingEngine {
     private async runMatchingCycle() {
         try {
             // ========================================
-            // UNIFIED BID POOL: Prisma + x402 Orders
+            // x402 ORDERS ONLY (Prisma bids removed)
             // ========================================
 
-            // 1. Fetch Prisma bids
-            const prismaBids = await prisma.bid.findMany({
-                where: {
-                    active: true,
-                    expiry: { gt: new Date() },
-                    targetQuantity: { gt: 0 }
-                },
-                orderBy: { maxPricePerSecond: 'desc' },
-                take: 100
-            });
-
-            // 2. Get x402 orders from orderStore
-            const x402Bids: Array<{
-                source: 'x402';
-                tx_hash: string;
+            // 1. Get x402 orders from orderStore
+            interface Bid {
+                id: string;           // tx_hash
                 maxPricePerSecond: number; // In micros for comparison
                 durationPerUser: number;
                 quantity: number;
                 contentUrl: string | null;
                 validationQuestion: string;
-            }> = [];
+            }
 
+            const bids: Bid[] = [];
             orderStore.forEach((order, txHash) => {
                 if (order.status === 'open' && order.quantity > 0) {
-                    x402Bids.push({
-                        source: 'x402',
-                        tx_hash: txHash,
+                    bids.push({
+                        id: txHash,
                         maxPricePerSecond: order.bid * 1_000_000, // Convert USDC to micros
                         durationPerUser: order.duration,
                         quantity: order.quantity,
@@ -63,50 +50,12 @@ export class MatchingEngine {
                 }
             });
 
-            // 3. Create unified bid pool
-            interface UnifiedBid {
-                source: 'prisma' | 'x402';
-                id: string;
-                maxPricePerSecond: number;
-                durationPerUser: number;
-                quantity: number;
-                contentUrl: string | null;
-                validationQuestion: string | null;
-                agentPubkey?: string | null;
-                targetUrl?: string | null;
-            }
-
-            const unifiedBids: UnifiedBid[] = [
-                ...prismaBids.map(b => ({
-                    source: 'prisma' as const,
-                    id: b.id,
-                    maxPricePerSecond: b.maxPricePerSecond,
-                    durationPerUser: b.durationPerUser,
-                    quantity: b.targetQuantity,
-                    contentUrl: b.contentUrl,
-                    validationQuestion: b.validationQuestion,
-                    agentPubkey: b.agentPubkey,
-                    targetUrl: b.targetUrl
-                })),
-                ...x402Bids.map(b => ({
-                    source: 'x402' as const,
-                    id: b.tx_hash,
-                    maxPricePerSecond: b.maxPricePerSecond,
-                    durationPerUser: b.durationPerUser,
-                    quantity: b.quantity,
-                    contentUrl: b.contentUrl,
-                    validationQuestion: b.validationQuestion,
-                    agentPubkey: null,
-                    targetUrl: undefined
-                }))
-            ];
-
             // Sort by price descending (best bids first)
-            unifiedBids.sort((a, b) => b.maxPricePerSecond - a.maxPricePerSecond);
+            bids.sort((a, b) => b.maxPricePerSecond - a.maxPricePerSecond);
 
-            if (unifiedBids.length === 0) return;
+            if (bids.length === 0) return;
 
-            // Fetch active sessions NOT currently in a match
+            // 2. Fetch active sessions NOT currently in a match (sessions still use Prisma)
             const availableSessions = await prisma.session.findMany({
                 where: {
                     active: true,
@@ -123,13 +72,12 @@ export class MatchingEngine {
 
             if (availableSessions.length === 0) return;
 
-            if (unifiedBids.length > 0 && availableSessions.length > 0) {
-                const prismaCount = prismaBids.length;
-                const x402Count = x402Bids.length;
-                console.log(`Matching Cycle: ${prismaCount} Prisma + ${x402Count} x402 Bids, ${availableSessions.length} Sessions`);
+            if (bids.length > 0 && availableSessions.length > 0) {
+                console.log(`Matching Cycle: ${bids.length} x402 Bids, ${availableSessions.length} Sessions`);
             }
 
-            for (const bid of unifiedBids) {
+            // 3. Match bids to sessions
+            for (const bid of bids) {
                 if (bid.quantity <= 0) continue;
 
                 // Find eligible session
@@ -151,118 +99,22 @@ export class MatchingEngine {
                 }
 
                 if (match) {
-                    console.log(`MATCH FOUND! Bid ${bid.maxPricePerSecond} (${bid.source}) >= Ask ${match.priceFloor}`);
-
-                    if (bid.source === 'prisma') {
-                        // Use existing Prisma matching logic
-                        const prismaBid = prismaBids.find(b => b.id === bid.id)!;
-                        await this.executeSoftMatch(prismaBid, match);
-                    } else {
-                        // Use x402 matching logic
-                        await this.executeX402Match(bid.id, match);
-                    }
+                    console.log(`MATCH FOUND! Bid ${bid.maxPricePerSecond} (x402) >= Ask ${match.priceFloor}`);
+                    await this.executeX402Match(bid.id, match);
 
                     // Remove matched session from local pool
                     const index = availableSessions.indexOf(match);
                     if (index > -1) availableSessions.splice(index, 1);
-                } else {
-                    if (availableSessions.length > 0) {
-                        const s = availableSessions[0];
-                        console.log(`No Match: Bid ${bid.maxPricePerSecond} (${bid.source}) vs Session ${s.priceFloor}`);
-                    }
                 }
             }
 
-            // Cleanup Stale Offers
-            await this.cleanupStaleOffers();
+            // Note: Stale cleanup handled by dismissMatch API (10s timeout client-side)
 
         } catch (error) {
             console.error('Matching Cycle Error:', error);
         }
     }
 
-    private async executeSoftMatch(bid: any, session: any) {
-        console.log(`SOFT MATCH: Bid ${bid.id} -> Session ${session.id}`);
-
-        // 1. ATOMIC: Decrement Quantity (Virtual Ledger)
-        const updatedBid = await prisma.bid.update({
-            where: { id: bid.id },
-            data: { targetQuantity: { decrement: 1 } }
-        });
-
-        // 2. Create Match Record
-        const matchRecord = await prisma.match.create({
-            data: {
-                bidId: bid.id,
-                sessionId: session.id,
-                status: 'offered',
-                startTime: new Date()
-            }
-        });
-
-        // 3. Mark session as consumed (prevents re-matching after stale cleanup)
-        await prisma.session.update({
-            where: { id: session.id },
-            data: { active: false }
-        });
-
-        // 3. Publish Granular Events
-        if (redis.isOpen) {
-            // A. Update Order Book (The "100 -> 99" visual)
-            if (updatedBid.targetQuantity > 0) {
-                await redis.publish('marketplace_events', JSON.stringify({
-                    type: 'BID_UPDATED',
-                    payload: {
-                        bidId: bid.id,
-                        remainingQuantity: updatedBid.targetQuantity
-                    }
-                }));
-            } else {
-                await redis.publish('marketplace_events', JSON.stringify({
-                    type: 'BID_FILLED',
-                    payload: { bidId: bid.id }
-                }));
-            }
-
-            // B. Remove Ask (It's taken)
-            await redis.publish('marketplace_events', JSON.stringify({
-                type: 'ASK_MATCHED',
-                payload: { askId: session.id }
-            }));
-
-            // C. Notify Users (Broadcast for Demo Mode)
-            await redis.publish('marketplace_events', JSON.stringify({
-                type: 'MATCH_CREATED', // Triggers MATCH_FOUND in WS
-                sessionId: session.id, // For Targeted
-                matchId: matchRecord.id,
-                bidId: bid.id,
-                price: bid.maxPricePerSecond / 1_000_000,
-                // Payload for Broadcast Feed/Modal
-                payload: {
-                    price: bid.maxPricePerSecond / 1_000_000,
-                    duration: bid.durationPerUser,
-                    quantity: 1,
-                    topic: bid.targetUrl || 'Ad Campaign',
-                    matchId: matchRecord.id,
-                    // Content for Focus Session
-                    contentUrl: bid.contentUrl || null,
-                    validationQuestion: bid.validationQuestion || null
-                }
-            }));
-        }
-
-        // 4. Send webhook to agent
-        if (bid.agentPubkey) {
-            await webhookService.notifyMatchCreated(
-                bid.agentPubkey,
-                matchRecord.id,
-                bid.id,
-                session.id,
-                bid.maxPricePerSecond,
-                bid.durationPerUser
-            );
-        }
-    }
 
     /**
      * Execute x402 order match (orders from orderStore, not Prisma)
@@ -347,48 +199,6 @@ export class MatchingEngine {
         // Mark user as seen for this campaign (uniqueness)
         if (redis.isOpen) {
             await redis.sAdd(`campaign:${txHash}:users`, session.userPubkey);
-        }
-    }
-
-    private async cleanupStaleOffers() {
-        // Reduced to 10s for snappier UX during demo/testing
-        const timeThreshold = new Date(Date.now() - 10 * 1000);
-
-        const expired = await prisma.match.findMany({
-            where: {
-                status: 'offered',
-                startTime: { lt: timeThreshold }
-            },
-            include: { bid: true } // Include bid data for quantity restoration
-        });
-
-        for (const match of expired) {
-            console.log(`Stale offer cleanup: Match ${match.id}`);
-
-            // 1. Mark match as failed
-            await prisma.match.update({
-                where: { id: match.id },
-                data: { status: 'failed' }
-            });
-
-            // 2. Restore bid quantity (bid returns to book)
-            const updatedBid = await prisma.bid.update({
-                where: { id: match.bidId },
-                data: { targetQuantity: { increment: 1 } }
-            });
-
-            // 3. Publish BID_UPDATED to restore bid in order book
-            if (redis.isOpen) {
-                await redis.publish('marketplace_events', JSON.stringify({
-                    type: 'BID_UPDATED',
-                    payload: {
-                        bidId: match.bidId,
-                        remainingQuantity: updatedBid.targetQuantity
-                    }
-                }));
-            }
-
-            // Note: Session is already marked inactive on match creation, so it won't re-match
         }
     }
 }

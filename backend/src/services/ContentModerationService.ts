@@ -1,5 +1,3 @@
-import { prisma } from '../utils/prisma';
-
 // Content moderation status
 export enum ContentStatus {
     PENDING = 'pending',
@@ -26,12 +24,12 @@ interface ModerationResult {
 /**
  * ContentModerationService - Scans content for ToS violations
  * Uses OpenAI Moderation API (free) for text content
+ * 
+ * x402-only: No database storage, inline moderation only
  */
 export class ContentModerationService {
     private static instance: ContentModerationService;
     private openaiApiKey: string | undefined;
-    private processingQueue: string[] = [];
-    private isProcessing = false;
 
     constructor() {
         this.openaiApiKey = process.env.OPENAI_API_KEY;
@@ -48,103 +46,49 @@ export class ContentModerationService {
     }
 
     /**
-     * Queue a bid's content for moderation
+     * Inline moderation for x402 orders (no database storage)
+     * Returns { approved: boolean, reason?: string }
      */
-    async queueForModeration(bidId: string): Promise<void> {
-        this.processingQueue.push(bidId);
-        this.processQueue();
-    }
+    async moderateContentInline(
+        contentUrl: string | null,
+        validationQuestion: string
+    ): Promise<{ approved: boolean; reason?: string }> {
+        // Collect text to moderate
+        const textToModerate: string[] = [validationQuestion];
 
-    /**
-     * Process the moderation queue
-     */
-    private async processQueue(): Promise<void> {
-        if (this.isProcessing || this.processingQueue.length === 0) return;
-        this.isProcessing = true;
-
-        while (this.processingQueue.length > 0) {
-            const bidId = this.processingQueue.shift();
-            if (bidId) {
-                try {
-                    await this.moderateBid(bidId);
-                } catch (error) {
-                    console.error(`[Moderation] Error processing bid ${bidId}:`, error);
+        if (contentUrl) {
+            // Check URL domain blocklist
+            const blockedDomains = ['nsfw', 'porn', 'xxx', 'adult'];
+            const urlLower = contentUrl.toLowerCase();
+            for (const blocked of blockedDomains) {
+                if (urlLower.includes(blocked)) {
+                    return { approved: false, reason: `blocked_domain: ${blocked}` };
                 }
             }
-        }
 
-        this.isProcessing = false;
-    }
-
-    /**
-     * Moderate a specific bid's content
-     */
-    private async moderateBid(bidId: string): Promise<void> {
-        const bid = await prisma.bid.findUnique({
-            where: { id: bidId },
-            select: {
-                id: true,
-                contentUrl: true,
-                targetUrl: true,
-                validationQuestion: true
-            }
-        });
-
-        if (!bid) {
-            console.warn(`[Moderation] Bid ${bidId} not found`);
-            return;
+            // Fetch text content if not binary
+            const contentText = await this.fetchContentText(contentUrl);
+            if (contentText) textToModerate.push(contentText);
         }
 
         // If no OpenAI key, auto-approve (for development)
         if (!this.openaiApiKey) {
-            await this.updateBidStatus(bidId, ContentStatus.APPROVED);
-            console.log(`[Moderation] Auto-approved bid ${bidId} (no API key)`);
-            return;
+            console.log('[Moderation] Auto-approved (no API key)');
+            return { approved: true };
         }
 
-        // Collect text content to moderate
-        const textToModerate: string[] = [];
-
-        if (bid.targetUrl) textToModerate.push(bid.targetUrl);
-        if (bid.validationQuestion) textToModerate.push(bid.validationQuestion);
-
-        // If content URL is text-based, try to fetch and moderate
-        if (bid.contentUrl) {
-            const contentText = await this.fetchContentText(bid.contentUrl);
-            if (contentText) textToModerate.push(contentText);
-        }
-
-        if (textToModerate.length === 0) {
-            // No text to moderate, approve
-            await this.updateBidStatus(bidId, ContentStatus.APPROVED);
-            console.log(`[Moderation] Approved bid ${bidId} (no text content)`);
-            return;
-        }
-
-        // Check each piece of text
-        let isFlagged = false;
-        let flagReason = '';
-
+        // Check each piece of text with OpenAI Moderation API
         for (const text of textToModerate) {
             const result = await this.moderateText(text);
             if (result?.flagged) {
-                isFlagged = true;
-                // Find which category triggered
                 const flaggedCategories = Object.entries(result.categories)
                     .filter(([, flagged]) => flagged)
                     .map(([category]) => category);
-                flagReason = flaggedCategories.join(', ');
-                break;
+                return { approved: false, reason: flaggedCategories.join(', ') };
             }
         }
 
-        if (isFlagged) {
-            await this.updateBidStatus(bidId, ContentStatus.FLAGGED);
-            console.log(`[Moderation] Flagged bid ${bidId}: ${flagReason}`);
-        } else {
-            await this.updateBidStatus(bidId, ContentStatus.APPROVED);
-            console.log(`[Moderation] Approved bid ${bidId}`);
-        }
+        return { approved: true };
     }
 
     /**
@@ -212,73 +156,6 @@ export class ContentModerationService {
         } catch {
             return null; // Network error, skip
         }
-    }
-
-    /**
-     * Update bid content status
-     */
-    private async updateBidStatus(bidId: string, status: ContentStatus): Promise<void> {
-        await prisma.bid.update({
-            where: { id: bidId },
-            data: { contentStatus: status }
-        });
-    }
-
-    /**
-     * Check if a bid's content is approved
-     */
-    async isContentApproved(bidId: string): Promise<boolean> {
-        const bid = await prisma.bid.findUnique({
-            where: { id: bidId },
-            select: { contentStatus: true }
-        });
-        return bid?.contentStatus === ContentStatus.APPROVED;
-    }
-
-    /**
-     * Inline moderation for x402 orders (no database storage)
-     * Returns { approved: boolean, reason?: string }
-     */
-    async moderateContentInline(
-        contentUrl: string | null,
-        validationQuestion: string
-    ): Promise<{ approved: boolean; reason?: string }> {
-        // Collect text to moderate
-        const textToModerate: string[] = [validationQuestion];
-
-        if (contentUrl) {
-            // Check URL domain blocklist
-            const blockedDomains = ['nsfw', 'porn', 'xxx', 'adult'];
-            const urlLower = contentUrl.toLowerCase();
-            for (const blocked of blockedDomains) {
-                if (urlLower.includes(blocked)) {
-                    return { approved: false, reason: `blocked_domain: ${blocked}` };
-                }
-            }
-
-            // Fetch text content if not binary
-            const contentText = await this.fetchContentText(contentUrl);
-            if (contentText) textToModerate.push(contentText);
-        }
-
-        // If no OpenAI key, auto-approve (for development)
-        if (!this.openaiApiKey) {
-            console.log('[Moderation] Auto-approved (no API key)');
-            return { approved: true };
-        }
-
-        // Check each piece of text with OpenAI Moderation API
-        for (const text of textToModerate) {
-            const result = await this.moderateText(text);
-            if (result?.flagged) {
-                const flaggedCategories = Object.entries(result.categories)
-                    .filter(([, flagged]) => flagged)
-                    .map(([category]) => category);
-                return { approved: false, reason: flaggedCategories.join(', ') };
-            }
-        }
-
-        return { approved: true };
     }
 }
 
