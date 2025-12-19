@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { Connection, PublicKey } from '@solana/web3.js';
 import { redisClient } from '../utils/redis';
 import { moderationService } from '../services/ContentModerationService';
+import { configService } from '../services/ConfigService';
 
 // Configuration
 const RPC_URL = process.env.SOLANA_RPC_URL || 'https://api.devnet.solana.com';
@@ -11,13 +12,14 @@ const IS_DEVNET = RPC_URL.includes('devnet');
 
 const connection = new Connection(RPC_URL, 'confirmed');
 
-// Admin Bypass Configuration
-const ADMIN_KEY = process.env.ADMIN_SECRET;
+// Admin Bypass Configuration - fallback to dev key if not set
+const ADMIN_KEY = process.env.ADMIN_SECRET || 'dev-admin-secret';
 
 export interface OrderRecord {
     duration: number;
     quantity: number;
-    bid: number;
+    bid: number;              // NET amount (what human earns, after fees)
+    gross_bid: number;        // GROSS amount (what agent paid)
     total_escrow: number;
     tx_hash: string;
     referrer: string | null;
@@ -79,6 +81,7 @@ export async function x402Middleware(req: Request, res: Response, next: NextFunc
         // ADMIN BYPASS: Skip payment for privileged requests
         // ========================================
         const adminKeyHeader = req.headers['x-admin-key'];
+
         if (ADMIN_KEY && adminKeyHeader === ADMIN_KEY) {
             const { duration, quantity = 1, bid_per_second, content_url, validation_question } = req.body;
 
@@ -99,10 +102,16 @@ export async function x402Middleware(req: Request, res: Response, next: NextFunc
             const tx_hash = `admin_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
             const totalEscrow = duration * quantity * bid_per_second;
 
+            // Apply spread: agent pays gross, human sees net
+            const fees = await configService.getFees();
+            const netBid = bid_per_second * fees.workerMultiplier;  // 85% of gross
+
+
             const orderRecord: OrderRecord = {
                 duration,
                 quantity,
-                bid: bid_per_second,
+                bid: netBid,                    // NET (what human earns)
+                gross_bid: bid_per_second,      // GROSS (what agent paid)
                 total_escrow: totalEscrow,
                 tx_hash,
                 referrer: null,
@@ -120,25 +129,27 @@ export async function x402Middleware(req: Request, res: Response, next: NextFunc
             if (redisClient.isOpen) {
                 await redisClient.setOrder(tx_hash, orderRecord);
 
-                // Emit socket event
+                // Emit socket event (broadcast NET price to frontend)
                 await redisClient.client.publish('marketplace_events', JSON.stringify({
                     type: 'BID_CREATED',
                     payload: {
                         bidId: tx_hash,
-                        price: bid_per_second,
-                        max_price_per_second: bid_per_second * 1_000_000,
+                        price: netBid,                               // NET for display
+                        max_price_per_second: netBid * 1_000_000,    // NET in micros
                         duration,
                         quantity,
                         contentUrl: content_url || null,
                         validationQuestion: validation_question
                     }
                 }));
-                console.log('[x402] Admin bypass: Broadcasted BID_CREATED via WebSocket');
+                console.log(`[x402] Admin bypass: Created order ${tx_hash} for ${quantity}x ${duration}s @ gross $${bid_per_second}/s (net $${netBid.toFixed(4)}/s)`);
+                return next();
             }
+        } // Close Admin Block
 
-            console.log(`[x402] Admin bypass: Created order ${tx_hash} for ${quantity}x ${duration}s @ $${bid_per_second}/s`);
-            return next();
-        }
+        // ========================================
+        // STANDARD FLOW: Payment Required
+        // ========================================
 
         // 1. EXTRACT ORDER DETAILS
         const { duration, quantity = 1, bid_per_second, content_url, validation_question } = req.body;
@@ -283,11 +294,16 @@ export async function x402Middleware(req: Request, res: Response, next: NextFunc
             const moderationResult = await moderationService.moderateContentInline(content_url, validation_question);
             const orderStatus = moderationResult.approved ? 'open' : 'rejected_tos';
 
+            // Apply spread: agent pays gross, human sees net
+            const fees = await configService.getFees();
+            const netBid = bid_per_second * fees.workerMultiplier;  // 85% of gross
+
             // ATTACH DATA TO REQUEST
             const orderRecord: OrderRecord = {
                 duration,
                 quantity,
-                bid: bid_per_second,
+                bid: netBid,                    // NET (what human earns)
+                gross_bid: bid_per_second,      // GROSS (what agent paid)
                 total_escrow: totalEscrow,
                 tx_hash: txSignature,
                 referrer: referrer,
@@ -305,14 +321,14 @@ export async function x402Middleware(req: Request, res: Response, next: NextFunc
             if (redisClient.isOpen) {
                 await redisClient.setOrder(txSignature, orderRecord);
 
-                // ONLY broadcast to WebSocket if moderation passed
+                // ONLY broadcast to WebSocket if moderation passed (broadcast NET price)
                 if (orderStatus === 'open') {
                     await redisClient.client.publish('marketplace_events', JSON.stringify({
                         type: 'BID_CREATED',
                         payload: {
                             bidId: txSignature,
-                            price: bid_per_second,
-                            max_price_per_second: bid_per_second * 1_000_000,
+                            price: netBid,                               // NET for display
+                            max_price_per_second: netBid * 1_000_000,    // NET in micros
                             duration: duration,
                             quantity: quantity,
                             contentUrl: content_url || null,
@@ -320,7 +336,7 @@ export async function x402Middleware(req: Request, res: Response, next: NextFunc
                         }
                     }));
                     console.log('[x402] Broadcasted BID_CREATED via WebSocket');
-                    console.log(`[x402] Payment verified + Moderation PASSED: ${totalEscrow} USDC for ${quantity}x ${duration}s`);
+                    console.log(`[x402] Payment verified + Moderation PASSED: ${totalEscrow} USDC for ${quantity}x ${duration}s @ gross $${bid_per_second}/s (net $${netBid.toFixed(4)}/s)`);
                 } else {
                     console.log(`[x402] Payment verified + Moderation FAILED: ${totalEscrow} USDC held. Reason: ${moderationResult.reason}`);
                 }

@@ -2,13 +2,20 @@ const API_URL = 'http://localhost:3000/v1';
 
 export const api = {
     async submitBid(bid: any) {
-        const response = await fetch(`${API_URL}/agents/bids`, {
+        // Route through x402 middleware which applies spread at creation time
+        const response = await fetch(`${API_URL}/verify`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'X-Admin-Key': 'dev-admin-secret'  // Admin bypass for demo
+                'X-Admin-Key': 'attentium-chicken-parm-delish-thankskara'  // Match backend env ADMIN_SECRET
             },
-            body: JSON.stringify(bid)
+            body: JSON.stringify({
+                duration: bid.duration_per_user,
+                quantity: bid.target_quantity,
+                bid_per_second: bid.max_price_per_second / 1_000_000, // Convert micros to USDC
+                content_url: bid.content_url,
+                validation_question: bid.validation_question
+            })
         });
         if (!response.ok) {
             const errorText = await response.text();

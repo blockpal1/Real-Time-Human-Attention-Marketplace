@@ -71,18 +71,17 @@ router.get('/oracle/quote', async (req, res) => {
 /**
  * GET /v1/orderbook
  * Returns all open orders for the frontend Order Book UI
- * Includes display_reward (net after fees) for humans
+ * bid is already NET (spread applied at order creation)
  */
 router.get('/orderbook', async (req, res) => {
     try {
-        // Get fee config for net calculation
         const fees = await configService.getFees();
 
         const openOrders: Array<{
             tx_hash: string;
             duration: number;
-            bid_per_second: number;      // Gross (what agent pays)
-            display_reward: number;       // Net (what human earns)
+            bid_per_second: number;      // NET (what human earns) - spread already applied
+            gross_bid: number;           // GROSS (what agent paid)
             total_escrow: number;
             quantity: number;
             created_at: number;
@@ -94,14 +93,11 @@ router.get('/orderbook', async (req, res) => {
             for (const txHash of openOrderIds) {
                 const order = await redisClient.getOrder(txHash) as any;
                 if (order && order.status === 'open') {
-                    const grossBid = order.bid;
-                    const netBid = grossBid * fees.workerMultiplier; // Apply spread
-
                     openOrders.push({
                         tx_hash: txHash,
                         duration: order.duration,
-                        bid_per_second: grossBid,
-                        display_reward: Number(netBid.toFixed(6)),
+                        bid_per_second: order.bid,           // Already NET (spread applied at creation)
+                        gross_bid: order.gross_bid || order.bid,  // GROSS (fallback for legacy orders)
                         total_escrow: order.total_escrow,
                         quantity: order.quantity,
                         created_at: order.created_at
@@ -110,8 +106,8 @@ router.get('/orderbook', async (req, res) => {
             }
         }
 
-        // Sort by display_reward (highest first - what humans care about)
-        openOrders.sort((a, b) => b.display_reward - a.display_reward);
+        // Sort by bid (highest first - what humans see)
+        openOrders.sort((a, b) => b.bid_per_second - a.bid_per_second);
 
         res.json({
             count: openOrders.length,
