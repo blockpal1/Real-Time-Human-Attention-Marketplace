@@ -18,6 +18,7 @@ interface BuilderCode {
     balance: number;
     owner_email: string;
     description: string;
+    payout_wallet: string;
     created_at: number;
     status: string;
 }
@@ -46,6 +47,7 @@ export const AdminDashboard: React.FC = () => {
     const [newCode, setNewCode] = useState('');
     const [newEmail, setNewEmail] = useState('');
     const [newDescription, setNewDescription] = useState('');
+    const [newPayoutWallet, setNewPayoutWallet] = useState('');
 
     const headers = {
         'Content-Type': 'application/json',
@@ -111,12 +113,14 @@ export const AdminDashboard: React.FC = () => {
             body: JSON.stringify({
                 code: newCode,
                 owner_email: newEmail,
-                description: newDescription
+                description: newDescription,
+                payout_wallet: newPayoutWallet || undefined
             })
         });
         setNewCode('');
         setNewEmail('');
         setNewDescription('');
+        setNewPayoutWallet('');
         await fetchBuilderCodes();
         await fetchStatus();
         setLoading(false);
@@ -292,13 +296,19 @@ export const AdminDashboard: React.FC = () => {
                             placeholder="Owner Email"
                             value={newEmail}
                             onChange={(e) => setNewEmail(e.target.value)}
-                            style={{ ...inputStyle, flex: 1, minWidth: '180px', marginBottom: 0 }}
+                            style={{ ...inputStyle, flex: 1, minWidth: '140px', marginBottom: 0 }}
+                        />
+                        <input
+                            placeholder="Payout Wallet (Solana)"
+                            value={newPayoutWallet}
+                            onChange={(e) => setNewPayoutWallet(e.target.value)}
+                            style={{ ...inputStyle, flex: 1, minWidth: '160px', marginBottom: 0, fontFamily: 'monospace', fontSize: '11px' }}
                         />
                         <input
                             placeholder="Description"
                             value={newDescription}
                             onChange={(e) => setNewDescription(e.target.value)}
-                            style={{ ...inputStyle, flex: 2, minWidth: '200px', marginBottom: 0 }}
+                            style={{ ...inputStyle, flex: 2, minWidth: '160px', marginBottom: 0 }}
                         />
                         <button
                             onClick={createBuilderCode}
@@ -314,7 +324,7 @@ export const AdminDashboard: React.FC = () => {
                             <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
                                 <th style={{ textAlign: 'left', padding: '12px', color: '#888' }}>Code</th>
                                 <th style={{ textAlign: 'left', padding: '12px', color: '#888' }}>Owner</th>
-                                <th style={{ textAlign: 'left', padding: '12px', color: '#888' }}>Description</th>
+                                <th style={{ textAlign: 'left', padding: '12px', color: '#888' }}>Wallet</th>
                                 <th style={{ textAlign: 'right', padding: '12px', color: '#888' }}>Balance</th>
                                 <th style={{ textAlign: 'left', padding: '12px', color: '#888' }}>Status</th>
                             </tr>
@@ -326,8 +336,8 @@ export const AdminDashboard: React.FC = () => {
                                     <td style={{ padding: '12px', fontSize: '12px' }}>
                                         {bc.owner_email || '-'}
                                     </td>
-                                    <td style={{ padding: '12px', fontSize: '12px', color: '#aaa', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                        {bc.description || '-'}
+                                    <td style={{ padding: '12px', fontSize: '11px', fontFamily: 'monospace', color: bc.payout_wallet === 'pending' ? '#f59e0b' : '#aaa' }}>
+                                        {bc.payout_wallet === 'pending' ? 'pending' : `${bc.payout_wallet.slice(0, 4)}...${bc.payout_wallet.slice(-4)}`}
                                     </td>
                                     <td style={{ padding: '12px', textAlign: 'right', fontFamily: 'monospace', color: bc.balance > 0 ? '#22c55e' : '#666' }}>
                                         ${bc.balance.toFixed(4)}
