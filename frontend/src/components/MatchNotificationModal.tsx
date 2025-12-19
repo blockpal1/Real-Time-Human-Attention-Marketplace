@@ -13,6 +13,7 @@ interface MatchNotificationModalProps {
         contentUrl?: string | null;
         validationQuestion?: string | null;
     };
+    walletPubkey?: string | null; // User wallet for fee distribution
     onAccept: () => void;
     onDismiss: () => void;
 }
@@ -22,7 +23,7 @@ const HANDSHAKE_TIMEOUT = 10;
 const PREP_COUNTDOWN = 3;
 const QUESTION_GRACE_PERIOD = 30; // 30 seconds to answer question
 
-export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ match, onAccept, onDismiss }) => {
+export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ match, walletPubkey, onAccept, onDismiss }) => {
     const [phase, setPhase] = useState<Phase>('matching');
     const [countdown, setCountdown] = useState(HANDSHAKE_TIMEOUT);
     const [prepCountdown, setPrepCountdown] = useState(PREP_COUNTDOWN);
@@ -233,7 +234,8 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
                 answer: answer.trim(),
                 actualDuration,
                 exitedEarly,
-                bidId: match.bidId // Include bidId for x402 orders
+                bidId: match.bidId, // Include bidId for x402 orders
+                wallet: walletPubkey // Include wallet for fee distribution
             });
 
             console.log('Match completed successfully:', result);

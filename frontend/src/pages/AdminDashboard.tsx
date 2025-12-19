@@ -14,24 +14,12 @@ interface PlatformStatus {
 }
 
 interface BuilderCode {
-    id: string;
     code: string;
-    builder_pubkey: string;
-    tier: string;
-    revenue_share_bps: number;
-    total_volume: string;
-    created_at: string;
-    approved_at: string | null;
-}
-
-interface FlaggedBid {
-    bid_id: string;
-    content_url: string | null;
-    target_url: string | null;
-    validation_question: string | null;
-    content_status: string;
-    agent: { pubkey: string; name: string | null; tier: string } | null;
-    created_at: string;
+    balance: number;
+    owner_email: string;
+    description: string;
+    created_at: number;
+    status: string;
 }
 
 interface X402FlaggedOrder {
@@ -50,14 +38,14 @@ export const AdminDashboard: React.FC = () => {
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [status, setStatus] = useState<PlatformStatus | null>(null);
     const [builderCodes, setBuilderCodes] = useState<BuilderCode[]>([]);
-    const [flaggedBids, setFlaggedBids] = useState<FlaggedBid[]>([]);
     const [x402FlaggedOrders, setX402FlaggedOrders] = useState<X402FlaggedOrder[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
     // New builder code form
     const [newCode, setNewCode] = useState('');
-    const [newPubkey, setNewPubkey] = useState('');
+    const [newEmail, setNewEmail] = useState('');
+    const [newDescription, setNewDescription] = useState('');
 
     const headers = {
         'Content-Type': 'application/json',
@@ -79,13 +67,11 @@ export const AdminDashboard: React.FC = () => {
     };
 
     const fetchBuilderCodes = async () => {
-        const res = await fetch(`${API_URL}/admin/builder-codes`, { headers });
-        if (res.ok) setBuilderCodes(await res.json());
-    };
-
-    const fetchFlaggedContent = async () => {
-        const res = await fetch(`${API_URL}/admin/content/flagged`, { headers });
-        if (res.ok) setFlaggedBids(await res.json());
+        const res = await fetch(`${API_URL}/admin/builders`, { headers });
+        if (res.ok) {
+            const data = await res.json();
+            setBuilderCodes(data.builders || []);
+        }
     };
 
     const fetchX402FlaggedContent = async () => {
@@ -100,7 +86,7 @@ export const AdminDashboard: React.FC = () => {
         setLoading(true);
         await fetchStatus();
         if (isAuthenticated) {
-            await Promise.all([fetchBuilderCodes(), fetchFlaggedContent(), fetchX402FlaggedContent()]);
+            await Promise.all([fetchBuilderCodes(), fetchX402FlaggedContent()]);
         }
         setLoading(false);
     };
@@ -117,44 +103,33 @@ export const AdminDashboard: React.FC = () => {
     };
 
     const createBuilderCode = async () => {
-        if (!newCode || !newPubkey) return;
+        if (!newCode) return;
         setLoading(true);
-        await fetch(`${API_URL}/admin/builder-codes`, {
+        await fetch(`${API_URL}/admin/builders/create`, {
             method: 'POST',
             headers,
             body: JSON.stringify({
                 code: newCode,
-                builder_pubkey: newPubkey,
-                tier: 'genesis'
+                owner_email: newEmail,
+                description: newDescription
             })
         });
         setNewCode('');
-        setNewPubkey('');
+        setNewEmail('');
+        setNewDescription('');
         await fetchBuilderCodes();
         await fetchStatus();
         setLoading(false);
     };
 
-    const reviewBuilderCode = async (codeId: string, action: 'approve' | 'reject') => {
+    const reviewX402Content = async (txHash: string, action: 'approve' | 'reject') => {
         setLoading(true);
-        await fetch(`${API_URL}/admin/builder-codes/${codeId}/review`, {
+        await fetch(`${API_URL}/admin/content/x402/${txHash}/review`, {
             method: 'POST',
             headers,
             body: JSON.stringify({ action })
         });
-        await fetchBuilderCodes();
-        await fetchStatus();
-        setLoading(false);
-    };
-
-    const reviewContent = async (bidId: string, action: 'approve' | 'reject') => {
-        setLoading(true);
-        await fetch(`${API_URL}/admin/content/${bidId}/review`, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify({ action })
-        });
-        await fetchFlaggedContent();
+        await fetchX402FlaggedContent();
         await fetchStatus();
         setLoading(false);
     };
@@ -162,7 +137,6 @@ export const AdminDashboard: React.FC = () => {
     useEffect(() => {
         if (isAuthenticated) {
             fetchBuilderCodes();
-            fetchFlaggedContent();
             fetchX402FlaggedContent();
         }
     }, [isAuthenticated]);
@@ -307,22 +281,28 @@ export const AdminDashboard: React.FC = () => {
                 <div style={cardStyle}>
                     <h2 style={{ marginBottom: '20px', fontSize: '20px' }}>🔑 Genesis Builder Codes</h2>
 
-                    <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
+                    <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap' }}>
                         <input
-                            placeholder="Code (e.g., langchain)"
+                            placeholder="Code (e.g., LANGCHAIN)"
                             value={newCode}
-                            onChange={(e) => setNewCode(e.target.value)}
-                            style={{ ...inputStyle, flex: 1, marginBottom: 0 }}
+                            onChange={(e) => setNewCode(e.target.value.toUpperCase())}
+                            style={{ ...inputStyle, flex: 1, minWidth: '120px', marginBottom: 0 }}
                         />
                         <input
-                            placeholder="Builder Wallet Pubkey"
-                            value={newPubkey}
-                            onChange={(e) => setNewPubkey(e.target.value)}
-                            style={{ ...inputStyle, flex: 2, marginBottom: 0 }}
+                            placeholder="Owner Email"
+                            value={newEmail}
+                            onChange={(e) => setNewEmail(e.target.value)}
+                            style={{ ...inputStyle, flex: 1, minWidth: '180px', marginBottom: 0 }}
+                        />
+                        <input
+                            placeholder="Description"
+                            value={newDescription}
+                            onChange={(e) => setNewDescription(e.target.value)}
+                            style={{ ...inputStyle, flex: 2, minWidth: '200px', marginBottom: 0 }}
                         />
                         <button
                             onClick={createBuilderCode}
-                            disabled={loading || !newCode || !newPubkey}
+                            disabled={loading || !newCode}
                             style={buttonStyle(true)}
                         >
                             Create
@@ -333,48 +313,34 @@ export const AdminDashboard: React.FC = () => {
                         <thead>
                             <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
                                 <th style={{ textAlign: 'left', padding: '12px', color: '#888' }}>Code</th>
-                                <th style={{ textAlign: 'left', padding: '12px', color: '#888' }}>Builder</th>
-                                <th style={{ textAlign: 'left', padding: '12px', color: '#888' }}>Tier</th>
-                                <th style={{ textAlign: 'left', padding: '12px', color: '#888' }}>Share</th>
-                                <th style={{ textAlign: 'left', padding: '12px', color: '#888' }}>Actions</th>
+                                <th style={{ textAlign: 'left', padding: '12px', color: '#888' }}>Owner</th>
+                                <th style={{ textAlign: 'left', padding: '12px', color: '#888' }}>Description</th>
+                                <th style={{ textAlign: 'right', padding: '12px', color: '#888' }}>Balance</th>
+                                <th style={{ textAlign: 'left', padding: '12px', color: '#888' }}>Status</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {builderCodes.map((code) => (
-                                <tr key={code.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                                    <td style={{ padding: '12px', fontWeight: 600 }}>{code.code}</td>
-                                    <td style={{ padding: '12px', fontFamily: 'monospace', fontSize: '12px' }}>
-                                        {code.builder_pubkey.slice(0, 12)}...
+                            {builderCodes.map((bc) => (
+                                <tr key={bc.code} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                    <td style={{ padding: '12px', fontWeight: 600, fontFamily: 'monospace' }}>{bc.code}</td>
+                                    <td style={{ padding: '12px', fontSize: '12px' }}>
+                                        {bc.owner_email || '-'}
+                                    </td>
+                                    <td style={{ padding: '12px', fontSize: '12px', color: '#aaa', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                        {bc.description || '-'}
+                                    </td>
+                                    <td style={{ padding: '12px', textAlign: 'right', fontFamily: 'monospace', color: bc.balance > 0 ? '#22c55e' : '#666' }}>
+                                        ${bc.balance.toFixed(4)}
                                     </td>
                                     <td style={{ padding: '12px' }}>
                                         <span style={{
                                             padding: '4px 8px',
                                             borderRadius: '4px',
                                             fontSize: '12px',
-                                            background: code.tier === 'genesis' ? '#6366f1' :
-                                                code.tier === 'pending' ? '#f59e0b' : '#22c55e'
+                                            background: bc.status === 'active' ? '#22c55e' : '#f59e0b'
                                         }}>
-                                            {code.tier}
+                                            {bc.status}
                                         </span>
-                                    </td>
-                                    <td style={{ padding: '12px' }}>{code.revenue_share_bps / 100}%</td>
-                                    <td style={{ padding: '12px' }}>
-                                        {code.tier === 'pending' && (
-                                            <>
-                                                <button
-                                                    onClick={() => reviewBuilderCode(code.id, 'approve')}
-                                                    style={{ ...buttonStyle(true), padding: '6px 12px', fontSize: '12px' }}
-                                                >
-                                                    Approve
-                                                </button>
-                                                <button
-                                                    onClick={() => reviewBuilderCode(code.id, 'reject')}
-                                                    style={{ ...buttonStyle(), padding: '6px 12px', fontSize: '12px', background: '#ef4444' }}
-                                                >
-                                                    Reject
-                                                </button>
-                                            </>
-                                        )}
                                     </td>
                                 </tr>
                             ))}
@@ -387,67 +353,6 @@ export const AdminDashboard: React.FC = () => {
                             )}
                         </tbody>
                     </table>
-                </div>
-
-                {/* Flagged Content */}
-                <div style={cardStyle}>
-                    <h2 style={{ marginBottom: '20px', fontSize: '20px' }}>🚨 Flagged Content</h2>
-
-                    {flaggedBids.length === 0 ? (
-                        <p style={{ color: '#666', textAlign: 'center', padding: '24px' }}>
-                            ✅ No flagged content to review
-                        </p>
-                    ) : (
-                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                            <thead>
-                                <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-                                    <th style={{ textAlign: 'left', padding: '12px', color: '#888' }}>Bid ID</th>
-                                    <th style={{ textAlign: 'left', padding: '12px', color: '#888' }}>Content</th>
-                                    <th style={{ textAlign: 'left', padding: '12px', color: '#888' }}>Agent</th>
-                                    <th style={{ textAlign: 'left', padding: '12px', color: '#888' }}>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {flaggedBids.map((bid) => (
-                                    <tr key={bid.bid_id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                                        <td style={{ padding: '12px', fontFamily: 'monospace', fontSize: '12px' }}>
-                                            {bid.bid_id.slice(0, 8)}...
-                                        </td>
-                                        <td style={{ padding: '12px', maxWidth: '400px' }}>
-                                            {bid.content_url && (
-                                                <a href={bid.content_url} target="_blank" rel="noreferrer"
-                                                    style={{ color: '#6366f1' }}>
-                                                    {bid.content_url.slice(0, 50)}...
-                                                </a>
-                                            )}
-                                            {bid.validation_question && (
-                                                <p style={{ fontSize: '12px', color: '#888', margin: '4px 0' }}>
-                                                    Q: {bid.validation_question}
-                                                </p>
-                                            )}
-                                        </td>
-                                        <td style={{ padding: '12px' }}>
-                                            {bid.agent?.name || bid.agent?.pubkey.slice(0, 12) || 'Unknown'}
-                                        </td>
-                                        <td style={{ padding: '12px' }}>
-                                            <button
-                                                onClick={() => reviewContent(bid.bid_id, 'approve')}
-                                                style={{ ...buttonStyle(true), padding: '6px 12px', fontSize: '12px' }}
-                                            >
-                                                Approve
-                                            </button>
-                                            <button
-                                                onClick={() => reviewContent(bid.bid_id, 'reject')}
-                                                style={{ ...buttonStyle(), padding: '6px 12px', fontSize: '12px', background: '#ef4444' }}
-                                            >
-                                                Reject
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    )}
                 </div>
 
                 {/* x402 Flagged Content */}
@@ -466,6 +371,7 @@ export const AdminDashboard: React.FC = () => {
                                     <th style={{ textAlign: 'left', padding: '12px', color: '#888' }}>Content</th>
                                     <th style={{ textAlign: 'left', padding: '12px', color: '#888' }}>Bid</th>
                                     <th style={{ textAlign: 'left', padding: '12px', color: '#888' }}>Status</th>
+                                    <th style={{ textAlign: 'left', padding: '12px', color: '#888' }}>Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -474,11 +380,11 @@ export const AdminDashboard: React.FC = () => {
                                         <td style={{ padding: '12px', fontFamily: 'monospace', fontSize: '12px' }}>
                                             {order.tx_hash.slice(0, 16)}...
                                         </td>
-                                        <td style={{ padding: '12px', maxWidth: '400px' }}>
+                                        <td style={{ padding: '12px', maxWidth: '300px' }}>
                                             {order.content_url && (
                                                 <a href={order.content_url} target="_blank" rel="noreferrer"
                                                     style={{ color: '#6366f1' }}>
-                                                    {order.content_url.slice(0, 50)}...
+                                                    {order.content_url.slice(0, 40)}...
                                                 </a>
                                             )}
                                             {order.validation_question && (
@@ -499,6 +405,15 @@ export const AdminDashboard: React.FC = () => {
                                             }}>
                                                 {order.status}
                                             </span>
+                                        </td>
+                                        <td style={{ padding: '12px' }}>
+                                            <button
+                                                onClick={() => reviewX402Content(order.tx_hash, 'approve')}
+                                                disabled={loading}
+                                                style={{ ...buttonStyle(true), padding: '6px 12px', fontSize: '12px', marginRight: '4px' }}
+                                            >
+                                                Approve
+                                            </button>
                                         </td>
                                     </tr>
                                 ))}

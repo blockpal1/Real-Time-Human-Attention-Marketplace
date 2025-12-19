@@ -52,7 +52,7 @@ export const api = {
         return response.json();
     },
 
-    async completeMatch(matchId: string, data: { answer: string; actualDuration: number; exitedEarly: boolean; bidId?: string }) {
+    async completeMatch(matchId: string, data: { answer: string; actualDuration: number; exitedEarly: boolean; bidId?: string; wallet?: string | null }) {
         const response = await fetch(`${API_URL}/matches/${matchId}/complete`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

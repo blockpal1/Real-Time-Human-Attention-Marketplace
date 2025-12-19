@@ -9,7 +9,9 @@ import {
     getAdminStatus,
     updatePlatformMode,
     getX402FlaggedContent,
-    reviewX402Content
+    reviewX402Content,
+    createBuilderCode,
+    listBuilderCodes
 } from '../controllers/AdminController';
 
 const router = Router();
@@ -44,6 +46,10 @@ router.post('/admin/mode', authenticateAdmin, updatePlatformMode);
 // Content moderation (x402 orders only)
 router.get('/admin/content/x402-flagged', authenticateAdmin, getX402FlaggedContent);
 router.post('/admin/content/x402/:tx_hash/review', authenticateAdmin, reviewX402Content);
+
+// Genesis Builder Codes
+router.get('/admin/builders', authenticateAdmin, listBuilderCodes);
+router.post('/admin/builders/create', authenticateAdmin, createBuilderCode);
 
 // === x402 Payment Protocol ===
 // Agent verification with HTTP 402 payment required

@@ -150,6 +150,7 @@ function App() {
                     {match && (
                         <MatchNotificationModal
                             match={match}
+                            walletPubkey={userPubkey}
                             onAccept={handleAcceptMatch}
                             onDismiss={handleDismissMatch}
                         />

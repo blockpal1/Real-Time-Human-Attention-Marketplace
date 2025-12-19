@@ -41,17 +41,28 @@ router.get('/oracle/quote', async (req, res) => {
 
         let grossBidCents: number;
 
+        const fees = await configService.getFees();
+
         if (bids.length === 0) {
             // Empty market: use floor price (0.01 USDC/second = 1 cent)
             grossBidCents = 1;
         } else {
-            // Calculate 75th percentile (clearing price)
-            bids.sort((a, b) => a - b);
-            const p75Index = Math.floor(bids.length * 0.75);
-            const clearingPrice = bids[p75Index] || bids[bids.length - 1];
+            // NEW ORACLE LOGIC:
+            // 1. Find Highest Net Bid
+            // 2. Add $0.01 (to beat it)
+            // 3. Gross it up (Reverse the spread)
+
+            const maxNetBid = Math.max(...bids);
+            const targetNetBid = maxNetBid + 0.01;
+
+            // net = gross * multiplier  =>  gross = net / multiplier
+            const recommendedGross = targetNetBid / fees.workerMultiplier;
 
             // Convert to cents (integer)
-            grossBidCents = Math.round(clearingPrice * 100);
+            grossBidCents = Math.round(recommendedGross * 100);
+
+            // Safety: Ensure it's at least 1 cent
+            grossBidCents = Math.max(1, grossBidCents);
         }
 
         res.json({

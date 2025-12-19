@@ -53,9 +53,9 @@ export const completeMatch = async (req: Request, res: Response) => {
             if (bidId) {
                 const order = await redisClient.getOrder(bidId) as any;
                 if (order) {
-                    // Calculate gross amount: bid price (per second) * actual duration
+                    // Calculate gross amount: GROSS bid price (per second) * actual duration
                     const duration = actualDuration || order.duration || 30;
-                    const grossAmount = order.bid * duration;
+                    const grossAmount = (order.gross_bid || order.bid) * duration;  // Use GROSS, fallback for legacy
 
                     // Get user wallet and builder_code from order
                     userWallet = req.body.wallet || null;

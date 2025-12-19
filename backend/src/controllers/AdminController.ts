@@ -174,3 +174,104 @@ function getModeDescription(mode: string): string {
             return '';
     }
 }
+
+/**
+ * Create a new Genesis Builder Code
+ * POST /v1/admin/builders/create
+ */
+export const createBuilderCode = async (req: Request, res: Response) => {
+    try {
+        let { code, owner_email, description, payout_wallet } = req.body;
+
+        // Generate random code if not provided
+        if (!code) {
+            const randomPart = Math.random().toString(36).substring(2, 8).toUpperCase();
+            code = `GEN-${randomPart}`;
+        }
+
+        // Normalize code to uppercase
+        code = code.toUpperCase().trim();
+
+        // Uniqueness check
+        const exists = await redisClient.client.sIsMember('builders:registry', code);
+        if (exists) {
+            return res.status(400).json({
+                error: 'code_exists',
+                message: `Builder code "${code}" already exists`
+            });
+        }
+
+        // Save to registry set
+        await redisClient.client.sAdd('builders:registry', code);
+
+        // Save metadata
+        await redisClient.client.hSet(`builder:${code}:info`, {
+            owner_email: owner_email || '',
+            description: description || '',
+            payout_wallet: payout_wallet || 'pending',
+            created_at: Date.now().toString(),
+            status: 'active'
+        });
+
+        console.log(`[Admin] Created builder code: ${code}`);
+
+        res.json({
+            success: true,
+            code,
+            message: `Builder code "${code}" created successfully`
+        });
+    } catch (error) {
+        console.error('Create builder code error:', error);
+        res.status(500).json({ error: 'Failed to create builder code' });
+    }
+};
+
+/**
+ * List all builder codes with balances
+ * GET /v1/admin/builders
+ */
+export const listBuilderCodes = async (req: Request, res: Response) => {
+    try {
+        // Get all registered codes
+        const codes = await redisClient.client.sMembers('builders:registry');
+
+        const builders: Array<{
+            code: string;
+            balance: number;
+            owner_email: string;
+            description: string;
+            payout_wallet: string;
+            created_at: number;
+            status: string;
+        }> = [];
+
+        // Pipeline fetch for each code
+        for (const code of codes) {
+            const [info, balanceStr] = await Promise.all([
+                redisClient.client.hGetAll(`builder:${code}:info`),
+                redisClient.client.get(`builder:${code}:balance`)
+            ]);
+
+            builders.push({
+                code,
+                balance: parseFloat(balanceStr || '0'),
+                owner_email: info.owner_email || '',
+                description: info.description || '',
+                payout_wallet: info.payout_wallet || 'pending',
+                created_at: parseInt(info.created_at || '0'),
+                status: info.status || 'unknown'
+            });
+        }
+
+        // Sort by balance descending
+        builders.sort((a, b) => b.balance - a.balance);
+
+        res.json({
+            count: builders.length,
+            builders
+        });
+    } catch (error) {
+        console.error('List builder codes error:', error);
+        res.status(500).json({ error: 'Failed to list builder codes' });
+    }
+};

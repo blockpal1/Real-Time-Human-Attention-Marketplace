@@ -1,9 +1,31 @@
 # Attentium x402 Protocol Specification
 
+## Architecture Overview
+
+Attentium uses a **hybrid x402 architecture**:
+1.  **Payment (L1):** USDC settlement on Solana via the x402 (Payment Required) standard.
+2.  **Matching (L2):** High-frequency, atomic order book running on Redis.
+3.  **Settlement:** Real-time balance updates and attribution upon match completion.
+
 ## Authentication
 
 Attentium is a **permissionless protocol**. We do not use API Keys.
-Access is purchased atomically via the **x402 (Payment Required)** standard.
+Access is purchased atomically via **USDC**.
+
+---
+
+## Financial Model (The Spread)
+
+The protocol applies a **15% Take Rate** at the moment of order creation.
+
+| Stakeholder | Share | Description |
+|-------------|-------|-------------|
+| **Human Worker** | **85%** | Net earnings for providing attention. |
+| **Protocol** | **12%** | Network maintenance and treasury. |
+| **Agent Developer** | **3%** | Kickback to the developer of the bidding Agent. |
+
+**Pricing Oracle:**
+The "Market Clearing Price" is calculated dynamically as the **Highest Net Bid + $0.01**, grossed up to account for the spread. This ensures a new bid is always competitive.
 
 ---
 
@@ -18,7 +40,7 @@ Request verification of an asset (image/text/video) by human attention.
 {
   "duration": 30,                    // Duration in seconds (10, 30, 60)
   "quantity": 5,                     // Number of human verifiers
-  "bid_per_second": 0.05,            // Offer in USDC
+  "bid_per_second": 0.05,            // GROSS Offer in USDC (Agent Pays)
   "validation_question": "What color is shown?",  // REQUIRED
   "content_url": "https://example.com/image.png"  // Optional
 }
@@ -32,8 +54,7 @@ Request verification of an asset (image/text/video) by human attention.
   "invoice": {
     "amount": 7.5,
     "destination": "2kDpvEhgoLkUbqFJqxMpUXMtr2gVYbfqNF8kGrfoZMAV",
-    "token": "USDC",
-    "referrer": null
+    "token": "USDC"
   }
 }
 ```
@@ -42,14 +63,15 @@ Request verification of an asset (image/text/video) by human attention.
 ```json
 {
   "success": true,
-  "message": "Verification slots reserved: 5x 30s @ $0.05/s",
+  "message": "Verification slots reserved: 5x 30s @ $0.0425/s (Net)",
   "order": {
     "duration": 30,
     "quantity": 5,
-    "bid_per_second": 0.05,
+    "bid_per_second": 0.0425,        // NET Amount (85% of Gross)
+    "gross_bid": 0.05,               // GROSS Amount
     "total_escrow": 7.5,
     "tx_hash": "5abc...",
-    "referrer": null
+    "builder_code": "MY_AGENT_V1"
   }
 }
 ```
@@ -62,51 +84,37 @@ Request verification of an asset (image/text/video) by human attention.
 |--------|----------|-------------|
 | `Content-Type` | Yes | `application/json` |
 | `X-Solana-Tx-Signature` | For 200 | Confirmed Solana transaction signature |
-| `X-Referrer-Agent` | No | Builder wallet for 20% revenue share |
+| `X-Builder-Code` | No | **Agent Developer Code** for 3% revenue share |
+
+---
+
+## Builder Attribution (Agent Devs)
+
+Agent developers can earn a **3% kickback** on every bid placed by their agents by including the `X-Builder-Code` header.
+
+```bash
+curl -X POST http://api.attentium.io/v1/verify \
+  -H "Content-Type: application/json" \
+  -H "X-Builder-Code: MY_AGENT_NVDA_BOT" \
+  -d '{"duration": 30, "quantity": 1, "bid_per_second": 0.05, "validation_question": "Verify chart"}'
+```
+
+*Note: If no code is provided, the 3% share reverts to the Protocol Treasury.*
 
 ---
 
 ## Escrow Formula
 
 ```
-total_escrow = duration × quantity × bid_per_second
+total_escrow = duration × quantity × bid_per_second (GROSS)
 ```
 
 **Example:**
 - Duration: 30 seconds
 - Quantity: 5 verifiers
-- Bid: $0.05/second
-- **Total: 30 × 5 × 0.05 = $7.50 USDC**
-
----
-
-## Payment Flow
-
-```
-1. Agent → POST /v1/verify (no signature)
-   ← 402 + Invoice
-
-2. Agent → Send USDC to destination
-   ← Tx confirmed on Solana
-
-3. Agent → POST /v1/verify + X-Solana-Tx-Signature
-   ← 200 + Order details
-```
-
----
-
-## Yield Header (Builder Revenue Share)
-
-Agents can attribute payments to a builder/referrer using the `X-Referrer-Agent` header.
-
-```bash
-curl -X POST http://api.attentium.io/v1/verify \
-  -H "Content-Type: application/json" \
-  -H "X-Referrer-Agent: BUILDER_WALLET_ADDRESS" \
-  -d '{"duration": 30, "quantity": 1, "bid_per_second": 0.05}'
-```
-
-The referrer is echoed in both the 402 invoice and the 200 response for tracking.
+- Bid: $0.05/second (Gross)
+- **Total Escrow: 30 × 5 × 0.05 = $7.50 USDC**
+- **Human Earns:** $0.0425/s (Net)
 
 ---
 
@@ -127,29 +135,11 @@ The referrer is echoed in both the 402 invoice and the 200 response for tracking
 
 All content is moderated **after payment verification** and **before appearing on the order book**.
 
-### Moderation Flow
-
-```
-Payment Verified → Moderation Check → Approved (order book) or Rejected (silent)
-```
-
-### Moderation Checks
-
-1. **URL Blocklist:** Domains containing `nsfw`, `porn`, `xxx`, `adult` are rejected
-2. **Text Moderation:** OpenAI Moderation API scans `validation_question` and `content_url` content
-3. **Fallback:** If no API key is configured, content is auto-approved (dev mode only)
-
-### Order Status Outcomes
-
-| Status | Appears on Order Book | WebSocket Event | Funds |
-|--------|----------------------|-----------------|-------|
-| `open` | ✅ Yes | `BID_CREATED` | Held in escrow |
-| `rejected_tos` | ❌ No | None | **Forfeited to treasury** |
-
-### Fund Treatment
-
-> [!CAUTION]
-> **TOS Violation = No Refund.** If content fails moderation, funds remain in the treasury as a deterrent against abuse. Agents should ensure content complies with Terms of Service before submitting.
+1. **URL Blocklist:** Domains containing `nsfw`, `porn`, `xxx`, `adult` are rejected.
+2. **Text Moderation:** OpenAI Moderation API scans `validation_question` and `content_url`.
+3. **Outcome:**
+    *   `open`: Appears on order book. Funds held in escrow.
+    *   `rejected_tos`: **Funds Forfeited**. Does not appear on order book.
 
 ---
 
@@ -169,36 +159,6 @@ Payment Verified → Moderation Check → Approved (order book) or Rejected (sil
 | 400 | `missing_fields` | Missing duration or bid_per_second |
 | 400 | `transaction_not_found` | TX not confirmed yet |
 | 402 | `payment_required` | No payment header, returns invoice |
-| 402 | `invalid_payment` | TX validation failed |
+| 402 | `invalid_payment` | TX validation failed (Wrong Amount/Token) |
 | 403 | `expired_transaction` | TX older than 2 minutes |
 | 500 | `server_error` | Internal error |
-
----
-
-## Example: Full Flow (curl)
-
-```bash
-# 1. Get Invoice
-curl -X POST http://localhost:3000/v1/verify \
-  -H "Content-Type: application/json" \
-  -d '{"duration": 30, "quantity": 1, "bid_per_second": 0.05}'
-
-# 2. Pay (via Solana wallet/CLI)
-# Send 1.5 USDC to destination from invoice
-
-# 3. Submit Proof
-curl -X POST http://localhost:3000/v1/verify \
-  -H "Content-Type: application/json" \
-  -H "X-Solana-Tx-Signature: YOUR_TX_SIGNATURE" \
-  -d '{"duration": 30, "quantity": 1, "bid_per_second": 0.05}'
-```
-
----
-
-## Treasury
-
-**Mainnet (Production):** `[PENDING_GENESIS_VAULT_ADDRESS]`
-**Devnet (Testing):** `2kDpvEhgoLkUbqFJqxMpUXMtr2gVYbfqNF8kGrfoZMAV`
-
-*Referrer revenue share will be distributed manually until the SplitterProgram is deployed.*
-
