@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
-import { prisma } from '../utils/prisma';
-import { orderStore } from '../middleware/x402OrderBook';
+import { redisClient } from '../utils/redis';
+import { configService } from '../services/ConfigService';
 
 /**
  * Get platform status and configuration
@@ -8,25 +8,20 @@ import { orderStore } from '../middleware/x402OrderBook';
  */
 export const getAdminStatus = async (req: Request, res: Response) => {
     try {
-        const config = await prisma.platformConfig.findUnique({
-            where: { id: 'singleton' }
-        });
+        const config = await configService.getConfig();
 
-        // Count x402 orders
-        let x402OrderCount = 0;
-        let x402FlaggedCount = 0;
-        orderStore.forEach((order) => {
-            if (order.status === 'open') x402OrderCount++;
-            if (order.status === 'rejected_tos') x402FlaggedCount++;
-        });
+        // Count x402 orders from Redis sets
+        const x402OrderCount = (await redisClient.getOpenOrders()).length;
+        const x402FlaggedCount = (await redisClient.getRejectedOrders()).length;
 
         res.json({
-            platform_mode: config?.mode || 'beta',
+            platform_mode: config.mode,
+            fee_rate: config.fee_rate,
+            min_version: config.min_version,
             stats: {
                 active_x402_orders: x402OrderCount,
                 flagged_content: x402FlaggedCount
-            },
-            updated_at: config?.updatedAt
+            }
         });
     } catch (error) {
         console.error('Admin status error:', error);
@@ -39,9 +34,9 @@ export const getAdminStatus = async (req: Request, res: Response) => {
  * POST /v1/admin/mode
  */
 export const updatePlatformMode = async (req: Request, res: Response) => {
-    const { mode } = req.body;
+    const { mode, fee_rate } = req.body;
 
-    if (!['beta', 'hybrid', 'live'].includes(mode)) {
+    if (mode && !['beta', 'hybrid', 'live'].includes(mode)) {
         return res.status(400).json({
             error: 'Invalid mode',
             valid_modes: ['beta', 'hybrid', 'live']
@@ -49,17 +44,21 @@ export const updatePlatformMode = async (req: Request, res: Response) => {
     }
 
     try {
-        const config = await prisma.platformConfig.update({
-            where: { id: 'singleton' },
-            data: { mode }
-        });
+        // Update config in Redis
+        const updates: any = {};
+        if (mode) updates.mode = mode;
+        if (fee_rate !== undefined) updates.fee_rate = fee_rate;
 
-        console.log(`[Admin] Platform mode changed to: ${mode}`);
+        await configService.setConfig(updates);
+        const newConfig = await configService.getConfig();
+
+        console.log(`[Admin] Platform config updated:`, updates);
 
         res.json({
             success: true,
-            mode: config.mode,
-            message: getModeDescription(mode)
+            mode: newConfig.mode,
+            fee_rate: newConfig.fee_rate,
+            message: getModeDescription(newConfig.mode)
         });
     } catch (error) {
         console.error('Update mode error:', error);
@@ -84,8 +83,12 @@ export const getX402FlaggedContent = async (req: Request, res: Response) => {
             created_at: number;
         }> = [];
 
-        orderStore.forEach((order, txHash) => {
-            if (order.status === 'rejected_tos') {
+        const rejectedIds = await redisClient.getRejectedOrders();
+
+        // Fetch details for all rejected orders
+        for (const txHash of rejectedIds) {
+            const order = await redisClient.getOrder(txHash) as any;
+            if (order && order.status === 'rejected_tos') {
                 flaggedOrders.push({
                     tx_hash: txHash,
                     content_url: order.content_url,
@@ -97,7 +100,7 @@ export const getX402FlaggedContent = async (req: Request, res: Response) => {
                     created_at: order.created_at
                 });
             }
-        });
+        }
 
         // Sort by created_at (newest first)
         flaggedOrders.sort((a, b) => b.created_at - a.created_at);
@@ -125,7 +128,7 @@ export const reviewX402Content = async (req: Request, res: Response) => {
         return res.status(400).json({ error: 'Action must be "approve" or "reject"' });
     }
 
-    const order = orderStore.get(tx_hash);
+    const order = await redisClient.getOrder(tx_hash) as any;
 
     if (!order) {
         return res.status(404).json({ error: 'Order not found' });
@@ -139,8 +142,12 @@ export const reviewX402Content = async (req: Request, res: Response) => {
     }
 
     // Update order status
-    order.status = action === 'approve' ? 'open' : 'rejected_tos';
-    orderStore.set(tx_hash, order);
+    const newStatus = action === 'approve' ? 'open' : 'rejected_tos';
+    order.status = newStatus;
+
+    // Save updated order and update set membership via updateOrderStatus helper
+    await redisClient.setOrder(tx_hash, order);
+    await redisClient.updateOrderStatus(tx_hash, newStatus);
 
     console.log(`[Admin] x402 content ${action}: ${tx_hash}`);
 

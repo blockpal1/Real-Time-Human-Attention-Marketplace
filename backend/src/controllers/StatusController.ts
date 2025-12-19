@@ -1,21 +1,25 @@
 import { Request, Response } from 'express';
-import { prisma } from '../utils/prisma';
-import { redis } from '../utils/redis';
+import { redis, redisClient } from '../utils/redis';
+import { configService } from '../services/ConfigService';
 
 export const getStatus = async (req: Request, res: Response) => {
     try {
-        const [userCount, bidCount] = await Promise.all([
-            prisma.user.count(),
-            prisma.bid.count({ where: { active: true } })
-        ]);
+        // Get counts from Redis
+        const openOrders = await redisClient.getOpenOrders();
+        const availableSessions = await redisClient.client.zCard('market:available_users');
+        const config = await configService.getConfig();
 
         const redisStatus = redis.isOpen ? 'connected' : 'disconnected';
 
         res.json({
             status: 'ok',
-            database: {
-                users: userCount,
-                active_bids: bidCount
+            platform: {
+                mode: config.mode,
+                fee_rate: config.fee_rate
+            },
+            stats: {
+                active_orders: openOrders.length,
+                available_sessions: availableSessions
             },
             redis: redisStatus,
             timestamp: new Date().toISOString()

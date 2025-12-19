@@ -1,8 +1,8 @@
 import { Request, Response } from 'express';
-import { prisma } from '../utils/prisma';
-import { redis } from '../utils/redis';
+import { redis, redisClient } from '../utils/redis';
 import { z } from 'zod';
 import jwt from 'jsonwebtoken';
+import { v4 as uuidv4 } from 'uuid';
 
 const startSessionSchema = z.object({
     pubkey: z.string(),
@@ -19,64 +19,64 @@ export const startSession = async (req: Request, res: Response) => {
     const { pubkey, price_floor_micros, device_attestation } = result.data;
 
     try {
-        // Upsert User
-        await prisma.user.upsert({
-            where: { pubkey },
-            update: {},
-            create: { pubkey }
-        });
+        // Check for existing active session by scanning user's sessions
+        const existingSessionId = await redisClient.client.get(`user:${pubkey}:active_session`);
 
-        // Check for existing active session (one ask per user)
-        const existingSession = await prisma.session.findFirst({
-            where: {
-                userPubkey: pubkey,
-                active: true
+        if (existingSessionId) {
+            const existingSession = await redisClient.getSession(existingSessionId) as any;
+            if (existingSession && existingSession.active) {
+                // Return existing session
+                const secret = process.env.JWT_SECRET || 'dev-secret';
+                const token = jwt.sign({ sessionId: existingSessionId, pubkey }, secret, { expiresIn: '1h' });
+
+                console.log(`[Session] Returning existing active session for ${pubkey.slice(0, 12)}...`);
+                return res.json({
+                    session_token: token,
+                    existing: true,
+                    session_id: existingSessionId
+                });
             }
-        });
-
-        if (existingSession) {
-            // Return existing session instead of creating duplicate
-            const secret = process.env.JWT_SECRET || 'dev-secret';
-            const token = jwt.sign({ sessionId: existingSession.id, pubkey }, secret, { expiresIn: '1h' });
-
-            console.log(`[Session] Returning existing active session for ${pubkey.slice(0, 12)}...`);
-            return res.json({
-                session_token: token,
-                existing: true,
-                session_id: existingSession.id
-            });
         }
 
-        // Create Session (only if no active session exists)
-        const session = await prisma.session.create({
-            data: {
-                userPubkey: pubkey,
-                priceFloor: price_floor_micros,
-                deviceAttestation: device_attestation || null,
-                active: true,
-                connected: false // Will be set to true on WS connect
-            }
-        });
+        // Create new session
+        const sessionId = uuidv4();
+        const sessionData = {
+            id: sessionId,
+            userPubkey: pubkey,
+            priceFloor: price_floor_micros,
+            deviceAttestation: device_attestation || null,
+            active: true,
+            connected: false,
+            createdAt: Date.now()
+        };
 
-        // Generate Token
+        // Store session in Redis with 1-hour TTL
+        await redisClient.setSession(sessionId, sessionData, 3600);
+
+        // Track active session for this user
+        await redisClient.client.set(`user:${pubkey}:active_session`, sessionId, { EX: 3600 });
+
+        // Add to market matching pool (sorted by price floor)
+        await redisClient.addAvailableUser(sessionId, price_floor_micros);
+
+        // Generate JWT token
         const secret = process.env.JWT_SECRET || 'dev-secret';
-        const token = jwt.sign({ sessionId: session.id, pubkey }, secret, { expiresIn: '1h' });
+        const token = jwt.sign({ sessionId, pubkey }, secret, { expiresIn: '1h' });
 
         // Publish ASK_CREATED event
-        if (!redis.isOpen) await redis.connect();
+        if (redisClient.isOpen) {
+            await redisClient.client.publish('marketplace_events', JSON.stringify({
+                type: 'ASK_CREATED',
+                payload: {
+                    id: sessionId,
+                    pricePerSecond: price_floor_micros,
+                    status: 'active'
+                }
+            }));
+        }
 
-        const eventPayload = {
-            type: 'ASK_CREATED',
-            payload: {
-                id: session.id, // Use session ID as Ask ID
-                pricePerSecond: price_floor_micros,
-                status: 'active'
-            }
-        };
-        console.log('Publishing ASK_CREATED:', JSON.stringify(eventPayload));
-        await redis.publish('marketplace_events', JSON.stringify(eventPayload));
-
-        res.json({ session_token: token });
+        console.log(`[Session] Created new session ${sessionId.slice(0, 8)}... for ${pubkey.slice(0, 12)}...`);
+        res.json({ session_token: token, session_id: sessionId });
 
     } catch (error) {
         console.error('Start Session Error:', error);
@@ -86,16 +86,27 @@ export const startSession = async (req: Request, res: Response) => {
 
 export const getActiveSessions = async (req: Request, res: Response) => {
     try {
-        const sessions = await prisma.session.findMany({
-            where: {
-                active: true,
-                priceFloor: { gt: 0 }, // Exclude phantom sessions with 0 price
-                matches: { none: { status: { in: ['active', 'offered'] } } } // Available only
-            },
-            take: 100
-        });
+        // Get all available users from the sorted set
+        const sessionIds = await redisClient.client.zRange('market:available_users', 0, 99);
+
+        const sessions: any[] = [];
+        for (const sessionId of sessionIds) {
+            const session = await redisClient.getSession(sessionId) as any;
+            if (session && session.active) {
+                sessions.push({
+                    id: sessionId,
+                    userPubkey: session.userPubkey,
+                    priceFloor: session.priceFloor,
+                    active: session.active,
+                    connected: session.connected,
+                    createdAt: session.createdAt
+                });
+            }
+        }
+
         res.json(sessions);
     } catch (error) {
+        console.error('Get Active Sessions Error:', error);
         res.status(500).json({ error: 'Failed to fetch sessions' });
     }
 };
@@ -112,37 +123,39 @@ export const cancelSession = async (req: Request, res: Response) => {
     }
 
     try {
-        // Find and deactivate user's active session
-        const session = await prisma.session.findFirst({
-            where: {
-                userPubkey: pubkey,
-                active: true
-            }
-        });
+        // Find user's active session
+        const sessionId = await redisClient.client.get(`user:${pubkey}:active_session`);
 
-        if (!session) {
+        if (!sessionId) {
             return res.status(404).json({ error: 'No active session found' });
         }
 
+        const session = await redisClient.getSession(sessionId) as any;
+        if (!session) {
+            return res.status(404).json({ error: 'Session data not found' });
+        }
+
         // Deactivate the session
-        await prisma.session.update({
-            where: { id: session.id },
-            data: {
-                active: false,
-                endedAt: new Date()
-            }
-        });
+        session.active = false;
+        session.endedAt = Date.now();
+        await redisClient.setSession(sessionId, session, 300); // Keep for 5 min for cleanup
+
+        // Remove from matching pool
+        await redisClient.removeAvailableUser(sessionId);
+
+        // Clear active session tracker
+        await redisClient.client.del(`user:${pubkey}:active_session`);
 
         // Broadcast ASK_CANCELLED event
-        if (redis.isOpen) {
-            await redis.publish('marketplace_events', JSON.stringify({
+        if (redisClient.isOpen) {
+            await redisClient.client.publish('marketplace_events', JSON.stringify({
                 type: 'ASK_CANCELLED',
-                payload: { id: session.id }
+                payload: { id: sessionId }
             }));
         }
 
-        console.log(`[Session] Cancelled session ${session.id} for ${pubkey.slice(0, 12)}...`);
-        res.json({ success: true, session_id: session.id });
+        console.log(`[Session] Cancelled session ${sessionId.slice(0, 8)}... for ${pubkey.slice(0, 12)}...`);
+        res.json({ success: true, session_id: sessionId });
 
     } catch (error) {
         console.error('Cancel Session Error:', error);
@@ -167,39 +180,40 @@ export const updateSession = async (req: Request, res: Response) => {
 
     try {
         // Find user's active session
-        const session = await prisma.session.findFirst({
-            where: {
-                userPubkey: pubkey,
-                active: true
-            }
-        });
+        const sessionId = await redisClient.client.get(`user:${pubkey}:active_session`);
 
-        if (!session) {
+        if (!sessionId) {
             return res.status(404).json({ error: 'No active session found' });
         }
 
+        const session = await redisClient.getSession(sessionId) as any;
+        if (!session) {
+            return res.status(404).json({ error: 'Session data not found' });
+        }
+
         // Update the price floor
-        const updatedSession = await prisma.session.update({
-            where: { id: session.id },
-            data: { priceFloor: price_floor_micros }
-        });
+        session.priceFloor = price_floor_micros;
+        await redisClient.setSession(sessionId, session, 3600);
+
+        // Update in matching pool (ZADD overwrites score)
+        await redisClient.addAvailableUser(sessionId, price_floor_micros);
 
         // Broadcast ASK_UPDATED event
-        if (redis.isOpen) {
-            await redis.publish('marketplace_events', JSON.stringify({
+        if (redisClient.isOpen) {
+            await redisClient.client.publish('marketplace_events', JSON.stringify({
                 type: 'ASK_UPDATED',
                 payload: {
-                    id: session.id,
+                    id: sessionId,
                     pricePerSecond: price_floor_micros
                 }
             }));
         }
 
-        console.log(`[Session] Updated session ${session.id}: price floor now ${price_floor_micros}`);
+        console.log(`[Session] Updated session ${sessionId.slice(0, 8)}...: price floor now ${price_floor_micros}`);
         res.json({
             success: true,
-            session_id: session.id,
-            price_floor_micros: updatedSession.priceFloor
+            session_id: sessionId,
+            price_floor_micros: session.priceFloor
         });
 
     } catch (error) {
@@ -220,66 +234,45 @@ export const acceptHighestBid = async (req: Request, res: Response) => {
     }
 
     try {
-        // Import orderStore dynamically
-        const { orderStore } = await import('../middleware/x402OrderBook');
+        // Use redisClient
+        const { redisClient } = await import('../utils/redis');
 
         // ========================================
         // CHECK BOTH SOURCES: x402 + Prisma
         // ========================================
 
-        // Source 1: x402 orderStore
-        const x402Orders = Array.from(orderStore.entries())
-            .filter(([, order]) => order.status === 'open' && order.quantity > 0)
-            .filter(([, order]) => !duration || order.duration === duration)
-            .map(([txHash, order]) => ({
-                source: 'x402' as const,
-                id: txHash,
-                bid: order.bid,
-                duration: order.duration,
-                content_url: order.content_url,
-                validation_question: order.validation_question,
-                order
-            }));
+        // Source 1: x402 orders from Redis
+        const x402Orders: any[] = []; // Explicit type
+        if (redisClient.isOpen) {
+            const openOrderIds = await redisClient.getOpenOrders();
 
-        // Source 2: Prisma bids
-        const prismaBids = await prisma.bid.findMany({
-            where: {
-                active: true,
-                expiry: { gt: new Date() },
-                targetQuantity: { gt: 0 },
-                ...(duration ? { durationPerUser: duration } : {})
-            },
-            orderBy: { maxPricePerSecond: 'desc' },
-            take: 1
-        });
+            for (const txHash of openOrderIds) {
+                const order = await redisClient.getOrder(txHash) as any;
 
-        const prismaOrders = prismaBids.map(bid => ({
-            source: 'prisma' as const,
-            id: bid.id,
-            bid: bid.maxPricePerSecond / 1_000_000, // Convert to USDC
-            duration: bid.durationPerUser,
-            content_url: bid.contentUrl,
-            validation_question: bid.validationQuestion,
-            prismaBid: bid
-        }));
-
-        // Combine and find highest
-        // Combine
-        let allBids = [...x402Orders, ...prismaOrders].sort((a, b) => b.bid - a.bid);
-
-        // ========================================
-        // FILTER: Campaign Uniqueness (One per user)
-        // ========================================
-        if (redis.isOpen) {
-            const eligibleBids = [];
-            for (const bid of allBids) {
-                const alreadySeen = await redis.sIsMember(`campaign:${bid.id}:users`, pubkey);
-                if (!alreadySeen) {
-                    eligibleBids.push(bid);
+                // Filter: Open + Quantity > 0 + Duration Match + Not Seen by User
+                if (order && order.status === 'open' && order.quantity > 0) {
+                    if (!duration || order.duration === duration) {
+                        // Check if user has already seen this campaign
+                        const hasSeen = await redisClient.hasUserSeenCampaign(txHash, pubkey);
+                        if (!hasSeen) {
+                            x402Orders.push({
+                                source: 'x402' as const,
+                                id: txHash,
+                                bid: order.bid,
+                                duration: order.duration,
+                                content_url: order.content_url,
+                                validation_question: order.validation_question,
+                                order
+                            });
+                        }
+                    }
                 }
             }
-            allBids = eligibleBids;
         }
+
+        // Only x402 orders as the source (Prisma removed)
+        // Sort by bid price descending
+        let allBids = [...x402Orders].sort((a, b) => b.bid - a.bid);
 
         if (allBids.length === 0) {
             return res.status(404).json({
@@ -291,78 +284,53 @@ export const acceptHighestBid = async (req: Request, res: Response) => {
         const winner = allBids[0];
         const matchedBid = winner.bid;
 
-        // Get or create user session
-        let session = await prisma.session.findFirst({
-            where: { userPubkey: pubkey, active: true }
-        });
+        // Get or create user session from Redis
+        let sessionId = await redisClient.client.get(`user:${pubkey}:active_session`);
+        let session = sessionId ? await redisClient.getSession(sessionId) as any : null;
 
         if (!session) {
             // Create session on the fly
-            await prisma.user.upsert({
-                where: { pubkey },
-                update: {},
-                create: { pubkey }
-            });
-
-            session = await prisma.session.create({
-                data: {
-                    userPubkey: pubkey,
-                    priceFloor: 0, // Accept any price
-                    active: true,
-                    connected: false
-                }
-            });
+            const { v4: uuidv4 } = await import('uuid');
+            sessionId = uuidv4();
+            session = {
+                id: sessionId,
+                userPubkey: pubkey,
+                priceFloor: 0, // Accept any price
+                active: true,
+                connected: false,
+                createdAt: Date.now()
+            };
+            await redisClient.setSession(sessionId, session, 3600);
+            await redisClient.client.set(`user:${pubkey}:active_session`, sessionId, { EX: 3600 });
+            await redisClient.addAvailableUser(sessionId, 0);
         }
 
-        // Decrement order quantity based on source
-        if (winner.source === 'x402') {
-            const order = winner.order;
-            order.quantity -= 1;
-            order.status = order.quantity === 0 ? 'in_progress' : 'open';
-            orderStore.set(winner.id, order);
+        // Decrement order quantity for x402 orders
+        const order = winner.order;
+        order.quantity -= 1;
+        order.status = order.quantity === 0 ? 'in_progress' : 'open';
 
-            // Broadcast BID_UPDATED or BID_FILLED to update frontend order book
-            if (redis.isOpen) {
-                if (order.quantity > 0) {
-                    await redis.publish('marketplace_events', JSON.stringify({
-                        type: 'BID_UPDATED',
-                        payload: {
-                            bidId: winner.id,
-                            remainingQuantity: order.quantity
-                        }
-                    }));
-                    console.log(`[Accept Highest] Broadcast BID_UPDATED: ${winner.id.slice(0, 16)}... qty=${order.quantity}`);
-                } else {
-                    await redis.publish('marketplace_events', JSON.stringify({
-                        type: 'BID_FILLED',
-                        payload: { bidId: winner.id }
-                    }));
-                    console.log(`[Accept Highest] Broadcast BID_FILLED: ${winner.id.slice(0, 16)}...`);
-                }
-            }
-        } else {
-            // Prisma bid - decrement quantity
-            const updatedBid = await prisma.bid.update({
-                where: { id: winner.id },
-                data: { targetQuantity: { decrement: 1 } }
-            });
+        // Save to Redis
+        await redisClient.setOrder(winner.id, order);
+        await redisClient.updateOrderStatus(winner.id, order.status);
 
-            // Broadcast BID_UPDATED for Prisma bids too
-            if (redis.isOpen) {
-                if (updatedBid.targetQuantity > 0) {
-                    await redis.publish('marketplace_events', JSON.stringify({
-                        type: 'BID_UPDATED',
-                        payload: {
-                            bidId: winner.id,
-                            remainingQuantity: updatedBid.targetQuantity
-                        }
-                    }));
-                } else {
-                    await redis.publish('marketplace_events', JSON.stringify({
-                        type: 'BID_FILLED',
-                        payload: { bidId: winner.id }
-                    }));
-                }
+        // Broadcast BID_UPDATED or BID_FILLED to update frontend order book
+        if (redisClient.isOpen) {
+            if (order.quantity > 0) {
+                await redisClient.client.publish('marketplace_events', JSON.stringify({
+                    type: 'BID_UPDATED',
+                    payload: {
+                        bidId: winner.id,
+                        remainingQuantity: order.quantity
+                    }
+                }));
+                console.log(`[Accept Highest] Broadcast BID_UPDATED: ${winner.id.slice(0, 16)}... qty=${order.quantity}`);
+            } else {
+                await redisClient.client.publish('marketplace_events', JSON.stringify({
+                    type: 'BID_FILLED',
+                    payload: { bidId: winner.id }
+                }));
+                console.log(`[Accept Highest] Broadcast BID_FILLED: ${winner.id.slice(0, 16)}...`);
             }
         }
 
@@ -370,8 +338,8 @@ export const acceptHighestBid = async (req: Request, res: Response) => {
         const matchId = `match_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
 
         // Broadcast MATCH_FOUND to trigger the modal
-        if (redis.isOpen) {
-            await redis.publish('marketplace_events', JSON.stringify({
+        if (redisClient.isOpen) {
+            await redisClient.client.publish('marketplace_events', JSON.stringify({
                 type: 'MATCH_FOUND',
                 payload: {
                     matchId,
@@ -385,12 +353,10 @@ export const acceptHighestBid = async (req: Request, res: Response) => {
             }));
         }
 
-        console.log(`[Accept Highest] User ${pubkey.slice(0, 12)}... matched with ${winner.source} bid ${winner.id.slice(0, 16)}... @ $${matchedBid}/s`);
+        console.log(`[Accept Highest] User ${pubkey.slice(0, 12)}... matched with x402 bid ${winner.id.slice(0, 16)}... @ $${matchedBid}/s`);
 
         // Mark user as seen for this campaign to prevent repeat matches
-        if (redis.isOpen) {
-            await redis.sAdd(`campaign:${winner.id}:users`, pubkey);
-        }
+        await redisClient.markUserSeenCampaign(winner.id, pubkey);
 
         res.json({
             success: true,

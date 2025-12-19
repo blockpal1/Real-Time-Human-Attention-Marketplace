@@ -1,7 +1,5 @@
 import { Request, Response } from 'express';
-import { prisma } from '../utils/prisma';
-import { redis } from '../utils/redis';
-import { webhookService } from '../services/WebhookService';
+import { redis, redisClient } from '../utils/redis';
 
 export const completeMatch = async (req: Request, res: Response) => {
     const { matchId } = req.params;
@@ -13,30 +11,88 @@ export const completeMatch = async (req: Request, res: Response) => {
         if (matchId.startsWith('x402_match_') || matchId.startsWith('match_')) {
             console.log(`[x402] Match ${matchId} completed. Answer: ${answer || 'none'}`);
 
-            // Import orderStore to update x402 order status
-            const { orderStore } = await import('../middleware/x402OrderBook');
+            // Import redisClient to update x402 order status
+            const { redisClient } = await import('../utils/redis');
 
-            // Find and update the order if bidId provided
-            if (bidId && orderStore.has(bidId)) {
-                const order = orderStore.get(bidId)!;
+            // 2. If this was an x402 match (has bidId), update order status
+            if (bidId) {
+                const order = await redisClient.getOrder(bidId) as any;
+                if (order) {
+                    // Only mark order as 'completed' when quantity reaches 0
+                    // Otherwise keep it 'open' for more potential matches
+                    if (order.quantity === 0) {
+                        order.status = 'completed';
+                    }
 
-                // Only mark order as 'completed' when quantity reaches 0
-                // Otherwise keep it 'open' for more potential matches
-                if (order.quantity === 0) {
-                    order.status = 'completed';
+                    // Store this match's result (supports multi-quantity orders)
+                    if (!Array.isArray(order.result)) {
+                        order.result = [];
+                    }
+                    order.result.push({ answer, actualDuration, exitedEarly, completedAt: Date.now() });
+
+                    await redisClient.setOrder(bidId, order);
+
+                    // Update status tracking if changed
+                    if (order.status !== 'open') {
+                        await redisClient.updateOrderStatus(bidId, order.status);
+                    }
+
+                    console.log(`[x402] Order ${bidId.slice(0, 16)}... match completed. Status: ${order.status}, Qty: ${order.quantity}`);
                 }
-
-                // Store this match's result (supports multi-quantity orders)
-                if (!Array.isArray(order.result)) {
-                    order.result = [];
-                }
-                order.result.push({ answer, actualDuration, exitedEarly, completedAt: Date.now() });
-
-                orderStore.set(bidId, order);
-                console.log(`[x402] Order ${bidId.slice(0, 16)}... match completed. Status: ${order.status}, Qty: ${order.quantity}`);
             }
 
-            // Publish completion event
+            // 3. Calculate earnings and credit user balance
+            let earnedAmount = 0;
+            let userWallet: string | null = null;
+
+            if (bidId) {
+                const order = await redisClient.getOrder(bidId) as any;
+                if (order) {
+                    // Calculate earnings: bid price (per second) * actual duration
+                    const duration = actualDuration || order.duration || 30;
+                    earnedAmount = order.bid * duration;
+
+                    // Get user wallet from session (passed from frontend or stored during match)
+                    // For now, extract from request body or use a placeholder
+                    userWallet = req.body.wallet || null;
+
+                    if (userWallet && earnedAmount > 0) {
+                        // Credit user balance
+                        const newBalance = await redisClient.incrementBalance(userWallet, earnedAmount);
+                        console.log(`[x402] Credited ${earnedAmount.toFixed(4)} USDC to ${userWallet.slice(0, 12)}... (new balance: ${newBalance.toFixed(4)})`);
+
+                        // Award points (1 point per 0.01 USDC earned)
+                        const pointsEarned = Math.floor(earnedAmount * 100);
+                        if (pointsEarned > 0) {
+                            await redisClient.incrementPoints(userWallet, pointsEarned);
+                        }
+
+                        // Record in user history
+                        await redisClient.addToHistory(userWallet, {
+                            matchId,
+                            bidId,
+                            earnedAmount,
+                            duration,
+                            answer: answer || null,
+                            completedAt: Date.now()
+                        });
+
+                        // Add to match history stream for archiving
+                        await redisClient.addMatchToStream({
+                            matchId,
+                            bidId,
+                            wallet: userWallet,
+                            earnedAmount,
+                            duration,
+                            answer: answer || null,
+                            exitedEarly: exitedEarly || false,
+                            completedAt: Date.now()
+                        });
+                    }
+                }
+            }
+
+            // 4. Publish completion event
             if (redis.isOpen) {
                 await redis.publish('marketplace_events', JSON.stringify({
                     type: 'MATCH_COMPLETED',
@@ -47,6 +103,7 @@ export const completeMatch = async (req: Request, res: Response) => {
                         actualDuration,
                         exitedEarly,
                         approved: true,
+                        earnedAmount,
                         timestamp: new Date().toISOString()
                     }
                 }));
@@ -56,91 +113,18 @@ export const completeMatch = async (req: Request, res: Response) => {
                 success: true,
                 matchId,
                 approved: true,
-                earnedAmount: 0, // x402 payments are handled differently
+                earnedAmount: Number(earnedAmount.toFixed(4)),
                 engagementScore: 1.0,
                 threshold: 0.7
             });
         }
 
-        // Prisma match completion (traditional flow)
-        // STUB: Auto-approve all sessions (engagementScore = 1.0)
-        // TODO: Replace with real ML scoring in Phase 3
-        const engagementScore = 1.0;
-        const threshold = 0.7;
-        const approved = engagementScore >= threshold;
-
-        // Update match with completion data
-        const match = await prisma.match.update({
-            where: { id: matchId },
-            data: {
-                status: approved ? 'completed' : 'rejected',
-                validationAnswer: answer || null,
-                validationSubmittedAt: answer ? new Date() : null,
-                completedAt: new Date(),
-                actualDuration: actualDuration || null,
-                humanExitedEarly: exitedEarly || false,
-                validationResult: approved ? 'approved' : 'rejected',
-                endTime: new Date()
-            },
-            include: {
-                bid: true,
-                session: {
-                    include: { user: true }
-                }
-            }
-        });
-
-        // Calculate earnings
-        const pricePerSecond = match.bid.maxPricePerSecond / 1_000_000;
-        const duration = actualDuration || match.bid.durationPerUser;
-        const earnedAmount = approved ? pricePerSecond * duration : 0;
-
-        console.log(`Match ${matchId} completed. Approved: ${approved}, Earned: $${earnedAmount.toFixed(4)}`);
-
-        // Publish completion event to agent for analytics
-        if (redis.isOpen && approved) {
-            // Add user to campaign's "seen" set (enforces unique match rule)
-            await redis.sAdd(`campaign:${match.bidId}:users`, match.session.userPubkey);
-
-            await redis.publish('marketplace_events', JSON.stringify({
-                type: 'MATCH_COMPLETED',
-                agentPubkey: match.bid.agentPubkey,
-                matchId: match.id,
-                bidId: match.bidId,
-                payload: {
-                    matchId: match.id,
-                    humanPubkey: match.session.userPubkey,
-                    validationQuestion: match.bid.validationQuestion,
-                    validationAnswer: answer,
-                    actualDuration,
-                    exitedEarly,
-                    earned: earnedAmount,
-                    timestamp: new Date().toISOString()
-                }
-            }));
-        }
-
-        // Send webhook to agent
-        if (match.bid.agentPubkey) {
-            const earnedMicros = Math.round(earnedAmount * 1_000_000);
-            await webhookService.notifyMatchCompleted(
-                match.bid.agentPubkey,
-                match.id,
-                match.bidId,
-                duration,
-                answer || null,
-                earnedMicros
-            );
-        }
-
-        // Return immediate payment confirmation to frontend
-        res.status(200).json({
-            success: true,
-            matchId: match.id,
-            approved,
-            earnedAmount: Number(earnedAmount.toFixed(4)),
-            engagementScore,
-            threshold
+        // Legacy Prisma match completion - no longer supported
+        // All matches should now be x402-based (matchId starts with 'x402_match_' or 'match_')
+        console.error(`[Match] Unsupported legacy match ID: ${matchId}`);
+        return res.status(400).json({
+            error: 'legacy_match_unsupported',
+            message: 'Legacy Prisma-based matches are no longer supported. Use x402 protocol.'
         });
 
     } catch (error) {
@@ -158,27 +142,19 @@ export const submitValidationResult = async (req: Request, res: Response) => {
     }
 
     try {
-        const match = await prisma.match.update({
-            where: { id: matchId },
-            data: {
-                validationResult: result,
-            },
-            include: { session: true, bid: true }
-        });
-
+        // For x402 matches, validation is automatic (all approved)
+        // This endpoint is kept for backwards compatibility
         console.log(`Validation result for match ${matchId}: ${result}`);
 
         // Publish result to human (for transparency)
         if (redis.isOpen) {
             await redis.publish('marketplace_events', JSON.stringify({
                 type: 'VALIDATION_RESULT',
-                sessionId: match.sessionId,
                 payload: {
                     matchId,
                     result,
                     reason,
-                    earningsApproved: result === 'approved',
-                    amount: (match.bid.maxPricePerSecond / 1_000_000) * (match.actualDuration || match.bid.durationPerUser)
+                    earningsApproved: result === 'approved'
                 }
             }));
         }
@@ -200,16 +176,21 @@ export const dismissMatch = async (req: Request, res: Response) => {
     const { bidId, pubkey } = req.body; // bidId = tx_hash for x402, pubkey for session cancellation
 
     try {
-        // Import orderStore to restore x402 order quantity
-        const { orderStore } = await import('../middleware/x402OrderBook');
+        // Import redisClient to restore x402 order quantity
+        const { redisClient } = await import('../utils/redis');
 
-        // 1. Restore order quantity in x402 orderStore (if bidId provided)
-        if (bidId && orderStore.has(bidId)) {
-            const order = orderStore.get(bidId)!;
-            order.quantity += 1;
-            order.status = 'open';
-            orderStore.set(bidId, order);
-            console.log(`[Dismiss] Restored ${bidId.slice(0, 16)}... quantity to ${order.quantity}`);
+        // 1. Restore order quantity in Redis (if bidId provided)
+        if (bidId) {
+            const order = await redisClient.getOrder(bidId) as any;
+            if (order) {
+                order.quantity += 1;
+                order.status = 'open';
+
+                await redisClient.setOrder(bidId, order);
+                await redisClient.updateOrderStatus(bidId, 'open');
+
+                console.log(`[Dismiss] Restored ${bidId.slice(0, 16)}... quantity to ${order.quantity}`);
+            }
 
             // Broadcast BID_UPDATED to restore quantity in frontend order book
             // (BID_UPDATED is simpler and the bid already exists in frontend state)
@@ -227,23 +208,25 @@ export const dismissMatch = async (req: Request, res: Response) => {
 
         // 2. Cancel user's session (if pubkey provided)
         if (pubkey) {
-            const session = await prisma.session.findFirst({
-                where: { userPubkey: pubkey, active: true }
-            });
+            const sessionId = await redisClient.client.get(`user:${pubkey}:active_session`);
 
-            if (session) {
-                await prisma.session.update({
-                    where: { id: session.id },
-                    data: { active: false, endedAt: new Date() }
-                });
-                console.log(`[Dismiss] Cancelled session for ${pubkey.slice(0, 12)}...`);
+            if (sessionId) {
+                const session = await redisClient.getSession(sessionId) as any;
+                if (session) {
+                    session.active = false;
+                    session.endedAt = Date.now();
+                    await redisClient.setSession(sessionId, session, 300);
+                    await redisClient.removeAvailableUser(sessionId);
+                    await redisClient.client.del(`user:${pubkey}:active_session`);
+                    console.log(`[Dismiss] Cancelled session for ${pubkey.slice(0, 12)}...`);
 
-                // Broadcast ASK_CANCELLED
-                if (redis.isOpen) {
-                    await redis.publish('marketplace_events', JSON.stringify({
-                        type: 'ASK_CANCELLED',
-                        payload: { id: session.id }
-                    }));
+                    // Broadcast ASK_CANCELLED
+                    if (redis.isOpen) {
+                        await redis.publish('marketplace_events', JSON.stringify({
+                            type: 'ASK_CANCELLED',
+                            payload: { id: sessionId }
+                        }));
+                    }
                 }
             }
         }

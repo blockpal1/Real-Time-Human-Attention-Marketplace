@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { redis } from '../utils/redis';
+import { redis, redisClient } from '../utils/redis';
 import { z } from 'zod';
 
 // Minimum bid floor: $0.0001/second = 100 micros
@@ -59,9 +59,7 @@ export const createBid = async (req: Request, res: Response) => {
     // ROUTE THROUGH x402 SYSTEM (UNIFIED ORDER STORE)
     // ========================================
     try {
-        // Import orderStore directly
-        const { orderStore } = await import('../middleware/x402OrderBook');
-
+        // Save to Redis (unified source)
         // Convert price from micros to USDC
         const bid_per_second = max_price_per_second / 1_000_000;
 
@@ -84,8 +82,8 @@ export const createBid = async (req: Request, res: Response) => {
             result: null
         };
 
-        // Save to x402 orderStore (unified source)
-        orderStore.set(tx_hash, orderRecord);
+        // Save to Redis
+        await redisClient.setOrder(tx_hash, orderRecord);
 
         // Emit WebSocket event
         if (redis.isOpen) {
@@ -120,15 +118,19 @@ export const createBid = async (req: Request, res: Response) => {
 
 export const getActiveBids = async (req: Request, res: Response) => {
     try {
-        // Query x402 orderStore (single source of truth)
-        const { orderStore } = await import('../middleware/x402OrderBook');
+        if (!redisClient.isOpen) {
+            return res.status(503).json({ error: 'Redis connection unavailable' });
+        }
 
         const now = Date.now();
         const bids: any[] = [];
+        const openOrderIds = await redisClient.getOpenOrders();
 
-        orderStore.forEach((order, txHash) => {
+        for (const txHash of openOrderIds) {
+            const order = await redisClient.getOrder(txHash) as any;
+
             // Only include open orders that haven't expired
-            if (order.status === 'open' && order.quantity > 0 && now < order.expires_at) {
+            if (order && order.status === 'open' && order.quantity > 0 && now < order.expires_at) {
                 bids.push({
                     id: txHash,
                     maxPricePerSecond: Math.round(order.bid * 1_000_000), // Convert back to micros for compatibility
@@ -141,7 +143,7 @@ export const getActiveBids = async (req: Request, res: Response) => {
                     active: true
                 });
             }
-        });
+        }
 
         // Sort by price descending
         bids.sort((a, b) => b.maxPricePerSecond - a.maxPricePerSecond);

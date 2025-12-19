@@ -4,8 +4,9 @@ import app from './app';
 import { WebSocketManager } from './websockets/WebSocketManager';
 import { startExpirationJob } from './middleware/x402OrderBook';
 import { MatchingEngine } from './services/MatchingEngine';
-import { connectRedis, redis } from './utils/redis';
-import { prisma } from './utils/prisma';
+import { connectRedis, redis, redisClient } from './utils/redis';
+import { archiverService } from './services/ArchiverService';
+import { configService } from './services/ConfigService';
 
 const port = process.env.PORT || 3000;
 const server = createServer(app);
@@ -14,33 +15,31 @@ const server = createServer(app);
 const wsManager = new WebSocketManager(server);
 const matchingEngine = new MatchingEngine();
 
-// Hydrate order book from database
+// Hydrate order book from Redis (x402 orders)
 async function hydrateOrderBook() {
-    console.log('[Hydration] Loading active bids from database...');
+    console.log('[Hydration] Loading active orders from Redis...');
 
-    const activeBids = await prisma.bid.findMany({
-        where: {
-            active: true,
-            expiry: { gt: new Date() },
-            targetQuantity: { gt: 0 }
-        },
-        orderBy: { maxPricePerSecond: 'desc' }
-    });
+    if (!redisClient.isOpen) {
+        console.log('[Hydration] Redis not connected, skipping hydration');
+        return;
+    }
 
-    console.log(`[Hydration] Found ${activeBids.length} active bids`);
+    const openOrderIds = await redisClient.getOpenOrders();
+    console.log(`[Hydration] Found ${openOrderIds.length} open x402 orders`);
 
-    // Publish each bid to WebSocket so frontend can display them
-    for (const bid of activeBids) {
-        if (redis.isOpen) {
-            await redis.publish('marketplace_events', JSON.stringify({
+    // Publish each order to WebSocket so frontend can display them
+    for (const txHash of openOrderIds) {
+        const order = await redisClient.getOrder(txHash) as any;
+        if (order && order.status === 'open') {
+            await redisClient.client.publish('marketplace_events', JSON.stringify({
                 type: 'BID_CREATED',
                 payload: {
-                    bidId: bid.id,
-                    max_price_per_second: bid.maxPricePerSecond,
-                    price: bid.maxPricePerSecond / 1_000_000,
-                    target_url: bid.targetUrl,
-                    duration: bid.durationPerUser,
-                    quantity: bid.targetQuantity
+                    bidId: txHash,
+                    tx_hash: txHash,
+                    price: order.bid,
+                    duration: order.duration,
+                    quantity: order.quantity,
+                    content_url: order.content_url
                 }
             }));
         }
@@ -53,19 +52,17 @@ async function hydrateOrderBook() {
 async function start() {
     await connectRedis();
 
-    // Initialize platform config (singleton)
-    await prisma.platformConfig.upsert({
-        where: { id: 'singleton' },
-        update: {},
-        create: { id: 'singleton', mode: 'beta' }
-    });
-    console.log('[Platform] Mode: beta');
+    // Initialize platform config from Redis
+    const mode = await configService.getMode();
+    console.log(`[Platform] Mode: ${mode}`);
 
-    // Hydrate order book from persisted bids
+    // Hydrate order book from Redis
     await hydrateOrderBook();
 
+    // Start services
     matchingEngine.start();
     startExpirationJob(); // Start x402 cleanup job
+    archiverService.start(); // Start match history archiver
 
     server.listen(port, () => {
         console.log(`Backend running on http://localhost:${port}`);
@@ -74,3 +71,4 @@ async function start() {
 }
 
 start().catch(console.error);
+

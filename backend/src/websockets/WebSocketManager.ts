@@ -1,8 +1,7 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { Server } from 'http';
 import jwt from 'jsonwebtoken';
-import { prisma } from '../utils/prisma';
-import { redis } from '../utils/redis';
+import { redis, redisClient } from '../utils/redis';
 
 interface ExtendedWebSocket extends WebSocket {
     sessionId?: string;
@@ -40,10 +39,14 @@ export class WebSocketManager {
             ws.on('close', async () => {
                 if (ws.sessionId) {
                     this.sessions.delete(ws.sessionId);
-                    await prisma.session.update({
-                        where: { id: ws.sessionId },
-                        data: { connected: false }
-                    });
+
+                    // Update session in Redis
+                    const session = await redisClient.getSession(ws.sessionId) as any;
+                    if (session) {
+                        session.connected = false;
+                        await redisClient.setSession(ws.sessionId, session, 300);
+                    }
+
                     console.log(`Session disconnected: ${ws.sessionId}`);
                 }
             });
@@ -70,10 +73,12 @@ export class WebSocketManager {
                 ws.sessionId = decoded.sessionId;
                 this.sessions.set(decoded.sessionId, ws);
 
-                await prisma.session.update({
-                    where: { id: decoded.sessionId },
-                    data: { connected: true }
-                });
+                // Update session connected status in Redis
+                const session = await redisClient.getSession(decoded.sessionId) as any;
+                if (session) {
+                    session.connected = true;
+                    await redisClient.setSession(decoded.sessionId, session, 3600);
+                }
 
                 ws.send(JSON.stringify({ type: 'AUTH_SUCCESS', sessionId: decoded.sessionId }));
                 console.log(`WS Authenticated: ${decoded.sessionId}`);

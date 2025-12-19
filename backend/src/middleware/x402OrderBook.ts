@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
-import { Connection, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
-import { redis } from '../utils/redis';
+import { Connection, PublicKey } from '@solana/web3.js';
+import { redisClient } from '../utils/redis';
 import { moderationService } from '../services/ContentModerationService';
 
 // Configuration
@@ -13,9 +13,6 @@ const connection = new Connection(RPC_URL, 'confirmed');
 
 // Admin Bypass Configuration
 const ADMIN_KEY = process.env.ADMIN_SECRET;
-
-// In-memory order storage (for status polling)
-export const orderStore = new Map<string, OrderRecord>();
 
 export interface OrderRecord {
     duration: number;
@@ -34,28 +31,35 @@ export interface OrderRecord {
 
 // Cleanup Job: Runs every 60s to expire old open orders
 export function startExpirationJob() {
-    setInterval(() => {
-        const now = Date.now();
-        let expiredCount = 0;
+    setInterval(async () => {
+        try {
+            if (!redisClient.isOpen) return;
 
-        orderStore.forEach((order, txHash) => {
-            if (order.status === 'open' && now > order.expires_at) {
-                order.status = 'expired';
-                orderStore.set(txHash, order);
-                expiredCount++;
+            const now = Date.now();
+            let expiredCount = 0;
 
-                // Broadcast expiration
-                if (redis.isOpen) {
-                    redis.publish('marketplace_events', JSON.stringify({
+            const openOrderIds = await redisClient.getOpenOrders();
+
+            for (const txHash of openOrderIds) {
+                const orderData = await redisClient.getOrder(txHash) as OrderRecord | null;
+
+                if (orderData && orderData.status === 'open' && now > orderData.expires_at) {
+                    await redisClient.updateOrderStatus(txHash, 'expired');
+                    expiredCount++;
+
+                    // Broadcast expiration
+                    await redisClient.client.publish('marketplace_events', JSON.stringify({
                         type: 'ORDER_EXPIRED',
                         payload: { tx_hash: txHash }
                     }));
                 }
             }
-        });
 
-        if (expiredCount > 0) {
-            console.log(`[x402] Cleanup: Expired ${expiredCount} stale orders`);
+            if (expiredCount > 0) {
+                console.log(`[x402] Cleanup: Expired ${expiredCount} stale orders`);
+            }
+        } catch (error) {
+            console.error('[x402] Expiration job error:', error);
         }
     }, 60000); // Check every minute
 }
@@ -111,14 +115,13 @@ export async function x402Middleware(req: Request, res: Response, next: NextFunc
             };
 
             req.order = orderRecord;
-            orderStore.set(tx_hash, orderRecord);
 
-            req.order = orderRecord;
-            orderStore.set(tx_hash, orderRecord);
+            // Save to Redis
+            if (redisClient.isOpen) {
+                await redisClient.setOrder(tx_hash, orderRecord);
 
-            // Emit socket event via Redis
-            if (redis.isOpen) {
-                await redis.publish('marketplace_events', JSON.stringify({
+                // Emit socket event
+                await redisClient.client.publish('marketplace_events', JSON.stringify({
                     type: 'BID_CREATED',
                     payload: {
                         bidId: tx_hash,
@@ -298,13 +301,13 @@ export async function x402Middleware(req: Request, res: Response, next: NextFunc
 
             req.order = orderRecord;
 
-            // Save to order store for status polling (regardless of moderation result)
-            orderStore.set(txSignature, orderRecord);
+            // Save to Redis (regardless of moderation result)
+            if (redisClient.isOpen) {
+                await redisClient.setOrder(txSignature, orderRecord);
 
-            // ONLY broadcast to WebSocket if moderation passed
-            if (orderStatus === 'open') {
-                if (redis.isOpen) {
-                    await redis.publish('marketplace_events', JSON.stringify({
+                // ONLY broadcast to WebSocket if moderation passed
+                if (orderStatus === 'open') {
+                    await redisClient.client.publish('marketplace_events', JSON.stringify({
                         type: 'BID_CREATED',
                         payload: {
                             bidId: txSignature,
@@ -317,10 +320,10 @@ export async function x402Middleware(req: Request, res: Response, next: NextFunc
                         }
                     }));
                     console.log('[x402] Broadcasted BID_CREATED via WebSocket');
+                    console.log(`[x402] Payment verified + Moderation PASSED: ${totalEscrow} USDC for ${quantity}x ${duration}s`);
+                } else {
+                    console.log(`[x402] Payment verified + Moderation FAILED: ${totalEscrow} USDC held. Reason: ${moderationResult.reason}`);
                 }
-                console.log(`[x402] Payment verified + Moderation PASSED: ${totalEscrow} USDC for ${quantity}x ${duration}s`);
-            } else {
-                console.log(`[x402] Payment verified + Moderation FAILED: ${totalEscrow} USDC held. Reason: ${moderationResult.reason}`);
             }
 
             return next();

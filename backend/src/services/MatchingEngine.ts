@@ -1,6 +1,5 @@
-import { prisma } from '../utils/prisma';
-import { redis } from '../utils/redis';
-import { orderStore } from '../middleware/x402OrderBook';
+import { redisClient } from '../utils/redis';
+import { OrderRecord } from '../middleware/x402OrderBook';
 
 export class MatchingEngine {
     private isRunning = false;
@@ -22,11 +21,13 @@ export class MatchingEngine {
 
     private async runMatchingCycle() {
         try {
+            if (!redisClient.isOpen) return;
+
             // ========================================
-            // x402 ORDERS ONLY (Prisma bids removed)
+            // x402 ORDERS ONLY (Redis-based)
             // ========================================
 
-            // 1. Get x402 orders from orderStore
+            // 1. Get x402 orders from Redis
             interface Bid {
                 id: string;           // tx_hash
                 maxPricePerSecond: number; // In micros for comparison
@@ -37,8 +38,13 @@ export class MatchingEngine {
             }
 
             const bids: Bid[] = [];
-            orderStore.forEach((order, txHash) => {
-                if (order.status === 'open' && order.quantity > 0) {
+            const openOrderIds = await redisClient.getOpenOrders();
+
+            for (const txHash of openOrderIds) {
+                // Fetch full order data
+                const order = await redisClient.getOrder(txHash) as OrderRecord | null;
+
+                if (order && order.status === 'open' && order.quantity > 0) {
                     bids.push({
                         id: txHash,
                         maxPricePerSecond: order.bid * 1_000_000, // Convert USDC to micros
@@ -48,63 +54,40 @@ export class MatchingEngine {
                         validationQuestion: order.validation_question
                     });
                 }
-            });
+            }
 
             // Sort by price descending (best bids first)
             bids.sort((a, b) => b.maxPricePerSecond - a.maxPricePerSecond);
 
             if (bids.length === 0) return;
 
-            // 2. Fetch active sessions NOT currently in a match (sessions still use Prisma)
-            const availableSessions = await prisma.session.findMany({
-                where: {
-                    active: true,
-                    priceFloor: { gt: 0 }, // Exclude phantom sessions
-                    matches: {
-                        none: {
-                            status: { in: ['active', 'offered'] }
-                        }
-                    }
-                },
-                include: { user: true },
-                take: 100
-            });
-
-            if (availableSessions.length === 0) return;
-
-            if (bids.length > 0 && availableSessions.length > 0) {
-                console.log(`Matching Cycle: ${bids.length} x402 Bids, ${availableSessions.length} Sessions`);
-            }
-
-            // 3. Match bids to sessions
+            // 2. Fetch available sessions from Redis sorted set (sorted by priceFloor)
+            // We'll iterate through bids and use ZRANGEBYSCORE to find matchable users
             for (const bid of bids) {
                 if (bid.quantity <= 0) continue;
 
-                // Find eligible session
-                let match = null;
-                for (const session of availableSessions) {
-                    const isMatch = session.priceFloor <= bid.maxPricePerSecond;
-                    if (!isMatch) continue;
+                // Find sessions with priceFloor <= bid price (in micros)
+                const matchableSessions = await redisClient.findMatchableUsers(bid.maxPricePerSecond, 10);
 
-                    // Redis uniqueness check
-                    let alreadySeen = false;
-                    if (redis.isOpen) {
-                        alreadySeen = Boolean(await redis.sIsMember(`campaign:${bid.id}:users`, session.userPubkey));
-                    }
+                if (matchableSessions.length === 0) continue;
 
-                    if (!alreadySeen) {
-                        match = session;
-                        break;
-                    }
-                }
+                // Try to claim a session atomically
+                for (const sessionId of matchableSessions) {
+                    // Get session data
+                    const session = await redisClient.getSession(sessionId) as any;
+                    if (!session || !session.active) continue;
 
-                if (match) {
-                    console.log(`MATCH FOUND! Bid ${bid.maxPricePerSecond} (x402) >= Ask ${match.priceFloor}`);
-                    await this.executeX402Match(bid.id, match);
+                    // Redis uniqueness check (has user already seen this campaign?)
+                    const alreadySeen = await redisClient.hasUserSeenCampaign(bid.id, session.userPubkey);
+                    if (alreadySeen) continue;
 
-                    // Remove matched session from local pool
-                    const index = availableSessions.indexOf(match);
-                    if (index > -1) availableSessions.splice(index, 1);
+                    // Atomically claim this user (remove from pool)
+                    const claimed = await redisClient.claimUser(sessionId);
+                    if (!claimed) continue; // Someone else claimed them
+
+                    console.log(`MATCH FOUND! Bid ${bid.maxPricePerSecond} (x402) >= Ask ${session.priceFloor}`);
+                    await this.executeX402Match(bid.id, session);
+                    break; // Move to next bid
                 }
             }
 
@@ -117,10 +100,10 @@ export class MatchingEngine {
 
 
     /**
-     * Execute x402 order match (orders from orderStore, not Prisma)
+     * Execute x402 order match (orders from Redis, not Prisma)
      */
     private async executeX402Match(txHash: string, session: any) {
-        const order = orderStore.get(txHash);
+        const order = await redisClient.getOrder(txHash) as OrderRecord | null;
         if (!order) {
             console.error(`[x402 Match] Order not found: ${txHash}`);
             return;
@@ -136,24 +119,33 @@ export class MatchingEngine {
         if (order.quantity === 0) {
             order.status = 'in_progress';
         }
-        orderStore.set(txHash, order);
+
+        // Save updated order to Redis
+        await redisClient.setOrder(txHash, order);
+
+        // Update set tracking if status changed
+        if (order.status !== 'open') {
+            await redisClient.updateOrderStatus(txHash, order.status);
+        }
 
         console.log(`[x402] Order ${txHash.slice(0, 16)}... quantity now ${order.quantity}, status: ${order.status}`);
 
-        // 2. Mark session as consumed
-        await prisma.session.update({
-            where: { id: session.id },
-            data: { active: false }
-        });
+        // 2. Mark session as consumed (already removed from pool by claimUser)
+        session.active = false;
+        session.endedAt = Date.now();
+        await redisClient.setSession(session.id, session, 300); // Keep for 5 min for cleanup
+
+        // Clear user's active session tracker
+        await redisClient.client.del(`user:${session.userPubkey}:active_session`);
 
         // 3. Generate a match ID for this x402 match (for tracking)
         const matchId = `x402_match_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
 
         // 4. Publish events to WebSocket
-        if (redis.isOpen) {
+        if (redisClient.isOpen) {
             // A. Update Order Book (remove or decrement)
             if (order.quantity > 0) {
-                await redis.publish('marketplace_events', JSON.stringify({
+                await redisClient.client.publish('marketplace_events', JSON.stringify({
                     type: 'BID_UPDATED',
                     payload: {
                         bidId: txHash,
@@ -161,20 +153,20 @@ export class MatchingEngine {
                     }
                 }));
             } else {
-                await redis.publish('marketplace_events', JSON.stringify({
+                await redisClient.client.publish('marketplace_events', JSON.stringify({
                     type: 'BID_FILLED',
                     payload: { bidId: txHash }
                 }));
             }
 
             // B. Remove Ask (It's taken)
-            await redis.publish('marketplace_events', JSON.stringify({
+            await redisClient.client.publish('marketplace_events', JSON.stringify({
                 type: 'ASK_MATCHED',
                 payload: { askId: session.id }
             }));
 
             // C. Notify Users - MATCH_CREATED triggers MATCH_FOUND in WebSocketManager
-            await redis.publish('marketplace_events', JSON.stringify({
+            await redisClient.client.publish('marketplace_events', JSON.stringify({
                 type: 'MATCH_CREATED',
                 sessionId: session.id,
                 matchId: matchId,
@@ -197,8 +189,6 @@ export class MatchingEngine {
         }
 
         // Mark user as seen for this campaign (uniqueness)
-        if (redis.isOpen) {
-            await redis.sAdd(`campaign:${txHash}:users`, session.userPubkey);
-        }
+        await redisClient.markUserSeenCampaign(txHash, session.userPubkey);
     }
 }

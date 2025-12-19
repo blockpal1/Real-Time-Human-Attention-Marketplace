@@ -1,6 +1,5 @@
 import { Router } from 'express';
-import { orderStore, OrderRecord } from '../middleware/x402OrderBook';
-import { redis } from '../utils/redis';
+import { redisClient } from '../utils/redis';
 
 const router = Router();
 
@@ -8,36 +7,46 @@ const router = Router();
  * GET /v1/orderbook
  * Returns all open orders for the frontend Order Book UI
  */
-router.get('/orderbook', (req, res) => {
-    const openOrders: Array<{
-        tx_hash: string;
-        duration: number;
-        bid_per_second: number;
-        total_escrow: number;
-        quantity: number;
-        created_at: number;
-    }> = [];
+router.get('/orderbook', async (req, res) => {
+    try {
+        const openOrders: Array<{
+            tx_hash: string;
+            duration: number;
+            bid_per_second: number;
+            total_escrow: number;
+            quantity: number;
+            created_at: number;
+        }> = [];
 
-    orderStore.forEach((order, txHash) => {
-        if (order.status === 'open') {
-            openOrders.push({
-                tx_hash: txHash,
-                duration: order.duration,
-                bid_per_second: order.bid,
-                total_escrow: order.total_escrow,
-                quantity: order.quantity,
-                created_at: order.created_at
-            });
+        if (redisClient.isOpen) {
+            const openOrderIds = await redisClient.getOpenOrders();
+
+            for (const txHash of openOrderIds) {
+                const order = await redisClient.getOrder(txHash) as any;
+                if (order && order.status === 'open') {
+                    openOrders.push({
+                        tx_hash: txHash,
+                        duration: order.duration,
+                        bid_per_second: order.bid,
+                        total_escrow: order.total_escrow,
+                        quantity: order.quantity,
+                        created_at: order.created_at
+                    });
+                }
+            }
         }
-    });
 
-    // Sort by bid (highest first) - best bids at top
-    openOrders.sort((a, b) => b.bid_per_second - a.bid_per_second);
+        // Sort by bid (highest first)
+        openOrders.sort((a, b) => b.bid_per_second - a.bid_per_second);
 
-    res.json({
-        count: openOrders.length,
-        orders: openOrders
-    });
+        res.json({
+            count: openOrders.length,
+            orders: openOrders
+        });
+    } catch (error) {
+        console.error('Orderbook Error:', error);
+        res.status(500).json({ error: 'Failed to fetch order book' });
+    }
 });
 
 /**
@@ -47,7 +56,7 @@ router.get('/orderbook', (req, res) => {
 router.post('/orders/:tx_hash/fill', async (req, res) => {
     const { tx_hash } = req.params;
 
-    const order = orderStore.get(tx_hash);
+    const order = await redisClient.getOrder(tx_hash) as any;
 
     if (!order) {
         return res.status(404).json({
@@ -66,11 +75,12 @@ router.post('/orders/:tx_hash/fill', async (req, res) => {
 
     // Update status to in_progress
     order.status = 'in_progress';
-    orderStore.set(tx_hash, order);
+    await redisClient.setOrder(tx_hash, order);
+    await redisClient.updateOrderStatus(tx_hash, 'in_progress');
 
     // Broadcast to WebSocket clients
-    if (redis.isOpen) {
-        await redis.publish('marketplace_events', JSON.stringify({
+    if (redisClient.isOpen) {
+        await redisClient.client.publish('marketplace_events', JSON.stringify({
             type: 'BID_FILLED',
             payload: { bidId: tx_hash }
         }));
@@ -101,16 +111,13 @@ router.post('/orders/:tx_hash/complete', async (req, res) => {
     const { tx_hash } = req.params;
     const { answer, actual_duration, session_id } = req.body;
 
-    const order = orderStore.get(tx_hash);
+    const order = await redisClient.getOrder(tx_hash) as any;
 
     if (!order) {
-        return res.status(404).json({
-            error: 'order_not_found',
-            message: 'No order found with this transaction hash'
-        });
+        return res.status(404).json({ error: 'Order not found' });
     }
 
-    // Allow completion for 'in_progress' or 'open' (MatchingEngine may not have updated status yet)
+    // Allow completion for 'in_progress' or 'open'
     if (order.status !== 'in_progress' && order.status !== 'open') {
         return res.status(400).json({
             error: 'invalid_status',
@@ -119,16 +126,15 @@ router.post('/orders/:tx_hash/complete', async (req, res) => {
         });
     }
 
-    // Calculate earnings for this response
+    // Calculate earnings
     const duration = actual_duration || order.duration;
     const earnedAmount = order.bid * duration;
 
-    // Initialize results array if needed
+    // Store result
     if (!Array.isArray(order.result)) {
         order.result = [];
     }
 
-    // Append this response to results
     const responseEntry = {
         answer: answer || null,
         actual_duration: duration,
@@ -138,66 +144,25 @@ router.post('/orders/:tx_hash/complete', async (req, res) => {
     };
     order.result.push(responseEntry);
 
-    // Track how many have been completed
-    const completedCount = order.result.length;
-    const originalQuantity = order.quantity + completedCount; // quantity decrements on match
+    // Save to Redis
+    await redisClient.setOrder(tx_hash, order);
 
-    // Update status: 'completed' only when all fills are done
-    if (order.quantity === 0) {
-        order.status = 'completed';
-    }
-    orderStore.set(tx_hash, order);
+    console.log(`[Market] Order result recorded: ${tx_hash.slice(0, 16)}...`);
 
-    // Broadcast completion event
-    if (redis.isOpen) {
-        await redis.publish('marketplace_events', JSON.stringify({
-            type: 'ORDER_RESPONSE',
+    // Broadcast result
+    if (redisClient.isOpen) {
+        await redisClient.client.publish('marketplace_events', JSON.stringify({
+            type: 'ORDER_RESULT',
             payload: {
                 tx_hash,
-                answer: answer || null,
-                duration,
-                earned_amount: earnedAmount,
-                response_count: completedCount,
-                remaining: order.quantity
+                result: responseEntry
             }
         }));
-        console.log(`[Market] Response ${completedCount} for ${tx_hash.slice(0, 16)}... (${order.quantity} remaining)`);
     }
 
     res.json({
         success: true,
-        tx_hash,
-        status: order.status,
-        response_count: completedCount,
-        remaining: order.quantity,
-        this_response: responseEntry
-    });
-});
-
-/**
- * GET /v1/orders/:tx_hash
- * Get order status by transaction hash
- */
-router.get('/orders/:tx_hash', (req, res) => {
-    const { tx_hash } = req.params;
-
-    const order = orderStore.get(tx_hash);
-
-    if (!order) {
-        return res.status(404).json({
-            error: 'order_not_found',
-            message: 'No order found with this transaction hash'
-        });
-    }
-
-    res.json({
-        status: order.status,
-        created_at: order.created_at,
-        duration: order.duration,
-        quantity: order.quantity,
-        total_escrow: order.total_escrow,
-        referrer: order.referrer,
-        result: order.result
+        saved_result: responseEntry
     });
 });
 
