@@ -266,6 +266,14 @@ router.get('/campaigns/:tx_hash/results', async (req, res) => {
             });
         }
 
+        // Security Check: Require read_key to access paid results
+        if (req.query.key !== order.read_key) {
+            return res.status(401).json({
+                error: 'unauthorized',
+                message: 'Invalid or missing read_key. Use ?key=YOUR_READ_KEY'
+            });
+        }
+
         // Parse results array (may be stored as string or array)
         let results: any[] = [];
         if (order.result) {

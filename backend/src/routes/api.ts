@@ -70,7 +70,10 @@ router.post('/verify', x402OrderBook, (req, res) => {
             total_escrow: order.total_escrow,
             tx_hash: order.tx_hash,
             referrer: order.referrer || null
-        }
+        },
+        // Phase 2: Secure keys for results access and webhooks
+        read_key: order.read_key,
+        webhook_secret: order.webhook_secret
     });
 });
 

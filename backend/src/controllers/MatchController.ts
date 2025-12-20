@@ -1,4 +1,6 @@
 import { Request, Response } from 'express';
+import crypto from 'crypto';
+import axios from 'axios';
 import { redis, redisClient } from '../utils/redis';
 import { configService } from '../services/ConfigService';
 
@@ -124,6 +126,14 @@ export const completeMatch = async (req: Request, res: Response) => {
                         });
                     }
                 }
+
+                // 3b. Trigger webhook (fire-and-forget) if callback_url is set
+                triggerWebhook(order, {
+                    answer: answer || null,
+                    duration: actualDuration,
+                    exited_early: exitedEarly || false,
+                    completed_at: new Date().toISOString()
+                });
             }
 
             // 4. Publish completion event
@@ -279,3 +289,40 @@ export const dismissMatch = async (req: Request, res: Response) => {
         res.status(500).json({ error: 'Failed to dismiss match' });
     }
 };
+
+/**
+ * Fire-and-forget webhook with HMAC-SHA256 signature
+ * Agents verify: crypto.createHmac('sha256', webhook_secret)
+ *                      .update(JSON.stringify(body)).digest('hex') === signature
+ */
+function triggerWebhook(order: any, responseData: any) {
+    if (!order.callback_url) return;
+
+    const payload = {
+        event: 'response_submitted',
+        campaign_id: order.tx_hash,
+        validation_question: order.validation_question,
+        timestamp: new Date().toISOString(),
+        data: responseData
+    };
+
+    // HMAC-SHA256 signature using the campaign's webhook_secret
+    const payloadString = JSON.stringify(payload);
+    const signature = crypto
+        .createHmac('sha256', order.webhook_secret)
+        .update(payloadString)
+        .digest('hex');
+
+    // Fire and forget (non-blocking, 5s timeout)
+    axios.post(order.callback_url, payload, {
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Attentium-Signature': `sha256=${signature}`
+        },
+        timeout: 5000
+    }).then(() => {
+        console.log(`[Webhook] Successfully sent to ${order.callback_url}`);
+    }).catch(err => {
+        console.error('[Webhook] Failed:', order.callback_url, err.message);
+    });
+}

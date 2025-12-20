@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { Connection, PublicKey } from '@solana/web3.js';
+import crypto from 'crypto';
 import { redisClient } from '../utils/redis';
 import { moderationService } from '../services/ContentModerationService';
 import { configService } from '../services/ConfigService';
@@ -30,6 +31,10 @@ export interface OrderRecord {
     created_at: number;
     expires_at: number;
     result: any | null;
+    // Phase 2: Secured Pull + Webhooks
+    read_key: string;           // Auth key for GET /campaigns/:tx_hash/results
+    webhook_secret: string;     // HMAC signing key for webhook payloads
+    callback_url: string | null; // Optional webhook URL
 }
 
 // Cleanup Job: Runs every 60s to expire old open orders
@@ -84,7 +89,7 @@ export async function x402Middleware(req: Request, res: Response, next: NextFunc
         const adminKeyHeader = req.headers['x-admin-key'];
 
         if (ADMIN_KEY && adminKeyHeader === ADMIN_KEY) {
-            const { duration, quantity = 1, bid_per_second, content_url, validation_question } = req.body;
+            const { duration, quantity = 1, bid_per_second, content_url, validation_question, callback_url } = req.body;
 
             if (!duration || !bid_per_second) {
                 return res.status(400).json({ error: "Missing required fields: duration, bid_per_second" });
@@ -111,6 +116,10 @@ export async function x402Middleware(req: Request, res: Response, next: NextFunc
             const builderCodeHeader = req.headers['x-builder-code'];
             const builderCode = typeof builderCodeHeader === 'string' ? builderCodeHeader : null;
 
+            // Generate secure keys for webhook authentication
+            const read_key = crypto.randomBytes(16).toString('hex');
+            const webhook_secret = crypto.randomBytes(32).toString('hex');
+
             const orderRecord: OrderRecord = {
                 duration,
                 quantity,
@@ -125,7 +134,10 @@ export async function x402Middleware(req: Request, res: Response, next: NextFunc
                 status: 'open',
                 created_at: Date.now(),
                 expires_at: Date.now() + (10 * 60 * 1000), // 10 minutes TTL
-                result: null
+                result: null,
+                read_key,
+                webhook_secret,
+                callback_url: callback_url || null
             };
 
             req.order = orderRecord;
@@ -157,7 +169,7 @@ export async function x402Middleware(req: Request, res: Response, next: NextFunc
         // ========================================
 
         // 1. EXTRACT ORDER DETAILS
-        const { duration, quantity = 1, bid_per_second, content_url, validation_question } = req.body;
+        const { duration, quantity = 1, bid_per_second, content_url, validation_question, callback_url } = req.body;
 
         if (!duration || !bid_per_second) {
             return res.status(400).json({ error: "Missing duration or bid_per_second" });
@@ -307,6 +319,10 @@ export async function x402Middleware(req: Request, res: Response, next: NextFunc
             const builderCodeHeader = req.headers['x-builder-code'];
             const builderCode = typeof builderCodeHeader === 'string' ? builderCodeHeader : null;
 
+            // Generate secure keys for webhook authentication
+            const read_key = crypto.randomBytes(16).toString('hex');
+            const webhook_secret = crypto.randomBytes(32).toString('hex');
+
             // ATTACH DATA TO REQUEST
             const orderRecord: OrderRecord = {
                 duration,
@@ -322,7 +338,10 @@ export async function x402Middleware(req: Request, res: Response, next: NextFunc
                 status: orderStatus,
                 created_at: Date.now(),
                 expires_at: Date.now() + (10 * 60 * 1000), // 10 minutes TTL
-                result: null
+                result: null,
+                read_key,
+                webhook_secret,
+                callback_url: callback_url || null
             };
 
             req.order = orderRecord;

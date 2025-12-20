@@ -42,7 +42,8 @@ Request verification of an asset (image/text/video) by human attention.
   "quantity": 5,                     // Number of human verifiers
   "bid_per_second": 0.05,            // GROSS Offer in USDC (Agent Pays)
   "validation_question": "What color is shown?",  // REQUIRED
-  "content_url": "https://example.com/image.png"  // Optional
+  "content_url": "https://example.com/image.png",  // Optional
+  "callback_url": "https://your-agent.com/webhook" // Optional webhook
 }
 ```
 
@@ -68,15 +69,58 @@ Request verification of an asset (image/text/video) by human attention.
     "duration": 30,
     "quantity": 5,
     "bid_per_second": 0.0425,        // NET Amount (85% of Gross)
-    "gross_bid": 0.05,               // GROSS Amount
-    "total_escrow": 7.5,
     "tx_hash": "5abc...",
-    "builder_code": "MY_AGENT_V1"
+    "referrer": null
+  },
+  "read_key": "a1b2c3d4...",         // Key for GET /campaigns/:tx_hash/results
+  "webhook_secret": "x9y8z7..."      // Secret for verifying webhook signatures
+}
+```
+
+> **Save `read_key` and `webhook_secret`!** These are only returned once.
+
+---
+
+### `GET /v1/campaigns/:tx_hash/results`
+
+Retrieve human responses for your campaign. **Requires `read_key`.**
+
+**Request:**
+```
+GET /v1/campaigns/admin_123abc.../results?key=YOUR_READ_KEY
+```
+
+**Response (200):**
+```json
+{
+  "campaign_id": "admin_123abc...",
+  "validation_question": "What color is shown?",
+  "status": "in_progress",
+  "target_quantity": 5,
+  "completed_quantity": 3,
+  "results": [
+    {
+      "response_id": "resp_1",
+      "answer": "Blue",
+      "duration_seconds": 28,
+      "completed_at": "2024-12-20T09:30:00Z"
+    }
+  ],
+  "aggregates": {
+    "avg_duration_seconds": 26.4,
+    "completion_rate": 0.6
   }
 }
 ```
 
----
+**Response (401 - Unauthorized):**
+```json
+{
+  "error": "unauthorized",
+  "message": "Invalid or missing read_key"
+}
+```
+
 
 ## Headers
 
@@ -102,6 +146,67 @@ curl -X POST http://api.attentium.io/v1/verify \
 *Note: If no code is provided, the 3% share reverts to the Protocol Treasury.*
 
 ---
+
+## Webhooks
+
+Receive real-time notifications when humans complete your verification tasks.
+
+### Setup
+
+Include `callback_url` in your `/v1/verify` request:
+```json
+{
+  "callback_url": "https://your-agent.com/attentium-webhook",
+  ...
+}
+```
+
+### Webhook Payload
+
+```json
+{
+  "event": "response_submitted",
+  "campaign_id": "admin_123abc...",
+  "validation_question": "What color is shown?",
+  "timestamp": "2024-12-20T09:30:00Z",
+  "data": {
+    "answer": "Blue",
+    "duration": 28,
+    "exited_early": false,
+    "completed_at": "2024-12-20T09:30:00Z"
+  }
+}
+```
+
+### Signature Verification
+
+Webhooks include an `X-Attentium-Signature` header for authentication:
+
+```
+X-Attentium-Signature: sha256=a1b2c3d4e5f6...
+```
+
+**Verify in your handler:**
+```javascript
+const crypto = require('crypto');
+
+function verifyWebhook(payload, signature, secret) {
+  const expected = 'sha256=' + crypto
+    .createHmac('sha256', secret)
+    .update(JSON.stringify(payload))
+    .digest('hex');
+  return signature === expected;
+}
+
+// Usage:
+const isValid = verifyWebhook(
+  req.body,
+  req.headers['x-attentium-signature'],
+  YOUR_WEBHOOK_SECRET
+);
+if (!isValid) return res.status(401).send('Invalid signature');
+```
+
 
 ## Escrow Formula
 
