@@ -1,11 +1,21 @@
 {
+    "$schema": "https://mintlify.com/schema.json",
     "name": "Attentium Public",
+    "logo": {
+        "light": "/logo/light.svg",
+        "dark": "/logo/dark.svg"
+    },
+    "favicon": "/favicon.png",
+    "colors": {
+        "primary": "#0D9488",
+        "light": "#14B8A6",
+        "dark": "#0F766E"
+    },
     "navigation": [
         {
-            "group": "Getting Started",
+            "group": "Get Started",
             "pages": [
-                "docs/introduction",
-                "docs/getting-started"
+                "introduction"
             ]
         }
     ]
