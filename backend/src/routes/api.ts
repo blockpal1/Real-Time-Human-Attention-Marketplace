@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { getStatus } from '../controllers/StatusController';
 import { createChallenge } from '../controllers/AttestationController';
 import { startSession, getActiveSessions, cancelSession, updateSession, acceptHighestBid } from '../controllers/UserController';
-import { createBid, getActiveBids } from '../controllers/AgentController';
+import { getActiveBids } from '../controllers/AgentController';
 import { completeMatch, submitValidationResult, dismissMatch } from '../controllers/MatchController';
 import { authenticateAdmin } from '../middleware/adminAuth';
 import {
@@ -29,9 +29,7 @@ router.delete('/users/session/cancel', cancelSession);
 router.patch('/users/session/update', updateSession);
 router.post('/users/session/accept-highest', acceptHighestBid);
 
-// === Agent API (x402 - no registration needed) ===
-// Create bid - works via admin panel or direct API
-router.post('/agents/bids', createBid);
+// Legacy POST /agents/bids removed - use POST /verify with x402 payment instead
 
 // Match Lifecycle Routes
 router.post('/matches/:matchId/complete', completeMatch);

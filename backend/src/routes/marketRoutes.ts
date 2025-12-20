@@ -248,4 +248,76 @@ router.post('/orders/:tx_hash/complete', async (req, res) => {
     });
 });
 
+/**
+ * GET /v1/campaigns/:tx_hash/results
+ * Agent retrieves all human responses for their campaign
+ * Returns the original validation question + all answers
+ */
+router.get('/campaigns/:tx_hash/results', async (req, res) => {
+    const { tx_hash } = req.params;
+
+    try {
+        const order = await redisClient.getOrder(tx_hash) as any;
+
+        if (!order) {
+            return res.status(404).json({
+                error: 'campaign_not_found',
+                message: 'No campaign found with this transaction hash'
+            });
+        }
+
+        // Parse results array (may be stored as string or array)
+        let results: any[] = [];
+        if (order.result) {
+            if (Array.isArray(order.result)) {
+                results = order.result;
+            } else if (typeof order.result === 'string') {
+                try {
+                    results = JSON.parse(order.result);
+                } catch {
+                    results = [order.result];
+                }
+            } else {
+                results = [order.result];
+            }
+        }
+
+        // Calculate aggregates
+        const completedCount = results.length;
+        const targetQuantity = order.quantity_original || order.quantity + completedCount;
+        const avgDuration = completedCount > 0
+            ? results.reduce((sum, r) => sum + (r.actual_duration || r.duration || 0), 0) / completedCount
+            : 0;
+
+        res.json({
+            campaign_id: tx_hash,
+            validation_question: order.validation_question || null,
+            content_url: order.content_url || null,
+            status: order.status,
+            target_quantity: targetQuantity,
+            completed_quantity: completedCount,
+            remaining_quantity: order.quantity || 0,
+            bid_per_second: order.bid,
+            duration_per_response: order.duration,
+            created_at: order.created_at,
+            results: results.map((r, idx) => ({
+                response_id: `resp_${idx + 1}`,
+                answer: r.answer || null,
+                duration_seconds: r.actual_duration || r.duration || order.duration,
+                completed_at: r.completed_at || null,
+                exited_early: r.exited_early || false
+            })),
+            aggregates: {
+                avg_duration_seconds: parseFloat(avgDuration.toFixed(1)),
+                completion_rate: targetQuantity > 0 ? parseFloat((completedCount / targetQuantity).toFixed(2)) : 0,
+                total_responses: completedCount
+            }
+        });
+
+    } catch (error) {
+        console.error('Get campaign results error:', error);
+        res.status(500).json({ error: 'Failed to fetch campaign results' });
+    }
+});
+
 export default router;
