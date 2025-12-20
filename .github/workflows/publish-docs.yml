@@ -3,7 +3,7 @@ name: Publish Mintlify Docs
 on:
   push:
     branches:
-      - main
+      - master
     paths:
       - "docs/**"
       - "mint.json"
