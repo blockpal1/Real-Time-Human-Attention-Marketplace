@@ -1,0 +1,12 @@
+{
+    "name": "Attentium Public",
+    "navigation": [
+        {
+            "group": "Getting Started",
+            "pages": [
+                "docs/introduction",
+                "docs/getting-started"
+            ]
+        }
+    ]
+}

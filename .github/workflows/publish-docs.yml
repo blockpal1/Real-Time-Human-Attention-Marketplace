@@ -1,0 +1,33 @@
+name: Publish Mintlify Docs
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "docs/**"
+      - "mint.json"
+
+jobs:
+  publish-docs:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout private repo
+        uses: actions/checkout@v4
+
+      - name: Push docs to public repo
+        run: |
+          rm -rf /tmp/docs-repo
+          git clone https://x-access-token:${{ secrets.DOCS_PUSH_TOKEN }}@github.com/blockpal1/Real-Time-Human-Attention-Marketplace /tmp/docs-repo
+
+          rm -rf /tmp/docs-repo/*
+          cp -R docs mint.json /tmp/docs-repo/
+
+          cd /tmp/docs-repo
+          git config user.name "docs-bot"
+          git config user.email "docs-bot@users.noreply.github.com"
+
+          git add .
+          git commit -m "Update docs from private repo" || echo "No changes"
+          git push
