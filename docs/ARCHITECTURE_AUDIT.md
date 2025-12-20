@@ -153,6 +153,6 @@ POST /v1/orders/:tx_hash/complete
 ### ✅ Phase 3: Launch Prep (COMPLETED)
 7. ~~Implement mainnet USDC validation (Option A: Agent pays gas)~~ ✅
 8. ~~Add order expiration job (10m TTL)~~ ✅
-9. Deploy SplitterProgram for referrer revenue (Deferred to post-launch)
+
 
 ---
