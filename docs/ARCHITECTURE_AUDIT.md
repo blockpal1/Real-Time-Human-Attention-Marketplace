@@ -156,23 +156,3 @@ POST /v1/orders/:tx_hash/complete
 9. Deploy SplitterProgram for referrer revenue (Deferred to post-launch)
 
 ---
-
-## Files to Delete/Archive
-
-```
-❌ controllers/AgentRegistrationController.ts (or archive)
-⚠️ controllers/AgentController.ts:getActiveBids (deprecated, uses Prisma)
-⚠️ services/WebhookService.ts (keep for future, unused by x402)
-⚠️ middleware/auth.ts (agent parts only)
-```
-
-## Files Updated (Matches x402 Unification)
-
-```
-✓ services/MatchingEngine.ts - Unified bid pool + executeX402Match
-✓ controllers/AgentController.ts - createBid writes to orderStore + expires_at
-✓ controllers/AdminController.ts - x402 flagged content endpoints
-✓ middleware/x402OrderBook.ts - Admin bypass, USDC validation, Cleanup job
-✓ routes/api.ts - Added x402 admin routes
-✓ server.ts - Added expiration job
-```
