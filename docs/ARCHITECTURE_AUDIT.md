@@ -150,9 +150,3 @@ POST /v1/orders/:tx_hash/complete
 5. ~~Store result in `orderStore` with answer/duration~~ ✅
 6. ~~Expose result in `GET /orders/:tx_hash` for agent polling~~ ✅
 
-### ✅ Phase 3: Launch Prep (COMPLETED)
-
-
-
-
----
