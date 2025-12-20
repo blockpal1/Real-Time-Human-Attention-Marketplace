@@ -14,6 +14,15 @@ Access is purchased atomically via **USDC**.
 
 ---
 
+## Base URL
+
+| Environment | Base URL |
+|-------------|----------|
+| **Production** | `https://api.attentium.ai` |
+| **Local** | `http://localhost:3000` |
+
+---
+
 ## Financial Model (The Spread)
 
 The protocol applies a **15% Take Rate** at the moment of order creation.

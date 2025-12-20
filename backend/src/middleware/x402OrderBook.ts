@@ -306,6 +306,16 @@ export async function x402Middleware(req: Request, res: Response, next: NextFunc
 
         if (isValidPayment) {
             // ========================================
+            // IDEMPOTENCY CHECK: Return existing order if tx already processed
+            // ========================================
+            const existingOrder = await redisClient.getOrder(txSignature) as any;
+            if (existingOrder) {
+                console.log(`[x402] Idempotent: Returning existing order for ${txSignature}`);
+                req.order = existingOrder;
+                return next();
+            }
+
+            // ========================================
             // CONTENT MODERATION CHECK
             // ========================================
             const moderationResult = await moderationService.moderateContentInline(content_url, validation_question);
