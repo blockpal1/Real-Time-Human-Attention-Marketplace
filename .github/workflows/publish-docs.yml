@@ -19,7 +19,8 @@ jobs:
       - name: Push docs to public repo
         run: |
           rm -rf /tmp/docs-repo
-          git clone https://x-access-token:${{ secrets.DOCS_PUSH_TOKEN }}@github.com/blockpal1/Real-Time-Human-Attention-Marketplace /tmp/docs-repo
+          git clone https://x-access-token:${{ secrets.DOCS_PUSH_TOKEN }}@github.com/blockpal1/Real-Time-Human-Attention-Marketplace.git /tmp/docs-repo
+
 
           rm -rf /tmp/docs-repo/*
           cp -R docs mint.json /tmp/docs-repo/
