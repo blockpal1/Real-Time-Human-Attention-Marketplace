@@ -1,9 +1,10 @@
 name: Publish Docs
 
 on:
+  workflow_dispatch: # Allows manual trigger button
   push:
     branches:
-      - master
+      - master  # Make sure this matches your PRIVATE repo branch name
     paths:
       - 'docs/**'
       - 'mint.json'
@@ -12,31 +13,37 @@ jobs:
   publish-docs:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Checkout private repository
         uses: actions/checkout@v4
 
-      - name: Push docs to public repo
+      - name: Push to public repository
         run: |
-          # 1. Setup fresh clone
-          rm -rf /tmp/docs-repo
-          git clone https://x-access-token:${{ secrets.DOCS_PUSH_TOKEN }}@github.com/blockpal1/Attentium-Public.git /tmp/docs-repo
-
-          # 2. Clear old public docs (Leave .git folder alone)
-          rm -rf /tmp/docs-repo/*
-
-          # 3. FLATTEN COPY: Take contents of docs/ and put in root
-          # This ensures 'introduction.mdx' ends up at the root level
-          cp -R docs/* /tmp/docs-repo/
+          # 1. Setup variables
+          PUBLIC_REPO="https://x-access-token:${{ secrets.DOCS_PUSH_TOKEN }}@github.com/blockpal1/Attentium-Public.git"
           
-          # 4. Copy config
-          cp mint.json /tmp/docs-repo/
-
-          # 5. Commit & Push
+          # 2. Clone the public repo into a temp folder
+          rm -rf /tmp/docs-repo
+          git clone $PUBLIC_REPO /tmp/docs-repo
+          
+          # 3. Clean destination (remove everything except .git)
           cd /tmp/docs-repo
-          git config user.name "docs-bot"
-          git config user.email "docs-bot@users.noreply.github.com"
-
+          find . -maxdepth 1 ! -name '.git' ! -name '.' -exec rm -rf {} +
+          
+          # 4. Copy files from Private Repo (root) to Public Repo (root)
+          # We go back to the workspace root ($GITHUB_WORKSPACE) to grab files
+          cp -R $GITHUB_WORKSPACE/docs/* .
+          cp $GITHUB_WORKSPACE/mint.json .
+          
+          # 5. Config Git User
+          git config user.name "Attentium Bot"
+          git config user.email "bot@attentium.xyz"
+          
+          # 6. FORCE Update the Remote URL (Fixes Error 128)
+          git remote set-url origin $PUBLIC_REPO
+          
+          # 7. Commit and Push
           git add .
-          # The '|| echo' prevents failure if there's nothing new to commit
-          git commit -m "Update docs from private repo" || echo "No changes to commit"
-          git push
+          git commit -m "Sync docs from private repo" || echo "No changes to commit"
+          
+          # Explicitly push to the 'main' branch
+          git push origin HEAD:main
