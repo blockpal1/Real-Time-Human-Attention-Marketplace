@@ -19,7 +19,7 @@ jobs:
       - name: Push to public repository
         run: |
           # 1. Setup variables
-          PUBLIC_REPO="https://x-access-token:${{ secrets.DOCS_PUSH_TOKEN }}@github.com/blockpal1/Attentium-Public.git"
+          PUBLIC_REPO="https://x-access-token:${{ secrets.DOCS_PUSH_TOKEN }}@github.com/attentium/Attentium-Public.git"
           
           # 2. Clone the public repo into a temp folder
           rm -rf /tmp/docs-repo
