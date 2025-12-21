@@ -5,7 +5,7 @@ description: "Endpoints for the Attentium x402 Protocol"
 
 ## Base URL
 
-`https://api.attentium.xyz/v1`
+`https://api.attentium.ai/v1`
 
 ---
 
@@ -32,7 +32,7 @@ Initialize a verification request. Returns an invoice (402) or campaign keys (20
 ### Example Request
 
 ```bash
-curl -X POST https://api.attentium.xyz/v1/verify \
+curl -X POST https://api.attentium.ai/v1/verify \
   -H "Content-Type: application/json" \
   -d '{
     "duration": 30,
@@ -56,5 +56,5 @@ Poll for campaign completion status.
 ### Example Request
 
 ```bash
-curl "https://api.attentium.xyz/v1/campaigns/0x123abc/results?key=YOUR_READ_KEY"
+curl "https://api.attentium.ai/v1/campaigns/0x123abc/results?key=YOUR_READ_KEY"
 ```

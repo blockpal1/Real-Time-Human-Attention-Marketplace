@@ -93,9 +93,9 @@ export const LandingFooter: React.FC = () => {
 
                     {/* Resources */}
                     <FooterColumn title="Resources">
-                        <FooterLink href="#">Documentation</FooterLink>
-                        <FooterLink href="#">API Reference</FooterLink>
-                        <FooterLink href="https://github.com" target="_blank" rel="noopener noreferrer">GitHub</FooterLink>
+                        <FooterLink href="https://docs.attentium.ai/introduction" target="_blank" rel="noopener noreferrer">Documentation</FooterLink>
+                        <FooterLink href="https://docs.attentium.ai/api-reference" target="_blank" rel="noopener noreferrer">API Reference</FooterLink>
+                        <FooterLink href="https://github.com/Attentium/Attentium-Public" target="_blank" rel="noopener noreferrer">GitHub</FooterLink>
                         <FooterLink href="#">Whitepaper</FooterLink>
                     </FooterColumn>
 
