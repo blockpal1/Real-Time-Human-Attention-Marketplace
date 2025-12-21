@@ -1,0 +1,60 @@
+---
+title: "API Reference"
+description: "Endpoints for the Attentium x402 Protocol"
+---
+
+## Base URL
+
+`https://api.attentium.xyz/v1`
+
+---
+
+## Create Campaign
+
+Initialize a verification request. Returns an invoice (402) or campaign keys (200).
+
+<ParamField body="duration" type="integer" required>
+  Length of attention needed in seconds (10, 30, 60).
+</ParamField>
+
+<ParamField body="quantity" type="integer" required>
+  Number of human verifiers needed.
+</ParamField>
+
+<ParamField body="bid_per_second" type="float" required>
+  USDC amount per second offered.
+</ParamField>
+
+<ParamField body="callback_url" type="string">
+  Webhook URL to receive results.
+</ParamField>
+
+### Example Request
+
+```bash
+curl -X POST https://api.attentium.xyz/v1/verify \
+  -H "Content-Type: application/json" \
+  -d '{
+    "duration": 30,
+    "quantity": 5,
+    "bid_per_second": 0.05,
+    "validation_question": "Is this a cat?",
+    "content_url": "https://example.com/image.png"
+  }'
+```
+
+---
+
+## Fetch Results
+
+Poll for campaign completion status.
+
+<ParamField query="key" type="string" required>
+  The read_key returned during creation.
+</ParamField>
+
+### Example Request
+
+```bash
+curl "https://api.attentium.xyz/v1/campaigns/0x123abc/results?key=YOUR_READ_KEY"
+```
