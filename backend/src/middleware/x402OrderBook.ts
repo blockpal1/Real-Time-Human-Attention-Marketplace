@@ -13,8 +13,17 @@ const IS_DEVNET = RPC_URL.includes('devnet');
 
 const connection = new Connection(RPC_URL, 'confirmed');
 
-// Admin Bypass Configuration - fallback to dev key if not set
-const ADMIN_KEY = process.env.ADMIN_SECRET || 'dev-admin-secret';
+// Admin Bypass Configuration - NO fallback in production
+const ADMIN_KEY = process.env.ADMIN_SECRET;
+if (!ADMIN_KEY && process.env.NODE_ENV === 'production') {
+    throw new Error('FATAL: ADMIN_SECRET environment variable required in production');
+}
+
+// Memo Program for payment binding
+const MEMO_PROGRAM = 'MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr';
+
+// Devnet bypass requires explicit opt-in
+const ALLOW_DEVNET_BYPASS = process.env.ALLOW_DEVNET_BYPASS === 'true';
 
 export interface OrderRecord {
     duration: number;
@@ -229,6 +238,41 @@ export async function x402Middleware(req: Request, res: Response, next: NextFunc
             });
         }
 
+        // Ensure transaction succeeded (not failed)
+        if (txStatus.meta?.err) {
+            return res.status(400).json({ error: "transaction_failed", message: "Transaction execution failed on-chain" });
+        }
+
+        // ========================================
+        // MEMO VALIDATION: Bind payment to campaign_id
+        // ========================================
+        const campaignId = req.headers['x-campaign-id'];
+        if (!campaignId || typeof campaignId !== 'string') {
+            return res.status(400).json({ error: "missing_campaign_id", message: "X-Campaign-Id header required" });
+        }
+
+        // Parse memo from transaction
+        const accountKeys = txStatus.transaction.message.getAccountKeys();
+        const compiledInstructions = txStatus.transaction.message.compiledInstructions;
+        const memoInstruction = compiledInstructions.find(
+            (ix: any) => accountKeys.get(ix.programIdIndex)?.toBase58() === MEMO_PROGRAM
+        );
+
+        if (!memoInstruction) {
+            return res.status(400).json({ error: "missing_memo", message: "Transaction must include campaign_id in memo" });
+        }
+
+        const memoData = Buffer.from(memoInstruction.data).toString('utf8');
+        if (memoData !== campaignId) {
+            return res.status(400).json({
+                error: "memo_mismatch",
+                message: "Transaction memo does not match X-Campaign-Id header",
+                expected: campaignId,
+                received: memoData
+            });
+        }
+        console.log(`[x402] Memo validated: ${campaignId.slice(0, 8)}...`);
+
         // --- VALIDATION LOGIC ---
         let isValidPayment = false;
 
@@ -238,14 +282,16 @@ export async function x402Middleware(req: Request, res: Response, next: NextFunc
             return res.status(403).json({ error: "expired_transaction" });
         }
 
-        // Check 2: Devnet Bypass (Native SOL)
-        if (IS_DEVNET) {
-            const accountKeys = txStatus.transaction.message.getAccountKeys();
-            const nativeTransfer = accountKeys.staticAccountKeys.some(k => k.equals(TREASURY));
+        // Check 2: Devnet Bypass (Native SOL) - REQUIRES EXPLICIT OPT-IN
+        if (IS_DEVNET && ALLOW_DEVNET_BYPASS) {
+            const devnetAccountKeys = txStatus.transaction.message.getAccountKeys();
+            const nativeTransfer = devnetAccountKeys.staticAccountKeys.some(k => k.equals(TREASURY));
             if (nativeTransfer) {
-                console.log('[x402] Devnet bypass: Accepted native SOL transfer');
+                console.log('[x402] Devnet bypass: Accepted native SOL transfer (ALLOW_DEVNET_BYPASS=true)');
                 isValidPayment = true;
             }
+        } else if (IS_DEVNET && !ALLOW_DEVNET_BYPASS) {
+            console.warn('[x402] Devnet RPC detected but ALLOW_DEVNET_BYPASS not set - requiring USDC');
         }
 
         // Check 3: Mainnet Strict (USDC Token Transfer)

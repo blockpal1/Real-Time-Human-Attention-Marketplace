@@ -29,6 +29,19 @@ Initialize a verification request. Returns an invoice (402) or campaign keys (20
   Webhook URL to receive results.
 </ParamField>
 
+### Required Headers (with payment)
+
+<ParamField header="X-Solana-Tx-Signature" type="string" required>
+  The Solana transaction signature proving payment.
+</ParamField>
+
+<ParamField header="X-Campaign-Id" type="string" required>
+  UUID linking the payment to this request. **Must match the memo in your Solana transaction.**
+</ParamField>
+
+> [!IMPORTANT]
+> Your Solana transaction MUST include a memo instruction containing the `X-Campaign-Id` value. This prevents payment replay attacks.
+
 ### Example Request
 
 ```bash

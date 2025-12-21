@@ -17,6 +17,7 @@ Requirements:
 import argparse
 import json
 import sys
+import uuid
 from typing import Optional
 
 import requests
@@ -46,6 +47,30 @@ ALLOWED_DURATIONS = [10, 30, 60]
 def calculate_total(duration: int, bid_per_second: float) -> float:
     """Calculate total escrow required."""
     return duration * bid_per_second
+
+
+# Memo Program for payment binding
+MEMO_PROGRAM_ID = "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"
+
+
+def generate_campaign_id() -> str:
+    """Generate unique campaign identifier for memo binding."""
+    return str(uuid.uuid4())
+
+
+def create_memo_instruction(campaign_id: str):
+    """
+    Create Memo Program instruction with campaign_id.
+    Returns a Solders Instruction object.
+    """
+    if not SOLANA_AVAILABLE:
+        raise RuntimeError("Solana libraries not installed")
+    from solders.instruction import Instruction
+    return Instruction(
+        program_id=Pubkey.from_string(MEMO_PROGRAM_ID),
+        accounts=[],  # Memo program requires no accounts
+        data=campaign_id.encode('utf-8')
+    )
 
 
 def request_payment_invoice(
@@ -88,14 +113,18 @@ def submit_with_payment(
     duration: int,
     bid_per_second: float,
     tx_signature: str,
-    referrer: Optional[str] = None
+    campaign_id: str,
+    referrer: Optional[str] = None,
+    validation_question: Optional[str] = None,
+    content_url: Optional[str] = None
 ) -> dict:
     """
     Submit verification request with payment proof.
     """
     headers = {
         "Content-Type": "application/json",
-        "X-Solana-Tx-Signature": tx_signature
+        "X-Solana-Tx-Signature": tx_signature,
+        "X-Campaign-Id": campaign_id
     }
     
     if referrer:
@@ -103,7 +132,9 @@ def submit_with_payment(
     
     payload = {
         "duration": duration,
-        "bid_per_second": bid_per_second
+        "bid_per_second": bid_per_second,
+        "validation_question": validation_question or "Is this content appropriate?",
+        "content_url": content_url
     }
     
     response = requests.post(
@@ -119,10 +150,11 @@ def create_usdc_transfer(
     keypair_path: str,
     recipient: str,
     amount_usdc: float,
+    campaign_id: str,
     rpc_url: str = "https://api.mainnet-beta.solana.com"
 ) -> str:
     """
-    Create and send a USDC transfer transaction.
+    Create and send a USDC transfer transaction with memo.
     Returns the transaction signature.
     """
     if not SOLANA_AVAILABLE:
@@ -158,10 +190,13 @@ def create_usdc_transfer(
         )
     )
     
-    # Build and send transaction
+    # Create memo instruction for payment binding
+    memo_ix = create_memo_instruction(campaign_id)
+    
+    # Build and send transaction (transfer + memo)
     recent_blockhash = client.get_latest_blockhash().value.blockhash
     tx = Transaction.new_signed_with_payer(
-        [transfer_ix],
+        [transfer_ix, memo_ix],
         keypair.pubkey(),
         [keypair],
         recent_blockhash
@@ -256,9 +291,13 @@ def main():
         print(f"Referrer:        {args.referrer[:12]}...{args.referrer[-4:]}")
     print(f"{'='*50}\n")
     
+    # Generate unique campaign ID for memo binding
+    campaign_id = generate_campaign_id()
+    
     # Step 1: Get payment invoice
-    print("[1/3] Requesting payment invoice...")
+    print("[1/4] Requesting payment invoice...")
     invoice = request_payment_invoice(args.duration, args.bid, args.referrer)
+    print(f"   Campaign ID: {campaign_id}")
     
     print(f"\n📄 PAYMENT INVOICE")
     print(f"   Chain:     {invoice['payment']['chain']}")
@@ -289,24 +328,32 @@ def main():
             print("   Install with: pip install solana solders spl-token")
             sys.exit(1)
         
-        print(f"\n[2/3] Creating USDC transfer...")
+        print(f"\n[2/4] Creating USDC transfer with memo...")
         try:
             tx_signature = create_usdc_transfer(
                 args.keypair,
                 invoice['payment']['recipient'],
                 invoice['payment']['amount'],
+                campaign_id,
                 args.rpc
             )
             print(f"   ✅ Transaction sent: {tx_signature[:20]}...")
+            print(f"   📝 Memo: {campaign_id[:8]}...")
         except Exception as e:
             print(f"   ❌ Transaction failed: {e}")
             sys.exit(1)
     else:
-        print(f"\n[2/3] Using existing transaction: {tx_signature[:20]}...")
+        print(f"\n[2/4] Using existing transaction: {tx_signature[:20]}...")
+        print(f"       ⚠️  Make sure the transaction includes memo: {campaign_id}")
     
-    # Step 3: Submit with payment proof
-    print(f"\n[3/3] Submitting verification with payment proof...")
-    result = submit_with_payment(args.duration, args.bid, tx_signature, args.referrer)
+    # Wait for confirmation
+    print(f"\n[3/4] Waiting for transaction confirmation...")
+    import time
+    time.sleep(3)  # Brief wait for finality
+    
+    # Step 4: Submit with payment proof
+    print(f"\n[4/4] Submitting verification with payment proof...")
+    result = submit_with_payment(args.duration, args.bid, tx_signature, campaign_id, args.referrer)
     
     if result.get('success'):
         print(f"\n{'='*50}")
