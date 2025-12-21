@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import axios from 'axios';
 import { redis, redisClient } from '../utils/redis';
 import { configService } from '../services/ConfigService';
+import { validateResponseWithAI, updateSignalQuality } from '../services/TrustService';
 
 export const completeMatch = async (req: Request, res: Response) => {
     const { matchId } = req.params;
@@ -69,6 +70,32 @@ export const completeMatch = async (req: Request, res: Response) => {
                     protocolPay = grossAmount * fees.protocol;        // 12%
 
                     if (userWallet && grossAmount > 0) {
+                        // ========================================
+                        // QUALITY GATE: Validate before payment
+                        // ========================================
+                        const passed = await validateResponseWithAI(
+                            order.validation_question || '',
+                            answer || ''
+                        );
+                        const qualityStatus = await updateSignalQuality(userWallet, passed);
+
+                        if (qualityStatus === 'BANNED') {
+                            return res.status(403).json({
+                                success: false,
+                                status: 'banned',
+                                message: 'Account suspended for low signal quality'
+                            });
+                        }
+
+                        if (qualityStatus === 'LOW_SIGNAL') {
+                            return res.status(200).json({
+                                success: false,
+                                status: 'rejected',
+                                message: 'Submission rejected by Quality Control'
+                            });
+                        }
+
+                        // HIGH_SIGNAL: Proceed with payment
                         // Atomic Redis operations for fee distribution
 
                         // 1. Credit worker (human)

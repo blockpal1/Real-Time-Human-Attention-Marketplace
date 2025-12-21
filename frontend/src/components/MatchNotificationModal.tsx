@@ -18,7 +18,7 @@ interface MatchNotificationModalProps {
     onDismiss: () => void;
 }
 
-type Phase = 'matching' | 'preparing' | 'liveness' | 'expanding' | 'focused' | 'question';
+type Phase = 'matching' | 'preparing' | 'liveness' | 'expanding' | 'focused' | 'question' | 'verifying' | 'rejected' | 'banned';
 const HANDSHAKE_TIMEOUT = 10;
 const PREP_COUNTDOWN = 3;
 const QUESTION_GRACE_PERIOD = 30; // 30 seconds to answer question
@@ -33,6 +33,7 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
     const [failedVerification, setFailedVerification] = useState(false);
     const [answer, setAnswer] = useState('');
     const [initialDuration] = useState(match.duration); // Store initial duration
+    const [rejectionMessage, setRejectionMessage] = useState('');
 
     const topicDisplay = typeof match.topic === 'string' ? match.topic : 'Ad Campaign';
     const totalEarnings = match.price * match.duration;
@@ -224,6 +225,9 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
             return;
         }
 
+        // Show optimistic verifying UI
+        setPhase('verifying');
+
         try {
             // Calculate how long they actually spent
             const actualDuration = initialDuration - sessionTime;
@@ -238,15 +242,36 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
                 wallet: walletPubkey // Include wallet for fee distribution
             });
 
+            // Handle quality gate responses (200 OK with status field)
+            if (result.status === 'rejected') {
+                setRejectionMessage(result.message || 'Submission rejected by Quality Control');
+                setPhase('rejected');
+                return;
+            }
+
+            if (result.status === 'banned') {
+                setRejectionMessage(result.message || 'Account suspended');
+                setPhase('banned');
+                return;
+            }
+
             console.log('Match completed successfully:', result);
             setPaymentResult(result); // Store for display
 
-        } catch (error) {
+        } catch (error: any) {
             console.error('Failed to submit match completion:', error);
+
+            // Handle 403 banned response
+            if (error?.response?.status === 403) {
+                setRejectionMessage('Account suspended for low signal quality');
+                setPhase('banned');
+                return;
+            }
+
             // Still close modal even if submission fails
             onAccept();
         }
-    }, [match.matchId, answer, sessionTime, initialDuration, onAccept, paymentResult]);
+    }, [match.matchId, match.bidId, answer, sessionTime, initialDuration, onAccept, paymentResult, walletPubkey]);
 
     const getModalStyles = (): React.CSSProperties => {
         const base: React.CSSProperties = {
@@ -271,6 +296,44 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
                     <div style={{ color: '#ff4444', fontSize: '18px', fontWeight: 'bold', marginBottom: '8px' }}>VERIFICATION FAILED</div>
                     <div style={{ color: '#666', fontSize: '14px', marginBottom: '8px' }}>Request timed out.</div>
                     <div style={{ color: '#444', fontSize: '12px' }}>Closing session...</div>
+                </div>
+            );
+        }
+
+        // VERIFYING phase - optimistic UI while AI validates
+        if (phase === 'verifying') {
+            return (
+                <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '48px', marginBottom: '16px' }}>✓</div>
+                    <div style={{ color: '#00FF41', fontSize: '18px', fontWeight: 'bold', marginBottom: '8px' }}>Success!</div>
+                    <div style={{ color: '#888', fontSize: '14px' }}>Verifying your response...</div>
+                    <div style={{ width: '60px', height: '60px', border: '3px solid #00FF41', borderTop: '3px solid transparent', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '24px auto 0' }} />
+                </div>
+            );
+        }
+
+        // REJECTED phase - Quality Control rejection
+        if (phase === 'rejected') {
+            return (
+                <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '48px', marginBottom: '16px' }}>⚠️</div>
+                    <div style={{ color: '#ff8800', fontSize: '18px', fontWeight: 'bold', marginBottom: '8px' }}>SUBMISSION REJECTED</div>
+                    <div style={{ color: '#888', fontSize: '14px', marginBottom: '16px' }}>{rejectionMessage}</div>
+                    <div style={{ color: '#666', fontSize: '12px', marginBottom: '24px' }}>No payment for this task. Try again with a relevant answer.</div>
+                    <button onClick={onDismiss} style={{ backgroundColor: '#333', color: 'white', fontWeight: 'bold', padding: '12px 32px', borderRadius: '8px', border: 'none', fontSize: '14px', cursor: 'pointer' }}>CONTINUE</button>
+                </div>
+            );
+        }
+
+        // BANNED phase - Account suspended
+        if (phase === 'banned') {
+            return (
+                <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '48px', marginBottom: '16px' }}>🚫</div>
+                    <div style={{ color: '#ff4444', fontSize: '18px', fontWeight: 'bold', marginBottom: '8px' }}>ACCOUNT SUSPENDED</div>
+                    <div style={{ color: '#888', fontSize: '14px', marginBottom: '16px' }}>{rejectionMessage}</div>
+                    <div style={{ color: '#666', fontSize: '12px', marginBottom: '24px' }}>Your Signal Quality score is too low.</div>
+                    <button onClick={onDismiss} style={{ backgroundColor: '#ff4444', color: 'white', fontWeight: 'bold', padding: '12px 32px', borderRadius: '8px', border: 'none', fontSize: '14px', cursor: 'pointer' }}>LOG OUT</button>
                 </div>
             );
         }
