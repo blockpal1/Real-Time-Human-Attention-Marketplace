@@ -6,12 +6,9 @@
  * Uses OpenAI gpt-4o-mini for response quality assessment.
  * Fail-open on API errors to preserve worker UX.
  */
-import Redis from 'ioredis';
 import OpenAI from 'openai';
 import { BOUNCER_SYSTEM_PROMPT } from '../lib/prompts';
-
-// Redis connection (reuses existing connection string or defaults to localhost)
-const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
+import { redisClient } from '../utils/redis';
 
 // OpenAI client with dedicated bouncer key
 const openai = new OpenAI({
@@ -73,9 +70,10 @@ export async function updateSignalQuality(walletAddress: string, passedAiCheck: 
     const now = Date.now();
 
     // 1. Initialize or fetch user
-    let stats = await redis.hgetall(key);
+    const existingData = await redisClient.client.hGetAll(key);
+    let stats: Record<string, string> = existingData;
     if (Object.keys(stats).length === 0 || !stats.quality) {
-        await redis.hset(key, { quality: CONSTANTS.START_SCORE, lastActive: now });
+        await redisClient.client.hSet(key, { quality: String(CONSTANTS.START_SCORE), lastActive: String(now) });
         stats = { quality: String(CONSTANTS.START_SCORE), lastActive: String(now) };
     }
 
@@ -100,9 +98,9 @@ export async function updateSignalQuality(walletAddress: string, passedAiCheck: 
     }
 
     // 4. Save updated stats
-    await redis.hset(key, {
-        quality: currentQuality,
-        lastActive: now
+    await redisClient.client.hSet(key, {
+        quality: String(currentQuality),
+        lastActive: String(now)
     });
 
     // 5. Determine status
@@ -119,7 +117,7 @@ export async function updateSignalQuality(walletAddress: string, passedAiCheck: 
  * Get worker's current quality status
  */
 export async function getWorkerStatus(walletAddress: string): Promise<{ quality: number; isBanned: boolean }> {
-    const quality = await redis.hget(`user:${walletAddress}`, 'quality');
+    const quality = await redisClient.client.hGet(`user:${walletAddress}`, 'quality');
     const score = quality ? parseInt(quality) : CONSTANTS.START_SCORE;
     return {
         quality: score,
