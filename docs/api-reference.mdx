@@ -39,12 +39,67 @@ Initialize a verification request. Returns an invoice (402) or campaign keys (20
   UUID linking the payment to this request. **Must match the memo in your Solana transaction.**
 </ParamField>
 
-> [!IMPORTANT]
-> Your Solana transaction MUST include a memo instruction containing the `X-Campaign-Id` value. This prevents payment replay attacks.
+<Warning>
+  **Critical Security Requirement**
+  Your Solana transaction MUST include a memo instruction containing the `X-Campaign-Id` value. This prevents payment replay attacks.
+</Warning>
+---
 
-### Example Request
+## Memo Program Integration
+
+To bind your payment to a specific campaign request, your Solana transaction must include a memo instruction.
+
+### Solana Memo Program
+
+| Property | Value |
+|----------|-------|
+| **Program ID** | `MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr` |
+| **Data** | Your `X-Campaign-Id` (UTF-8 encoded UUID) |
+| **Accounts** | None required |
+
+### Transaction Structure
+
+Your transaction should contain two instructions:
+
+1. **SPL Token Transfer** - USDC to treasury
+2. **Memo Instruction** - Campaign UUID as data
+
+### Python Example
+
+```python
+from solders.instruction import Instruction
+from solders.pubkey import Pubkey
+import uuid
+
+MEMO_PROGRAM = "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"
+
+# Generate campaign ID
+campaign_id = str(uuid.uuid4())
+
+# Create memo instruction
+memo_ix = Instruction(
+    program_id=Pubkey.from_string(MEMO_PROGRAM),
+    accounts=[],
+    data=campaign_id.encode('utf-8')
+)
+
+# Add to your transaction: [transfer_ix, memo_ix]
+```
+
+### Error Codes
+
+| Error | Description |
+|-------|-------------|
+| `missing_campaign_id` | `X-Campaign-Id` header not provided |
+| `missing_memo` | Transaction has no memo instruction |
+| `memo_mismatch` | Memo content doesn't match header |
+
+---
+
+### Example Request (with Payment)
 
 ```bash
+# Step 1: Get invoice (no headers needed)
 curl -X POST https://api.attentium.ai/v1/verify \
   -H "Content-Type: application/json" \
   -d '{
@@ -54,6 +109,21 @@ curl -X POST https://api.attentium.ai/v1/verify \
     "validation_question": "Is this a cat?",
     "content_url": "https://example.com/image.png"
   }'
+# Returns 402 with invoice
+
+# Step 2: Pay with memo, then submit with headers
+curl -X POST https://api.attentium.ai/v1/verify \
+  -H "Content-Type: application/json" \
+  -H "X-Solana-Tx-Signature: YOUR_TX_SIGNATURE" \
+  -H "X-Campaign-Id: YOUR_UUID_FROM_MEMO" \
+  -d '{
+    "duration": 30,
+    "quantity": 5,
+    "bid_per_second": 0.05,
+    "validation_question": "Is this a cat?",
+    "content_url": "https://example.com/image.png"
+  }'
+# Returns 200 with campaign keys
 ```
 
 ---
