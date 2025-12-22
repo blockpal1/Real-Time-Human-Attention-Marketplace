@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { usePrivy } from '@privy-io/react-auth';
+import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { LoginButton } from './LoginButton';
 import { EarningsDashboard } from './EarningsDashboard';
 import { api } from '../services/api';
@@ -13,23 +13,74 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({ setView, theme, setTheme, userPubkey }) => {
     const { authenticated, user, logout } = usePrivy();
+    const { wallets } = useWallets();
     const [showEarnings, setShowEarnings] = useState(false);
+    const [showEarningsDropdown, setShowEarningsDropdown] = useState(false);
+    const [showSignalDropdown, setShowSignalDropdown] = useState(false);
+    const [showUserDropdown, setShowUserDropdown] = useState(false);
     const [totalEarnings, setTotalEarnings] = useState(0);
+    const [pendingEarnings, setPendingEarnings] = useState(0);
+    const [walletBalance, setWalletBalance] = useState(0);
+    const [signalQuality, setSignalQuality] = useState<number | null>(null);
+    const [qualityStatus, setQualityStatus] = useState<'high' | 'medium' | 'low' | 'banned' | 'new'>('new');
 
-    // Fetch earnings summary on mount and when userPubkey changes
+    // Get wallet address from Privy
+    const embeddedWallet = wallets.find((wallet) => wallet.walletClientType === 'privy');
+    const walletAddress = embeddedWallet?.address || user?.wallet?.address;
+
+    // Fetch earnings and signal quality on mount and when wallet address changes
     useEffect(() => {
-        if (userPubkey) {
+        if (walletAddress) {
             loadEarnings();
+            loadSignalQuality();
         }
-    }, [userPubkey]);
+    }, [walletAddress]);
+
+    // Close dropdown when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            const target = event.target as HTMLElement;
+            if (showEarningsDropdown && !target.closest('.earnings-dropdown-container')) {
+                setShowEarningsDropdown(false);
+            }
+            if (showSignalDropdown && !target.closest('.signal-dropdown-container')) {
+                setShowSignalDropdown(false);
+            }
+            if (showUserDropdown && !target.closest('.user-dropdown-container')) {
+                setShowUserDropdown(false);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [showEarningsDropdown, showSignalDropdown, showUserDropdown]);
 
     const loadEarnings = async () => {
-        if (!userPubkey) return;
+        if (!walletAddress) return;
         try {
-            const data = await api.getUserEarnings(userPubkey);
+            const data = await api.getUserEarnings(walletAddress);
             setTotalEarnings(data.allTime || 0);
+
+            // Fetch balance data
+            const balanceData = await api.getUserBalance(walletAddress);
+            setPendingEarnings(balanceData.pending || 0);
+            setWalletBalance(balanceData.wallet || 0);
         } catch (error) {
             console.error('Failed to load earnings:', error);
+        }
+    };
+
+    const loadSignalQuality = async () => {
+        if (!walletAddress) return;
+        try {
+            const data = await api.getSignalQuality(walletAddress);
+            setSignalQuality(data.quality);
+            setQualityStatus(data.status);
+        } catch (error) {
+            console.error('Failed to load signal quality:', error);
+            // Set default values on error
+            setSignalQuality(50);
+            setQualityStatus('new');
         }
     };
 
@@ -47,18 +98,6 @@ export const Header: React.FC<HeaderProps> = ({ setView, theme, setTheme, userPu
                 {/* Right Side: Stats & Wallet */}
                 <div className="flex items-center gap-6">
 
-                    {/* Earnings Pill - Human (white accents) */}
-                    {userPubkey && (
-                        <button
-                            onClick={() => setShowEarnings(true)}
-                            className="flex items-center gap-2 px-3 py-1 bg-white/5 rounded-full border border-white/20 hover:border-white/50 transition-all text-xs"
-                            title="View Earnings"
-                        >
-                            <span className="text-gray-400">💰 EARNED</span>
-                            <span className="text-white font-mono font-bold">${totalEarnings.toFixed(4)}</span>
-                        </button>
-                    )}
-
                     {/* Theme Toggle */}
                     <button
                         onClick={() => setTheme(theme === 'quantum' ? 'classic' : 'quantum')}
@@ -68,18 +107,258 @@ export const Header: React.FC<HeaderProps> = ({ setView, theme, setTheme, userPu
                         {theme === 'quantum' ? '🔮' : '🌑'}
                     </button>
 
-                    {/* Privy Auth */}
-                    {authenticated && user ? (
-                        <div className="flex items-center gap-3">
-                            <div className="px-3 py-1 rounded-full bg-white/5 border border-white/30 text-xs text-white font-mono">
-                                {user.email ? user.email.address : 'User'}
-                            </div>
+                    {/* Earnings Dropdown */}
+                    {walletAddress && (
+                        <div className="relative earnings-dropdown-container">
                             <button
-                                onClick={logout}
-                                className="text-gray-500 hover:text-white text-xs transition-colors"
+                                onClick={() => setShowEarningsDropdown(!showEarningsDropdown)}
+                                className="flex items-center gap-2 px-3 py-1 bg-white/5 rounded-full border border-white/20 hover:border-white/50 transition-all text-xs"
+                                title="View Earnings Breakdown"
                             >
-                                Logout
+                                <span className="text-gray-400">💰</span>
+                                <span className="text-white font-mono font-bold">${pendingEarnings.toFixed(4)}</span>
                             </button>
+
+                            {/* Dropdown */}
+                            {showEarningsDropdown && (
+                                <div
+                                    className="absolute right-0 mt-2 w-72 bg-[#0a0a0a] border border-white/20 rounded-lg shadow-lg z-50"
+                                    style={{ top: '100%' }}
+                                >
+                                    <div className="p-4">
+                                        <div className="text-white font-bold text-sm mb-3 border-b border-white/10 pb-2">
+                                            Earnings Breakdown
+                                        </div>
+
+                                        <div className="space-y-3 mb-4">
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-gray-400 text-xs">Pending:</span>
+                                                <span className="text-[#0088FF] font-mono font-bold">
+                                                    ${pendingEarnings.toFixed(4)}
+                                                </span>
+                                            </div>
+                                            <div className="text-xs text-gray-500 -mt-2 text-right">
+                                                (Ready to claim)
+                                            </div>
+
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-gray-400 text-xs">Wallet:</span>
+                                                <span className="text-white font-mono font-bold">
+                                                    ${walletBalance.toFixed(4)}
+                                                </span>
+                                            </div>
+                                            <div className="text-xs text-gray-500 -mt-2 text-right">
+                                                (Funds you control)
+                                            </div>
+
+                                            <div className="flex justify-between items-center pt-2 border-t border-white/10">
+                                                <span className="text-gray-400 text-xs">Lifetime:</span>
+                                                <span className="text-white font-mono font-bold">
+                                                    ${totalEarnings.toFixed(4)}
+                                                </span>
+                                            </div>
+                                            <div className="text-xs text-gray-500 -mt-2 text-right">
+                                                (Total Earned)
+                                            </div>
+                                        </div>
+
+                                        <button
+                                            disabled
+                                            className="w-full py-2 bg-[#0088FF]/20 text-[#0088FF] rounded-lg font-bold text-xs uppercase tracking-wider opacity-50 cursor-not-allowed"
+                                        >
+                                            Claim to Wallet
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Signal Quality Dropdown */}
+                    {walletAddress && signalQuality !== null && (
+                        <div className="relative signal-dropdown-container">
+                            <button
+                                onClick={() => setShowSignalDropdown(!showSignalDropdown)}
+                                className="flex items-center gap-2 px-3 py-1 bg-white/5 rounded-full border transition-all text-xs cursor-pointer hover:border-white/50"
+                                style={{
+                                    borderColor: qualityStatus === 'high' ? '#0088FF' :
+                                        qualityStatus === 'medium' ? '#FFB800' :
+                                            qualityStatus === 'low' ? '#FF8800' :
+                                                qualityStatus === 'banned' ? '#FF4444' : '#666'
+                                }}
+                                title="Signal Quality Score - Click for details"
+                            >
+                                <span className="text-gray-400">⚡ SIGNAL</span>
+                                <span
+                                    className="font-mono font-bold"
+                                    style={{
+                                        color: qualityStatus === 'high' ? '#0088FF' :
+                                            qualityStatus === 'medium' ? '#FFB800' :
+                                                qualityStatus === 'low' ? '#FF8800' :
+                                                    qualityStatus === 'banned' ? '#FF4444' : '#888'
+                                    }}
+                                >
+                                    {signalQuality}
+                                </span>
+                            </button>
+
+                            {/* Dropdown */}
+                            {showSignalDropdown && (
+                                <div
+                                    className="absolute right-0 mt-2 w-80 bg-[#0a0a0a] border border-white/20 rounded-lg shadow-lg z-50"
+                                    style={{ top: '100%' }}
+                                >
+                                    <div className="p-4">
+                                        {/* Section A: The Visual (Status) */}
+                                        <div className="mb-4">
+                                            <div className="text-white font-bold text-sm mb-2">
+                                                Current Quality
+                                            </div>
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <span
+                                                    className="font-mono font-bold text-2xl"
+                                                    style={{
+                                                        color: qualityStatus === 'high' ? '#0088FF' :
+                                                            qualityStatus === 'medium' ? '#FFB800' :
+                                                                qualityStatus === 'low' ? '#FF8800' :
+                                                                    qualityStatus === 'banned' ? '#FF4444' : '#888'
+                                                    }}
+                                                >
+                                                    {signalQuality}
+                                                </span>
+                                                <span className="text-gray-400 text-sm">/ 100</span>
+                                            </div>
+
+                                            {/* Progress Bar */}
+                                            <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden mb-2">
+                                                <div
+                                                    className="h-full transition-all duration-300"
+                                                    style={{
+                                                        width: `${signalQuality}%`,
+                                                        backgroundColor: qualityStatus === 'high' ? '#0088FF' :
+                                                            qualityStatus === 'medium' ? '#FFB800' :
+                                                                qualityStatus === 'low' ? '#FF8800' :
+                                                                    qualityStatus === 'banned' ? '#FF4444' : '#888'
+                                                    }}
+                                                />
+                                            </div>
+
+                                            {/* Status Label */}
+                                            <div
+                                                className="text-xs font-bold"
+                                                style={{
+                                                    color: qualityStatus === 'high' ? '#0088FF' :
+                                                        qualityStatus === 'medium' ? '#FFB800' :
+                                                            qualityStatus === 'low' ? '#FF8800' :
+                                                                qualityStatus === 'banned' ? '#FF4444' : '#888'
+                                                }}
+                                            >
+                                                {qualityStatus === 'high' ? '✅ Excellent' :
+                                                    qualityStatus === 'medium' ? '⚠️ Good' :
+                                                        qualityStatus === 'low' ? '⚠️ At Risk' :
+                                                            qualityStatus === 'banned' ? '🚫 Suspended' : '⚪ New'}
+                                            </div>
+                                        </div>
+
+                                        {/* Section B: The Rules (Educational) */}
+                                        <div className="mb-4 pb-4 border-b border-white/10">
+                                            <div className="text-white font-bold text-xs mb-2">
+                                                How to improve:
+                                            </div>
+                                            <div className="space-y-2 text-xs text-gray-400">
+                                                <div className="flex gap-2">
+                                                    <span>✅</span>
+                                                    <span><strong className="text-white">Accuracy:</strong> Consistent, relevant answers increase your score.</span>
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <span>❌</span>
+                                                    <span><strong className="text-white">Spam:</strong> Gibberish or irrelevant answers carry a heavy penalty.</span>
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <span>📉</span>
+                                                    <span><strong className="text-white">Consistency:</strong> Inactivity slowly lowers your score. Stay active to maintain your reputation.</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Section C: The Stakes (The "Why") */}
+                                        <div className="space-y-2 text-xs">
+                                            <div className="text-red-400">
+                                                ⚠️ Scores below 20 result in account suspension.
+                                            </div>
+                                            <div className="text-[#0088FF]">
+                                                ✨ Higher scores unlock exclusive opportunities.
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* User Account Dropdown */}
+                    {authenticated && user ? (
+                        <div className="relative user-dropdown-container">
+                            <button
+                                onClick={() => setShowUserDropdown(!showUserDropdown)}
+                                className="px-3 py-1 rounded-full bg-white/5 border border-white/30 hover:border-white/50 text-xs text-white font-mono transition-all cursor-pointer"
+                            >
+                                {user.email ? user.email.address : 'User'}
+                            </button>
+
+                            {/* Dropdown */}
+                            {showUserDropdown && (
+                                <div
+                                    className="absolute right-0 mt-2 w-72 bg-[#0a0a0a] border border-white/20 rounded-lg shadow-lg z-50"
+                                    style={{ top: '100%' }}
+                                >
+                                    <div className="p-4">
+                                        <div className="text-white font-bold text-sm mb-3 border-b border-white/10 pb-2">
+                                            Account
+                                        </div>
+
+                                        <div className="space-y-3 mb-4">
+                                            {/* Email */}
+                                            <div>
+                                                <div className="text-gray-400 text-xs mb-1">Email</div>
+                                                <div className="text-white text-sm font-mono">
+                                                    {user.email?.address || user.google?.email || user.twitter?.username || 'Not available'}
+                                                </div>
+                                            </div>
+                                            {/* Wallet Address */}
+                                            {walletAddress && (
+                                                <div>
+                                                    <div className="text-gray-400 text-xs mb-1">Wallet Address</div>
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="text-white text-xs font-mono flex-1 truncate">
+                                                            {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}
+                                                        </div>
+                                                        <button
+                                                            onClick={() => {
+                                                                navigator.clipboard.writeText(walletAddress);
+                                                            }}
+                                                            className="text-[#0088FF] hover:text-white text-xs transition-colors"
+                                                            title="Copy wallet address"
+                                                        >
+                                                            📋
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <button
+                                            onClick={() => {
+                                                logout();
+                                                setShowUserDropdown(false);
+                                            }}
+                                            className="w-full py-2 bg-red-600/20 text-red-400 hover:bg-red-600/30 rounded-lg font-bold text-xs uppercase tracking-wider transition-colors"
+                                        >
+                                            Logout
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     ) : (
                         <LoginButton />

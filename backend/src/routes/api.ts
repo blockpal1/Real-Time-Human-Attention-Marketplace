@@ -14,10 +14,12 @@ import {
     listBuilderCodes
 } from '../controllers/AdminController';
 import debugRoutes from './debugRoutes';
+import signalQualityRoutes from './signalQualityRoutes';
 
 const router = Router();
 
 router.use('/debug', debugRoutes);
+router.use(signalQualityRoutes);
 
 router.get('/status', getStatus);
 router.post('/attestation/challenge', createChallenge);

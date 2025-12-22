@@ -136,5 +136,27 @@ export const api = {
             throw new Error(error.message || 'No bids available');
         }
         return response.json();
+    },
+
+    async getSignalQuality(wallet: string) {
+        const response = await fetch(`${API_URL}/users/${wallet}/signal-quality`);
+        if (!response.ok) {
+            throw new Error('Failed to fetch signal quality');
+        }
+        return response.json();
+    },
+
+    async getUserBalance(wallet: string) {
+        const response = await fetch(`${API_URL}/users/${wallet}/balance`);
+        if (!response.ok) {
+            throw new Error('Failed to fetch balance');
+        }
+        const data = await response.json();
+        // Backend returns { wallet, balance }
+        // For now, treat balance as wallet balance, pending is calculated separately
+        return {
+            wallet: data.balance || 0,
+            pending: 0 // TODO: Backend needs to track pending separately
+        };
     }
 };

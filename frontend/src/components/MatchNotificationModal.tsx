@@ -308,9 +308,9 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
             return (
                 <div style={{ textAlign: 'center' }}>
                     <div style={{ fontSize: '48px', marginBottom: '16px' }}>✓</div>
-                    <div style={{ color: '#00FF41', fontSize: '18px', fontWeight: 'bold', marginBottom: '8px' }}>Success!</div>
+                    <div style={{ color: '#0088FF', fontSize: '18px', fontWeight: 'bold', marginBottom: '8px' }}>Success!</div>
                     <div style={{ color: '#888', fontSize: '14px' }}>Verifying your response...</div>
-                    <div style={{ width: '60px', height: '60px', border: '3px solid #00FF41', borderTop: '3px solid transparent', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '24px auto 0' }} />
+                    <div style={{ width: '60px', height: '60px', border: '3px solid #0088FF', borderTop: '3px solid transparent', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '24px auto 0' }} />
                 </div>
             );
         }
@@ -405,19 +405,19 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
                     <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
                         <div style={{ textAlign: 'center' }}>
                             <div style={{ fontSize: '48px', marginBottom: '16px' }}>✅</div>
-                            <div style={{ color: '#00FF41', fontSize: '18px', fontWeight: 'bold', marginBottom: '8px' }}>THANK YOU!</div>
-                            <div style={{ backgroundColor: 'rgba(0,255,65,0.1)', border: '1px solid rgba(0,255,65,0.3)', borderRadius: '8px', padding: '16px 32px', marginBottom: '8px', display: 'inline-block' }}>
+                            <div style={{ color: '#0088FF', fontSize: '18px', fontWeight: 'bold', marginBottom: '8px' }}>THANK YOU!</div>
+                            <div style={{ backgroundColor: 'rgba(0,136,255,0.1)', border: '1px solid rgba(0,136,255,0.3)', borderRadius: '8px', padding: '16px 32px', marginBottom: '8px', display: 'inline-block' }}>
                                 <div style={{ color: '#888', fontSize: '10px', letterSpacing: '2px', marginBottom: '4px' }}>YOU EARNED</div>
-                                <div style={{ color: '#00FF41', fontSize: '32px', fontFamily: 'monospace', fontWeight: 'bold' }}>${paymentResult.earnedAmount.toFixed(4)}</div>
+                                <div style={{ color: '#0088FF', fontSize: '32px', fontFamily: 'monospace', fontWeight: 'bold' }}>${paymentResult.earnedAmount.toFixed(4)}</div>
                             </div>
-                            <div style={{ color: '#00FF41', fontSize: '12px', marginBottom: '8px' }}>✅ Payment Confirmed</div>
+                            <div style={{ color: '#0088FF', fontSize: '12px', marginBottom: '8px' }}>✅ Payment Confirmed</div>
                             {answer && (
                                 <div style={{ color: '#555', fontSize: '12px', marginBottom: '16px' }}>
                                     Your response: "{answer.slice(0, 60)}{answer.length > 60 ? '...' : ''}"
                                 </div>
                             )}
                             <div style={{ color: '#666', fontSize: '14px', marginBottom: '24px' }}>Funds released to your wallet!</div>
-                            <button onClick={handleEndSession} style={{ backgroundColor: '#00FF41', color: 'black', fontWeight: 'bold', padding: '12px 32px', borderRadius: '8px', border: 'none', fontSize: '14px', cursor: 'pointer' }}>CONTINUE EARNING</button>
+                            <button onClick={handleEndSession} style={{ backgroundColor: '#0088FF', color: 'white', fontWeight: 'bold', padding: '12px 32px', borderRadius: '8px', border: 'none', fontSize: '14px', cursor: 'pointer' }}>CONTINUE EARNING</button>
                         </div>
                     </div>
                 );
