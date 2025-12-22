@@ -12,7 +12,9 @@ import { redisClient } from '../utils/redis';
 
 // OpenAI client with dedicated bouncer key
 const openai = new OpenAI({
-    apiKey: process.env.OPENAI_Bouncer_Key
+    apiKey: process.env.OPENAI_Bouncer_Key,
+    timeout: 10000, // 10 second timeout for all requests
+    maxRetries: 0   // Don't retry on timeout
 });
 
 // --- CONSTANTS ---
@@ -46,6 +48,8 @@ export async function validateResponseWithAI(question: string, answer: string): 
             ],
             temperature: 0,
             max_tokens: 5,
+        }, {
+            timeout: 10000 // 10 second timeout
         });
 
         const verdict = response.choices[0]?.message?.content?.trim().toUpperCase() || 'PASS';

@@ -13,8 +13,11 @@ import {
     createBuilderCode,
     listBuilderCodes
 } from '../controllers/AdminController';
+import debugRoutes from './debugRoutes';
 
 const router = Router();
+
+router.use('/debug', debugRoutes);
 
 router.get('/status', getStatus);
 router.post('/attestation/challenge', createChallenge);

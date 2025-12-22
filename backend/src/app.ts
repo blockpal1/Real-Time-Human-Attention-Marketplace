@@ -5,7 +5,10 @@ import marketRoutes from './routes/marketRoutes';
 
 const app = express();
 
-app.use(cors());
+app.use(cors({
+    exposedHeaders: ['x-admin-key'],
+    allowedHeaders: ['Content-Type', 'x-admin-key', 'x-builder-code']
+}));
 app.use(express.json());
 
 // Routes

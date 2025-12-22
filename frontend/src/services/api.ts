@@ -5,7 +5,7 @@ export const api = {
         // Route through x402 middleware which applies spread at creation time
         const headers: any = {
             'Content-Type': 'application/json',
-            'X-Admin-Key': 'attentium-chicken-parm-delish-thankskara'  // Match backend env ADMIN_SECRET
+            'X-Admin-Key': import.meta.env.VITE_ADMIN_SECRET || ''  // Read from .env
         };
 
         if (bid.builder_code) {

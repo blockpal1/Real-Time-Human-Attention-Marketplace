@@ -18,7 +18,7 @@ interface MatchNotificationModalProps {
     onDismiss: () => void;
 }
 
-type Phase = 'matching' | 'preparing' | 'liveness' | 'expanding' | 'focused' | 'question' | 'verifying' | 'rejected' | 'banned';
+type Phase = 'matching' | 'preparing' | 'liveness' | 'expanding' | 'focused' | 'question' | 'verifying' | 'rejected' | 'banned' | 'success';
 const HANDSHAKE_TIMEOUT = 10;
 const PREP_COUNTDOWN = 3;
 const QUESTION_GRACE_PERIOD = 30; // 30 seconds to answer question
@@ -29,7 +29,7 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
     const [prepCountdown, setPrepCountdown] = useState(PREP_COUNTDOWN);
     const [sessionTime, setSessionTime] = useState(match.duration);
     const [questionTime, setQuestionTime] = useState(QUESTION_GRACE_PERIOD);
-    const [livenessTime, setLivenessTime] = useState(15);
+
     const [failedVerification, setFailedVerification] = useState(false);
     const [answer, setAnswer] = useState('');
     const [initialDuration] = useState(match.duration); // Store initial duration
@@ -40,7 +40,8 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
     const contentUrl = match.contentUrl;
     const validationQuestion = match.validationQuestion;
 
-    // Liveness Timer
+    // Liveness Timer (DISABLED - not currently used)
+    /*
     useEffect(() => {
         if (phase !== 'liveness') return;
         const timer = setInterval(() => {
@@ -56,6 +57,7 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
         }, 1000);
         return () => clearInterval(timer);
     }, [phase, onDismiss]);
+    */
 
     // Matching phase countdown
     useEffect(() => {
@@ -257,6 +259,7 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
 
             console.log('Match completed successfully:', result);
             setPaymentResult(result); // Store for display
+            setPhase('success'); // Move to success phase to show earnings
 
         } catch (error: any) {
             console.error('Failed to submit match completion:', error);
@@ -317,10 +320,11 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
             return (
                 <div style={{ textAlign: 'center' }}>
                     <div style={{ fontSize: '48px', marginBottom: '16px' }}>⚠️</div>
-                    <div style={{ color: '#ff8800', fontSize: '18px', fontWeight: 'bold', marginBottom: '8px' }}>SUBMISSION REJECTED</div>
-                    <div style={{ color: '#888', fontSize: '14px', marginBottom: '16px' }}>{rejectionMessage}</div>
-                    <div style={{ color: '#666', fontSize: '12px', marginBottom: '24px' }}>No payment for this task. Try again with a relevant answer.</div>
-                    <button onClick={onDismiss} style={{ backgroundColor: '#333', color: 'white', fontWeight: 'bold', padding: '12px 32px', borderRadius: '8px', border: 'none', fontSize: '14px', cursor: 'pointer' }}>CONTINUE</button>
+                    <div style={{ color: '#ff8800', fontSize: '18px', fontWeight: 'bold', marginBottom: '8px' }}>Low Signal Detected</div>
+                    <div style={{ color: '#888', fontSize: '14px', marginBottom: '16px', maxWidth: '400px', margin: '0 auto 16px' }}>
+                        This answer was flagged as irrelevant or low-quality. As a result, your Signal Quality Score has dropped. To earn rewards and restore your score, please provide accurate, thoughtful answers.
+                    </div>
+                    <button onClick={onDismiss} style={{ backgroundColor: '#333', color: 'white', fontWeight: 'bold', padding: '12px 32px', borderRadius: '8px', border: 'none', fontSize: '14px', cursor: 'pointer' }}>I Understand</button>
                 </div>
             );
         }
