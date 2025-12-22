@@ -26,7 +26,7 @@ function App() {
     const [duration, setDuration] = React.useState(10);
     const [theme, setTheme] = React.useState<'quantum' | 'classic'>('quantum');
     const [match, setMatch] = React.useState<MatchNotification | null>(null);
-    const [liveFeed, setLiveFeed] = React.useState<string[]>([]);
+    const [liveFeed, setLiveFeed] = React.useState<{ id: string; text: string }[]>([]);
     const [sessionToken, setSessionToken] = React.useState<string | null>(null);
     const [userPubkey, setUserPubkey] = React.useState<string | null>(null);
     const [showAnalytics, setShowAnalytics] = React.useState(false);
@@ -67,7 +67,13 @@ function App() {
             });
 
             const topicStr = typeof data.topic === 'string' ? data.topic : 'Campaign';
-            setLiveFeed(prev => [`[MATCH] ${topicStr} @ $${(data.price || 0).toFixed(4)}/s`, ...prev].slice(0, 10));
+            const matchId = data.matchId || data.id || `${Date.now()}`;
+            const feedText = `[MATCH] ${topicStr} @ $${(data.price || 0).toFixed(4)}/s`;
+            setLiveFeed(prev => {
+                // Dedupe by matchId to prevent React StrictMode / reconnection duplicates
+                if (prev.some(entry => entry.id === matchId)) return prev;
+                return [{ id: matchId, text: feedText }, ...prev].slice(0, 10);
+            });
         });
 
         return () => {
@@ -190,11 +196,24 @@ function App() {
                                     {liveFeed.length === 0 ? (
                                         <div className="text-gray-600">Waiting for events...</div>
                                     ) : (
-                                        liveFeed.map((event, i) => (
-                                            <div key={i} className={`${event.includes('[BID]') ? 'text-[#0EA5E9]' : event.includes('[ASK]') ? 'text-white' : 'text-yellow-400'}`}>
-                                                {event}
-                                            </div>
-                                        ))
+                                        liveFeed.map((event) => {
+                                            // Determine color based on event type
+                                            let colorClass = 'text-gray-400';
+                                            if (event.text.includes('[BID]')) {
+                                                colorClass = 'text-[#0EA5E9]';
+                                            } else if (event.text.includes('[ASK]')) {
+                                                colorClass = 'text-white';
+                                            } else if (event.text.includes('[MATCH]')) {
+                                                // Check if it's a points match ($0.0000) or paid match
+                                                const isPointsMatch = event.text.includes('$0.0000');
+                                                colorClass = isPointsMatch ? 'text-purple-400' : 'text-[#0EA5E9]';
+                                            }
+                                            return (
+                                                <div key={event.id} className={colorClass}>
+                                                    {event.text}
+                                                </div>
+                                            );
+                                        })
                                     )}
                                 </div>
                             </div>

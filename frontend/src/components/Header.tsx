@@ -138,11 +138,12 @@ export const Header: React.FC<HeaderProps> = ({ theme, setTheme, userPubkey }) =
                         <div className="relative earnings-dropdown-container">
                             <button
                                 onClick={() => setShowEarningsDropdown(!showEarningsDropdown)}
-                                className="flex items-center gap-2 px-3 py-1 bg-white/5 rounded-full border border-white/20 hover:border-white/50 transition-all text-xs"
+                                className="flex items-center gap-2 px-3 py-1 rounded-full border border-[#0EA5E9]/50 hover:border-[#0EA5E9] transition-all text-xs"
+                                style={{ backgroundColor: 'rgba(14, 165, 233, 0.1)' }}
                                 title="View Earnings Breakdown"
                             >
                                 <span className="text-gray-400">💰</span>
-                                <span className="text-white font-mono font-bold">${pendingEarnings.toFixed(4)}</span>
+                                <span className="text-[#0EA5E9] font-mono font-bold">${pendingEarnings.toFixed(4)}</span>
                             </button>
 
                             {/* Dropdown */}
@@ -205,12 +206,16 @@ export const Header: React.FC<HeaderProps> = ({ theme, setTheme, userPubkey }) =
                         <div className="relative signal-dropdown-container">
                             <button
                                 onClick={() => setShowSignalDropdown(!showSignalDropdown)}
-                                className="flex items-center gap-2 px-3 py-1 bg-white/5 rounded-full border transition-all text-xs cursor-pointer hover:border-white/50"
+                                className="flex items-center gap-2 px-3 py-1 rounded-full border transition-all text-xs cursor-pointer"
                                 style={{
-                                    borderColor: qualityStatus === 'high' ? '#0088FF' :
-                                        qualityStatus === 'medium' ? '#FFB800' :
-                                            qualityStatus === 'low' ? '#FF8800' :
-                                                qualityStatus === 'banned' ? '#FF4444' : '#666'
+                                    borderColor: qualityStatus === 'high' ? 'rgba(0, 136, 255, 0.5)' :
+                                        qualityStatus === 'medium' ? 'rgba(255, 184, 0, 0.5)' :
+                                            qualityStatus === 'low' ? 'rgba(255, 136, 0, 0.5)' :
+                                                qualityStatus === 'banned' ? 'rgba(255, 68, 68, 0.5)' : 'rgba(102, 102, 102, 0.5)',
+                                    backgroundColor: qualityStatus === 'high' ? 'rgba(0, 136, 255, 0.1)' :
+                                        qualityStatus === 'medium' ? 'rgba(255, 184, 0, 0.1)' :
+                                            qualityStatus === 'low' ? 'rgba(255, 136, 0, 0.1)' :
+                                                qualityStatus === 'banned' ? 'rgba(255, 68, 68, 0.1)' : 'rgba(102, 102, 102, 0.1)'
                                 }}
                                 title="Signal Quality Score - Click for details"
                             >
@@ -325,7 +330,8 @@ export const Header: React.FC<HeaderProps> = ({ theme, setTheme, userPubkey }) =
                     {/* Season Points Pill */}
                     {walletAddress && (
                         <div
-                            className="flex items-center gap-2 px-3 py-1 bg-white/5 rounded-full border border-purple-500/50 text-xs"
+                            className="flex items-center gap-2 px-3 py-1 rounded-full border border-purple-500/50 text-xs"
+                            style={{ backgroundColor: 'rgba(168, 85, 247, 0.1)' }}
                             title="Season Zero Points - Earned from $0 campaigns"
                         >
                             <span className="text-gray-400">🎮</span>
