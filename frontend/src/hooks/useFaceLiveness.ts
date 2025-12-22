@@ -74,14 +74,14 @@ export const useFaceLiveness = ({ videoRef, onVerified, active }: UseFaceLivenes
             const smileRight = blendshapes.find((b: any) => b.categoryName === 'mouthSmileRight')?.score || 0;
             score = (smileLeft + smileRight) / 2;
             console.log('Smile Score:', score.toFixed(2));
-            if (score > 0.3) verified = true;
+            if (score > 0.2) verified = true;
         }
         else if (challenge === 'blink') {
             const blinkLeft = blendshapes.find((b: any) => b.categoryName === 'eyeBlinkLeft')?.score || 0;
             const blinkRight = blendshapes.find((b: any) => b.categoryName === 'eyeBlinkRight')?.score || 0;
             score = Math.max(blinkLeft, blinkRight);
             console.log('Blink Score:', score.toFixed(2));
-            if (score > 0.3) verified = true;
+            if (score > 0.2) verified = true;
         }
         else if (challenge === 'tilt') {
             if (landmarks && landmarks[33] && landmarks[263]) {
@@ -98,7 +98,7 @@ export const useFaceLiveness = ({ videoRef, onVerified, active }: UseFaceLivenes
 
         // Smooth progress update
         const targetProgress = verified ? 100 : Math.min(score * 100, 95);
-        progressRef.current = progressRef.current + (targetProgress - progressRef.current) * 0.2;
+        progressRef.current = progressRef.current + (targetProgress - progressRef.current) * 0.4;
         setProgress(progressRef.current);
 
         if (verified && progressRef.current > 80) {

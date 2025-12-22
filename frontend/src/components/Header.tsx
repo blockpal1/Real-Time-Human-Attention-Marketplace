@@ -11,7 +11,7 @@ interface HeaderProps {
     userPubkey?: string | null; // Accept null to match App state
 }
 
-export const Header: React.FC<HeaderProps> = ({ setView, theme, setTheme, userPubkey }) => {
+export const Header: React.FC<HeaderProps> = ({ theme, setTheme, userPubkey }) => {
     const { authenticated, user, logout } = usePrivy();
     const { wallets } = useWallets();
     const [showEarnings, setShowEarnings] = useState(false);
@@ -28,6 +28,19 @@ export const Header: React.FC<HeaderProps> = ({ setView, theme, setTheme, userPu
     // Get wallet address from Privy
     const embeddedWallet = wallets.find((wallet) => wallet.walletClientType === 'privy');
     const walletAddress = embeddedWallet?.address || user?.wallet?.address;
+
+    // Listen for refresh event from match completion
+    useEffect(() => {
+        const handleRefresh = () => {
+            if (walletAddress) {
+                loadEarnings();
+                loadSignalQuality();
+                loadSeasonPoints();
+            }
+        };
+        window.addEventListener('refresh-user-stats', handleRefresh);
+        return () => window.removeEventListener('refresh-user-stats', handleRefresh);
+    }, [walletAddress]);
 
     // Fetch earnings, signal quality, and season points on mount and when wallet address changes
     useEffect(() => {

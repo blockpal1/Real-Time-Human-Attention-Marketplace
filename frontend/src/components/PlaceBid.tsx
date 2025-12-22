@@ -8,7 +8,7 @@ interface PlaceBidProps {
 
 export const PlaceBid: React.FC<PlaceBidProps> = ({ duration, setDuration }) => {
     // Campaign Logic
-    const [price, setPrice] = useState(0.0001); // USDC per second
+    const [price, setPrice] = useState(0.0000); // USDC per second
     const [targetUsers, setTargetUsers] = useState(100);
     const [question, setQuestion] = useState('');
     const [contentUrl, setContentUrl] = useState('');
@@ -134,9 +134,9 @@ export const PlaceBid: React.FC<PlaceBidProps> = ({ duration, setDuration }) => 
                             <input
                                 type="number"
                                 step="0.0001"
-                                min="0.0001"
+                                min="0"
                                 value={price}
-                                onChange={(e) => setPrice(Number(e.target.value))}
+                                onChange={(e) => setPrice(Math.max(0, Number(e.target.value)))}
                                 className="w-full bg-dark border border-gray-700 rounded p-2 text-sm text-center font-mono text-[#0EA5E9] transition-colors focus:border-[#0EA5E9]"
                             />
                         </div>

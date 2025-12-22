@@ -97,6 +97,7 @@ function App() {
 
         // Trigger order book refresh (WS may have been disconnected during focus session)
         window.dispatchEvent(new CustomEvent('orderbook-refresh'));
+        window.dispatchEvent(new CustomEvent('refresh-user-stats'));
 
         // Session ended - clear the match and reset user state
         setMatch(null);

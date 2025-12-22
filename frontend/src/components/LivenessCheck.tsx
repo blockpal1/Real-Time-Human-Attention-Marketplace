@@ -55,7 +55,7 @@ export const LivenessCheck: React.FC<LivenessCheckProps> = ({ onVerified, active
 
             {/* Status & Instructions */}
             <div style={{ textAlign: 'center', zIndex: 10 }}>
-                <div style={{ color: '#00FF41', fontSize: '10px', letterSpacing: '2px', marginBottom: '16px' }}>HUMAN VERIFICATION</div>
+                <div style={{ color: '#0EA5E9', fontSize: '10px', letterSpacing: '2px', marginBottom: '16px' }}>HUMAN VERIFICATION</div>
 
                 {status === 'loading' && (
                     <div style={{ color: '#666', fontSize: '14px' }}>Starting Camera...</div>
@@ -107,8 +107,8 @@ export const LivenessCheck: React.FC<LivenessCheckProps> = ({ onVerified, active
                                 left: 0,
                                 width: '100%',
                                 height: '2px',
-                                background: 'linear-gradient(90deg, transparent, #00FF41, transparent)',
-                                boxShadow: '0 0 10px #00FF41',
+                                background: 'linear-gradient(90deg, transparent, #0EA5E9, transparent)',
+                                boxShadow: '0 0 10px #0EA5E9',
                                 animation: 'scan 3s linear infinite',
                                 opacity: 0.7
                             }} />
@@ -118,10 +118,10 @@ export const LivenessCheck: React.FC<LivenessCheckProps> = ({ onVerified, active
                                 position: 'absolute',
                                 width: '100%',
                                 height: '100%',
-                                border: `2px solid ${isVerified ? '#00FF41' : 'transparent'}`,
+                                border: `2px solid ${isVerified ? '#0EA5E9' : 'transparent'}`,
                                 borderRadius: '50%',
                                 transition: 'all 0.5s',
-                                boxShadow: isVerified ? '0 0 30px #00FF41 inset' : 'none',
+                                boxShadow: isVerified ? '0 0 30px #0EA5E9 inset' : 'none',
                                 opacity: 0.5
                             }} />
                         </div>
@@ -133,7 +133,7 @@ export const LivenessCheck: React.FC<LivenessCheckProps> = ({ onVerified, active
                 )}
 
                 {isVerified && (
-                    <div style={{ color: '#00FF41', fontSize: '24px', fontWeight: 'bold' }}>✓ VERIFIED</div>
+                    <div style={{ color: '#0EA5E9', fontSize: '24px', fontWeight: 'bold' }}>✓ VERIFIED</div>
                 )}
             </div>
 

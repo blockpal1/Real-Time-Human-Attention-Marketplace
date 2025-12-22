@@ -105,7 +105,7 @@ export async function x402Middleware(req: Request, res: Response, next: NextFunc
         if (ADMIN_KEY && adminKeyHeader === ADMIN_KEY) {
             const { duration, quantity = 1, bid_per_second, content_url, validation_question, callback_url } = req.body;
 
-            if (!duration || !bid_per_second) {
+            if (duration === undefined || bid_per_second === undefined) {
                 return res.status(400).json({ error: "Missing required fields: duration, bid_per_second" });
             }
 
@@ -185,8 +185,11 @@ export async function x402Middleware(req: Request, res: Response, next: NextFunc
         // 1. EXTRACT ORDER DETAILS
         const { duration, quantity = 1, bid_per_second, content_url, validation_question, callback_url } = req.body;
 
-        if (!duration || !bid_per_second) {
-            return res.status(400).json({ error: "Missing duration or bid_per_second" });
+        if (!duration || !bid_per_second || bid_per_second < 0.003) {
+            return res.status(400).json({
+                error: "invalid_bid",
+                message: "Minimum bid for agents is $0.003/s. Campaign Manager (Admin) is required for $0.0000 bids."
+            });
         }
 
         // Validation question is REQUIRED

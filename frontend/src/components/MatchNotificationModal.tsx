@@ -34,6 +34,14 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
     const [answer, setAnswer] = useState('');
     const [initialDuration] = useState(match.duration); // Store initial duration
     const [rejectionMessage, setRejectionMessage] = useState('');
+    const [verifyStep, setVerifyStep] = useState(0);
+    const verifyMessages = [
+        "Analyzing session metadata...",
+        "Validating semantic relevance...",
+        "Checking gaze consistency...",
+        "Finalizing attention proof...",
+        "Calculating season rewards..."
+    ];
 
     const topicDisplay = typeof match.topic === 'string' ? match.topic : 'Ad Campaign';
     const totalEarnings = match.price * match.duration;
@@ -216,6 +224,15 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
         return () => clearInterval(timer);
     }, [phase]);
 
+    // Cycle verification messages
+    useEffect(() => {
+        if (phase !== 'verifying') return;
+        const interval = setInterval(() => {
+            setVerifyStep(prev => (prev + 1) % verifyMessages.length);
+        }, 1200);
+        return () => clearInterval(interval);
+    }, [phase, verifyMessages.length]);
+
     const handleAccept = useCallback(() => setPhase('preparing'), []);
 
     const [paymentResult, setPaymentResult] = useState<any>(null);
@@ -286,7 +303,7 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
             justifyContent: 'center',
         };
         if (phase === 'matching' || phase === 'preparing') {
-            return { ...base, border: '2px solid #00FF41', borderRadius: '16px', padding: '32px', maxWidth: '400px', width: '90%', boxShadow: '0 0 60px rgba(0,255,65,0.4)' };
+            return { ...base, border: '2px solid #0EA5E9', borderRadius: '16px', padding: '32px', maxWidth: '400px', width: '90%', boxShadow: '0 0 60px rgba(14,165,233,0.4)' };
         }
         return { ...base, position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, width: '100%', height: '100%', maxWidth: '100%', borderRadius: 0, border: 'none', padding: '48px' };
     };
@@ -306,11 +323,20 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
         // VERIFYING phase - optimistic UI while AI validates
         if (phase === 'verifying') {
             return (
-                <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: '48px', marginBottom: '16px' }}>✓</div>
-                    <div style={{ color: '#0088FF', fontSize: '18px', fontWeight: 'bold', marginBottom: '8px' }}>Success!</div>
-                    <div style={{ color: '#888', fontSize: '14px' }}>Verifying your response...</div>
-                    <div style={{ width: '60px', height: '60px', border: '3px solid #0088FF', borderTop: '3px solid transparent', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '24px auto 0' }} />
+                <div style={{ textAlign: 'center', position: 'relative', padding: '40px' }}>
+                    <div style={{ fontSize: '48px', marginBottom: '16px', animation: 'checkPulse 2s ease-in-out infinite' }}>✓</div>
+                    <div style={{ color: '#0EA5E9', fontSize: '18px', fontWeight: 'bold', marginBottom: '8px' }}>Success!</div>
+                    <div style={{ color: '#888', fontSize: '14px', height: '20px', transition: 'all 0.3s ease' }}>{verifyMessages[verifyStep]}</div>
+
+                    <div style={{ position: 'relative', width: '80px', height: '80px', margin: '32px auto 0' }}>
+                        {/* Outer Glow Spinner */}
+                        <div style={{ position: 'absolute', inset: -10, borderRadius: '50%', border: '2px solid rgba(14,165,233,0.1)', animation: 'pulseGlow 2s ease-in-out infinite' }} />
+                        {/* The Spinner */}
+                        <div style={{ width: '80px', height: '80px', border: '4px solid #0EA5E9', borderTop: '4px solid transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite', boxShadow: '0 0 15px rgba(14,165,233,0.3)' }} />
+                    </div>
+
+                    {/* Scanning Bar Animation */}
+                    <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '2px', background: 'linear-gradient(90deg, transparent, #0EA5E9, transparent)', animation: 'scanLine 3s linear infinite', opacity: 0.5 }} />
                 </div>
             );
         }
@@ -344,26 +370,26 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
         if (phase === 'matching') {
             return (
                 <>
-                    <div style={{ width: '80px', height: '80px', borderRadius: '50%', border: `4px solid ${countdown <= 3 ? '#ff4444' : '#00FF41'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '24px', fontSize: '32px', fontFamily: 'monospace', color: countdown <= 3 ? '#ff4444' : '#00FF41', fontWeight: 'bold' }}>
+                    <div style={{ width: '80px', height: '80px', borderRadius: '50%', border: `4px solid ${countdown <= 3 ? '#ff4444' : '#0EA5E9'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '24px', fontSize: '32px', fontFamily: 'monospace', color: countdown <= 3 ? '#ff4444' : '#0EA5E9', fontWeight: 'bold' }}>
                         {countdown}
                     </div>
-                    <div style={{ color: '#00FF41', fontSize: '12px', letterSpacing: '2px', marginBottom: '8px' }}>⚡ MATCH DETECTED</div>
+                    <div style={{ color: '#0EA5E9', fontSize: '12px', letterSpacing: '2px', marginBottom: '8px' }}>⚡ MATCH DETECTED</div>
                     <h2 style={{ color: 'white', fontSize: '24px', marginBottom: '24px', textAlign: 'center' }}>{topicDisplay}</h2>
                     <div style={{ display: 'flex', gap: '16px', marginBottom: '24px', width: '100%' }}>
                         <div style={{ flex: 1, backgroundColor: 'rgba(255,255,255,0.05)', padding: '16px', borderRadius: '8px', textAlign: 'center' }}>
                             <div style={{ color: '#888', fontSize: '10px', marginBottom: '4px' }}>RATE</div>
-                            <div style={{ color: '#00FF41', fontSize: '20px', fontFamily: 'monospace' }}>${match.price.toFixed(4)}/s</div>
+                            <div style={{ color: '#0EA5E9', fontSize: '20px', fontFamily: 'monospace' }}>${match.price.toFixed(4)}/s</div>
                         </div>
                         <div style={{ flex: 1, backgroundColor: 'rgba(255,255,255,0.05)', padding: '16px', borderRadius: '8px', textAlign: 'center' }}>
                             <div style={{ color: '#888', fontSize: '10px', marginBottom: '4px' }}>DURATION</div>
                             <div style={{ color: 'white', fontSize: '20px', fontFamily: 'monospace' }}>{match.duration}s</div>
                         </div>
                     </div>
-                    <div style={{ backgroundColor: 'rgba(0,255,65,0.1)', border: '1px solid rgba(0,255,65,0.3)', padding: '16px', borderRadius: '8px', marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                    <div style={{ backgroundColor: 'rgba(14,165,233,0.1)', border: '1px solid rgba(14,165,233,0.3)', padding: '16px', borderRadius: '8px', marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
                         <span style={{ color: '#888', fontSize: '12px' }}>EST. EARNINGS</span>
-                        <span style={{ color: '#00FF41', fontSize: '24px', fontFamily: 'monospace', fontWeight: 'bold' }}>${totalEarnings.toFixed(4)}</span>
+                        <span style={{ color: '#0EA5E9', fontSize: '24px', fontFamily: 'monospace', fontWeight: 'bold' }}>${totalEarnings.toFixed(4)}</span>
                     </div>
-                    <button onClick={handleAccept} style={{ width: '100%', backgroundColor: '#00FF41', color: 'black', fontWeight: 'bold', padding: '16px', borderRadius: '8px', border: 'none', fontSize: '16px', cursor: 'pointer', marginBottom: '12px' }}>ACCEPT & FOCUS</button>
+                    <button onClick={handleAccept} style={{ width: '100%', backgroundColor: '#0EA5E9', color: 'black', fontWeight: 'bold', padding: '16px', borderRadius: '8px', border: 'none', fontSize: '16px', cursor: 'pointer', marginBottom: '12px' }}>ACCEPT & FOCUS</button>
                     <button onClick={onDismiss} style={{ width: '100%', backgroundColor: 'transparent', color: '#888', padding: '12px', borderRadius: '8px', border: '1px solid #333', fontSize: '12px', cursor: 'pointer' }}>Dismiss Offer</button>
                 </>
             );
@@ -372,7 +398,7 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
         if (phase === 'preparing') {
             return (
                 <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: '120px', fontFamily: 'monospace', fontWeight: 'bold', color: '#00FF41', textShadow: '0 0 40px rgba(0,255,65,0.6)' }}>{prepCountdown}</div>
+                    <div style={{ fontSize: '120px', fontFamily: 'monospace', fontWeight: 'bold', color: '#0EA5E9', textShadow: '0 0 40px rgba(14,165,233,0.6)' }}>{prepCountdown}</div>
                     <div style={{ color: '#888', fontSize: '14px', letterSpacing: '4px', marginTop: '16px' }}>PREPARING SESSION...</div>
                 </div>
             );
@@ -391,8 +417,7 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
         if (phase === 'expanding') {
             return (
                 <div style={{ textAlign: 'center' }}>
-                    <div style={{ width: '60px', height: '60px', border: '3px solid #00FF41', borderTop: '3px solid transparent', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto' }} />
-                    <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+                    <div style={{ width: '60px', height: '60px', border: '3px solid #0EA5E9', borderTop: '3px solid transparent', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto' }} />
                 </div>
             );
         }
@@ -405,12 +430,12 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
                     <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
                         <div style={{ textAlign: 'center' }}>
                             <div style={{ fontSize: '48px', marginBottom: '16px' }}>✅</div>
-                            <div style={{ color: '#0088FF', fontSize: '18px', fontWeight: 'bold', marginBottom: '8px' }}>THANK YOU!</div>
-                            <div style={{ backgroundColor: 'rgba(0,136,255,0.1)', border: '1px solid rgba(0,136,255,0.3)', borderRadius: '8px', padding: '16px 32px', marginBottom: '8px', display: 'inline-block' }}>
+                            <div style={{ color: '#0EA5E9', fontSize: '18px', fontWeight: 'bold', marginBottom: '8px' }}>THANK YOU!</div>
+                            <div style={{ backgroundColor: 'rgba(14,165,233,0.1)', border: '1px solid rgba(14,165,233,0.3)', borderRadius: '8px', padding: '16px 32px', marginBottom: '8px', display: 'inline-block' }}>
                                 <div style={{ color: '#888', fontSize: '10px', letterSpacing: '2px', marginBottom: '4px' }}>YOU EARNED</div>
-                                <div style={{ color: '#0088FF', fontSize: '32px', fontFamily: 'monospace', fontWeight: 'bold' }}>${paymentResult.earnedAmount.toFixed(4)}</div>
+                                <div style={{ color: '#0EA5E9', fontSize: '32px', fontFamily: 'monospace', fontWeight: 'bold' }}>${paymentResult.earnedAmount.toFixed(4)}</div>
                             </div>
-                            <div style={{ color: '#0088FF', fontSize: '12px', marginBottom: '8px' }}>✅ Payment Confirmed</div>
+                            <div style={{ color: '#0EA5E9', fontSize: '12px', marginBottom: '8px' }}>✅ Payment Confirmed</div>
                             {answer && (
                                 <div style={{ color: '#555', fontSize: '12px', marginBottom: '16px' }}>
                                     Your response: "{answer.slice(0, 60)}{answer.length > 60 ? '...' : ''}"
@@ -428,7 +453,7 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
                     {/* Top Bar */}
                     <div style={{ position: 'absolute', top: 0, left: 0, right: 0, padding: '12px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                            <div style={{ color: '#00FF41', fontSize: '10px', letterSpacing: '2px' }}>SESSION ENDED - ANSWER QUESTION</div>
+                            <div style={{ color: '#0EA5E9', fontSize: '10px', letterSpacing: '2px' }}>SESSION ENDED - ANSWER QUESTION</div>
                             <div style={{ color: questionTime <= 5 ? '#ff4444' : '#888', fontSize: '12px', fontFamily: 'monospace' }}>{questionTime}s</div>
                         </div>
                     </div>
@@ -445,9 +470,9 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
                                     onChange={(e) => setAnswer(e.target.value)}
                                     placeholder="Type your answer..."
                                     autoFocus
-                                    style={{ width: '100%', backgroundColor: '#0a0a0a', border: '2px solid #00FF41', borderRadius: '8px', padding: '16px', color: 'white', fontSize: '16px', marginBottom: '24px' }}
+                                    style={{ width: '100%', backgroundColor: '#0a0a0a', border: '2px solid #0EA5E9', borderRadius: '8px', padding: '16px', color: 'white', fontSize: '16px', marginBottom: '24px' }}
                                 />
-                                <button onClick={handleEndSession} style={{ width: '100%', backgroundColor: '#00FF41', color: 'black', fontWeight: 'bold', padding: '16px', borderRadius: '8px', border: 'none', fontSize: '16px', cursor: 'pointer' }}>SUBMIT & FINISH</button>
+                                <button onClick={handleEndSession} style={{ width: '100%', backgroundColor: '#0EA5E9', color: 'black', fontWeight: 'bold', padding: '16px', borderRadius: '8px', border: 'none', fontSize: '16px', cursor: 'pointer' }}>SUBMIT & FINISH</button>
                             </div>
                         ) : (
                             /* Time's up */
@@ -455,7 +480,7 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
                                 <div style={{ fontSize: '48px', marginBottom: '16px' }}>⏱️</div>
                                 <div style={{ color: '#ff4444', fontSize: '18px', fontWeight: 'bold', marginBottom: '8px' }}>TIME EXPIRED</div>
                                 <div style={{ color: '#666', fontSize: '14px', marginBottom: '24px' }}>Question not answered in time</div>
-                                <button onClick={handleEndSession} style={{ backgroundColor: '#00FF41', color: 'black', fontWeight: 'bold', padding: '12px 32px', borderRadius: '8px', border: 'none', fontSize: '14px', cursor: 'pointer' }}>RETURN TO DASHBOARD</button>
+                                <button onClick={handleEndSession} style={{ backgroundColor: '#0EA5E9', color: 'black', fontWeight: 'bold', padding: '12px 32px', borderRadius: '8px', border: 'none', fontSize: '14px', cursor: 'pointer' }}>RETURN TO DASHBOARD</button>
                             </div>
                         )}
                     </div>
@@ -489,8 +514,8 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
                 {/* Top Bar */}
                 <div style={{ position: 'absolute', top: 0, left: 0, right: 0, padding: '12px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                        <div style={{ color: '#00FF41', fontSize: '10px', letterSpacing: '2px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span style={{ width: '6px', height: '6px', backgroundColor: '#00FF41', borderRadius: '50%' }} />
+                        <div style={{ color: '#0EA5E9', fontSize: '10px', letterSpacing: '2px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ width: '6px', height: '6px', backgroundColor: '#0EA5E9', borderRadius: '50%' }} />
                             FOCUS MODE
                         </div>
                         <div style={{ color: sessionTime <= 5 ? '#ff4444' : '#888', fontSize: '12px', fontFamily: 'monospace' }}>{sessionTime}s</div>
@@ -515,19 +540,19 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
                         /* Session Complete - Payment Confirmed */
                         <div style={{ textAlign: 'center' }}>
                             <div style={{ fontSize: '48px', marginBottom: '16px' }}>✅</div>
-                            <div style={{ color: paymentResult.isPointsReward ? '#0088FF' : '#00FF41', fontSize: '18px', fontWeight: 'bold', marginBottom: '8px' }}>THANK YOU!</div>
-                            <div style={{ backgroundColor: paymentResult.isPointsReward ? 'rgba(0,136,255,0.1)' : 'rgba(0,255,65,0.1)', border: paymentResult.isPointsReward ? '1px solid rgba(0,136,255,0.3)' : '1px solid rgba(0,255,65,0.3)', borderRadius: '8px', padding: '16px 32px', marginBottom: '8px', display: 'inline-block' }}>
+                            <div style={{ color: '#0EA5E9', fontSize: '18px', fontWeight: 'bold', marginBottom: '8px' }}>THANK YOU!</div>
+                            <div style={{ backgroundColor: 'rgba(14,165,233,0.1)', border: '1px solid rgba(14,165,233,0.3)', borderRadius: '8px', padding: '16px 32px', marginBottom: '8px', display: 'inline-block' }}>
                                 <div style={{ color: '#888', fontSize: '10px', letterSpacing: '2px', marginBottom: '4px' }}>
                                     {paymentResult.isPointsReward ? 'POINTS EARNED' : 'YOU EARNED'}
                                 </div>
-                                <div style={{ color: paymentResult.isPointsReward ? '#0088FF' : '#00FF41', fontSize: '32px', fontFamily: 'monospace', fontWeight: 'bold' }}>
+                                <div style={{ color: '#0EA5E9', fontSize: '32px', fontFamily: 'monospace', fontWeight: 'bold' }}>
                                     {paymentResult.isPointsReward
                                         ? `+${paymentResult.points || 0} pts`
                                         : `$${(paymentResult.earnedAmount || 0).toFixed(4)}`
                                     }
                                 </div>
                             </div>
-                            <div style={{ color: paymentResult.isPointsReward ? '#0088FF' : '#00FF41', fontSize: '12px', marginBottom: '8px' }}>
+                            <div style={{ color: '#0EA5E9', fontSize: '12px', marginBottom: '8px' }}>
                                 {paymentResult.isPointsReward ? '🎮 Season Points Awarded!' : '✅ Payment Confirmed'}
                             </div>
                             {answer && (
@@ -538,12 +563,12 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
                             <div style={{ color: '#666', fontSize: '14px', marginBottom: '24px' }}>
                                 {paymentResult.isPointsReward ? 'Keep grinding Season Zero!' : 'Funds released to your wallet!'}
                             </div>
-                            <button onClick={handleEndSession} style={{ backgroundColor: paymentResult.isPointsReward ? '#0088FF' : '#00FF41', color: paymentResult.isPointsReward ? 'white' : 'black', fontWeight: 'bold', padding: '12px 32px', borderRadius: '8px', border: 'none', fontSize: '14px', cursor: 'pointer' }}>CONTINUE EARNING</button>
+                            <button onClick={handleEndSession} style={{ backgroundColor: '#0EA5E9', color: 'white', fontWeight: 'bold', padding: '12px 32px', borderRadius: '8px', border: 'none', fontSize: '14px', cursor: 'pointer' }}>CONTINUE EARNING</button>
                         </div>
                     ) : (
                         /* Loading Payment... */
                         <div style={{ textAlign: 'center' }}>
-                            <div style={{ width: '60px', height: '60px', border: '3px solid #00FF41', borderTop: '3px solid transparent', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 16px' }} />
+                            <div style={{ width: '60px', height: '60px', border: '3px solid #0EA5E9', borderTop: '3px solid transparent', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 16px' }} />
                             <div style={{ color: '#888', fontSize: '14px' }}>Processing Payment...</div>
                         </div>
                     )}
@@ -564,6 +589,15 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
                 height={480}
                 style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', zIndex: -1000 }}
             />
+
+            {/* Animations */}
+            <style>{`
+                @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+                @keyframes checkPulse { 0% { transform: scale(1); opacity: 0.8; } 50% { transform: scale(1.1); opacity: 1; text-shadow: 0 0 20px rgba(14,165,233,0.5); } 100% { transform: scale(1); opacity: 0.8; } }
+                @keyframes scanLine { 0% { top: 0%; opacity: 0; } 10% { opacity: 0.5; } 90% { opacity: 0.5; } 100% { top: 100%; opacity: 0; } }
+                @keyframes pulseGlow { 0% { transform: scale(0.94); opacity: 0.2; } 50% { transform: scale(1.15); opacity: 0.5; } 100% { transform: scale(0.94); opacity: 0.2; } }
+                @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
+            `}</style>
 
             <div style={getModalStyles()}>
                 {renderContent()}
