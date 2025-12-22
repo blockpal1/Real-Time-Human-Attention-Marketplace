@@ -158,5 +158,14 @@ export const api = {
             wallet: data.balance || 0,
             pending: 0 // TODO: Backend needs to track pending separately
         };
+    },
+
+    async getSeasonPoints(wallet: string) {
+        const response = await fetch(`${API_URL}/users/${wallet}/season-points`);
+        if (!response.ok) {
+            throw new Error('Failed to fetch season points');
+        }
+        const data = await response.json();
+        return data.points || 0;
     }
 };

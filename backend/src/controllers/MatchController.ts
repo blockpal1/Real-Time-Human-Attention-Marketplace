@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import axios from 'axios';
 import { redis, redisClient } from '../utils/redis';
 import { configService } from '../services/ConfigService';
-import { validateResponseWithAI, updateSignalQuality } from '../services/TrustService';
+import { validateResponseWithAI, updateSignalQuality, awardSeasonPoints } from '../services/TrustService';
 
 export const completeMatch = async (req: Request, res: Response) => {
     const { matchId } = req.params;
@@ -68,6 +68,54 @@ export const completeMatch = async (req: Request, res: Response) => {
                     workerPay = grossAmount * fees.workerMultiplier;  // 85%
                     builderPay = grossAmount * fees.builder;          // 3%
                     protocolPay = grossAmount * fees.protocol;        // 12%
+
+                    if (userWallet && grossAmount === 0) {
+                        // ========================================
+                        // SEASON ZERO: $0 campaign → Award Points
+                        // ========================================
+                        const passed = await validateResponseWithAI(
+                            order.validation_question || '',
+                            answer || ''
+                        );
+                        const qualityStatus = await updateSignalQuality(userWallet, passed);
+
+                        if (qualityStatus === 'BANNED') {
+                            return res.status(403).json({
+                                success: false,
+                                status: 'banned',
+                                message: 'Account suspended for low signal quality',
+                                earned: 0,
+                                points: 0,
+                                isPointsReward: true
+                            });
+                        }
+
+                        if (qualityStatus === 'LOW_SIGNAL') {
+                            return res.status(200).json({
+                                success: false,
+                                status: 'rejected',
+                                message: 'Submission rejected by Quality Control',
+                                earned: 0,
+                                points: 0,
+                                isPointsReward: true
+                            });
+                        }
+
+                        // HIGH_SIGNAL: Award Season Points
+                        const pointsAwarded = await awardSeasonPoints(userWallet, order.duration || 30);
+                        console.log(`[Season Zero] Awarded ${pointsAwarded} points to ${userWallet.slice(0, 12)}...`);
+
+                        return res.status(200).json({
+                            success: true,
+                            matchId,
+                            approved: true,
+                            earned: 0,
+                            points: pointsAwarded,
+                            isPointsReward: true,
+                            engagementScore: 1.0,
+                            threshold: 0.7
+                        });
+                    }
 
                     if (userWallet && grossAmount > 0) {
                         // ========================================

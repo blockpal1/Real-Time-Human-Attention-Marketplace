@@ -515,19 +515,30 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
                         /* Session Complete - Payment Confirmed */
                         <div style={{ textAlign: 'center' }}>
                             <div style={{ fontSize: '48px', marginBottom: '16px' }}>✅</div>
-                            <div style={{ color: '#00FF41', fontSize: '18px', fontWeight: 'bold', marginBottom: '8px' }}>THANK YOU!</div>
-                            <div style={{ backgroundColor: 'rgba(0,255,65,0.1)', border: '1px solid rgba(0,255,65,0.3)', borderRadius: '8px', padding: '16px 32px', marginBottom: '8px', display: 'inline-block' }}>
-                                <div style={{ color: '#888', fontSize: '10px', letterSpacing: '2px', marginBottom: '4px' }}>YOU EARNED</div>
-                                <div style={{ color: '#00FF41', fontSize: '32px', fontFamily: 'monospace', fontWeight: 'bold' }}>${paymentResult.earnedAmount.toFixed(4)}</div>
+                            <div style={{ color: paymentResult.isPointsReward ? '#0088FF' : '#00FF41', fontSize: '18px', fontWeight: 'bold', marginBottom: '8px' }}>THANK YOU!</div>
+                            <div style={{ backgroundColor: paymentResult.isPointsReward ? 'rgba(0,136,255,0.1)' : 'rgba(0,255,65,0.1)', border: paymentResult.isPointsReward ? '1px solid rgba(0,136,255,0.3)' : '1px solid rgba(0,255,65,0.3)', borderRadius: '8px', padding: '16px 32px', marginBottom: '8px', display: 'inline-block' }}>
+                                <div style={{ color: '#888', fontSize: '10px', letterSpacing: '2px', marginBottom: '4px' }}>
+                                    {paymentResult.isPointsReward ? 'POINTS EARNED' : 'YOU EARNED'}
+                                </div>
+                                <div style={{ color: paymentResult.isPointsReward ? '#0088FF' : '#00FF41', fontSize: '32px', fontFamily: 'monospace', fontWeight: 'bold' }}>
+                                    {paymentResult.isPointsReward
+                                        ? `+${paymentResult.points || 0} pts`
+                                        : `$${(paymentResult.earnedAmount || 0).toFixed(4)}`
+                                    }
+                                </div>
                             </div>
-                            <div style={{ color: '#00FF41', fontSize: '12px', marginBottom: '8px' }}>✅ Payment Confirmed</div>
+                            <div style={{ color: paymentResult.isPointsReward ? '#0088FF' : '#00FF41', fontSize: '12px', marginBottom: '8px' }}>
+                                {paymentResult.isPointsReward ? '🎮 Season Points Awarded!' : '✅ Payment Confirmed'}
+                            </div>
                             {answer && (
                                 <div style={{ color: '#555', fontSize: '12px', marginBottom: '16px' }}>
                                     Your response: "{answer.slice(0, 60)}{answer.length > 60 ? '...' : ''}"
                                 </div>
                             )}
-                            <div style={{ color: '#666', fontSize: '14px', marginBottom: '24px' }}>Funds released to your wallet!</div>
-                            <button onClick={handleEndSession} style={{ backgroundColor: '#00FF41', color: 'black', fontWeight: 'bold', padding: '12px 32px', borderRadius: '8px', border: 'none', fontSize: '14px', cursor: 'pointer' }}>CONTINUE EARNING</button>
+                            <div style={{ color: '#666', fontSize: '14px', marginBottom: '24px' }}>
+                                {paymentResult.isPointsReward ? 'Keep grinding Season Zero!' : 'Funds released to your wallet!'}
+                            </div>
+                            <button onClick={handleEndSession} style={{ backgroundColor: paymentResult.isPointsReward ? '#0088FF' : '#00FF41', color: paymentResult.isPointsReward ? 'white' : 'black', fontWeight: 'bold', padding: '12px 32px', borderRadius: '8px', border: 'none', fontSize: '14px', cursor: 'pointer' }}>CONTINUE EARNING</button>
                         </div>
                     ) : (
                         /* Loading Payment... */

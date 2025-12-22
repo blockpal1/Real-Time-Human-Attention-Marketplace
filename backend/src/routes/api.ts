@@ -120,6 +120,18 @@ router.get('/users/:wallet/balance', async (req, res) => {
     }
 });
 
+// Get user Season Zero points
+router.get('/users/:wallet/season-points', async (req, res) => {
+    const { wallet } = req.params;
+    try {
+        const points = await redisClient.client.hGet(`user:${wallet}`, 'points');
+        res.json({ wallet, points: points ? parseInt(points) : 0 });
+    } catch (error) {
+        console.error('Get Season Points Error:', error);
+        res.status(500).json({ error: 'Failed to fetch season points' });
+    }
+});
+
 // Get user match history
 router.get('/users/:wallet/history', async (req, res) => {
     const { wallet } = req.params;

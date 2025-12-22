@@ -128,3 +128,41 @@ export async function getWorkerStatus(walletAddress: string): Promise<{ quality:
         isBanned: score < CONSTANTS.MIN_THRESHOLD
     };
 }
+
+// ============================================================
+// SEASON ZERO POINTS SYSTEM
+// ============================================================
+
+/**
+ * Calculate points based on task duration (quadratic scaling)
+ * 10s = 100pts, 30s = 400pts, 60s = 900pts
+ */
+export function calculateSeasonPoints(durationSeconds: number): number {
+    const pointsMap: Record<number, number> = {
+        10: 100,
+        30: 400,
+        60: 900
+    };
+    return pointsMap[durationSeconds] || 0;
+}
+
+/**
+ * Award Season Zero points to a worker
+ * Called when task is completed successfully on a $0 campaign
+ */
+export async function awardSeasonPoints(wallet: string, duration: number): Promise<number> {
+    const points = calculateSeasonPoints(duration);
+    if (points > 0) {
+        await redisClient.client.hIncrBy(`user:${wallet}`, 'points', points);
+        console.log(`[TrustService] Awarded ${points} Season Points to ${wallet.slice(0, 12)}...`);
+    }
+    return points;
+}
+
+/**
+ * Get worker's current Season Points total
+ */
+export async function getSeasonPoints(wallet: string): Promise<number> {
+    const points = await redisClient.client.hGet(`user:${wallet}`, 'points');
+    return points ? parseInt(points) : 0;
+}

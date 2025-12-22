@@ -23,16 +23,18 @@ export const Header: React.FC<HeaderProps> = ({ setView, theme, setTheme, userPu
     const [walletBalance, setWalletBalance] = useState(0);
     const [signalQuality, setSignalQuality] = useState<number | null>(null);
     const [qualityStatus, setQualityStatus] = useState<'high' | 'medium' | 'low' | 'banned' | 'new'>('new');
+    const [seasonPoints, setSeasonPoints] = useState(0);
 
     // Get wallet address from Privy
     const embeddedWallet = wallets.find((wallet) => wallet.walletClientType === 'privy');
     const walletAddress = embeddedWallet?.address || user?.wallet?.address;
 
-    // Fetch earnings and signal quality on mount and when wallet address changes
+    // Fetch earnings, signal quality, and season points on mount and when wallet address changes
     useEffect(() => {
         if (walletAddress) {
             loadEarnings();
             loadSignalQuality();
+            loadSeasonPoints();
         }
     }, [walletAddress]);
 
@@ -81,6 +83,17 @@ export const Header: React.FC<HeaderProps> = ({ setView, theme, setTheme, userPu
             // Set default values on error
             setSignalQuality(50);
             setQualityStatus('new');
+        }
+    };
+
+    const loadSeasonPoints = async () => {
+        if (!walletAddress) return;
+        try {
+            const points = await api.getSeasonPoints(walletAddress);
+            setSeasonPoints(points);
+        } catch (error) {
+            console.error('Failed to load season points:', error);
+            setSeasonPoints(0);
         }
     };
 
@@ -293,6 +306,17 @@ export const Header: React.FC<HeaderProps> = ({ setView, theme, setTheme, userPu
                                     </div>
                                 </div>
                             )}
+                        </div>
+                    )}
+
+                    {/* Season Points Pill */}
+                    {walletAddress && (
+                        <div
+                            className="flex items-center gap-2 px-3 py-1 bg-white/5 rounded-full border border-purple-500/50 text-xs"
+                            title="Season Zero Points - Earned from $0 campaigns"
+                        >
+                            <span className="text-gray-400">🎮</span>
+                            <span className="text-purple-400 font-mono font-bold">{seasonPoints.toLocaleString()} pts</span>
                         </div>
                     )}
 
