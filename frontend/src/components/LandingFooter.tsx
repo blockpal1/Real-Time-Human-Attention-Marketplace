@@ -87,7 +87,6 @@ export const LandingFooter: React.FC = () => {
                     <FooterColumn title="Product">
                         <FooterLink href="#how-it-works">How It Works</FooterLink>
                         <FooterLink href="#privacy">Privacy & Security</FooterLink>
-                        <FooterLink href="#app">Set Your Rate</FooterLink>
                         <FooterLink href="#faq">FAQ</FooterLink>
                     </FooterColumn>
 
@@ -96,7 +95,6 @@ export const LandingFooter: React.FC = () => {
                         <FooterLink href="https://docs.attentium.ai/introduction" target="_blank" rel="noopener noreferrer">Documentation</FooterLink>
                         <FooterLink href="https://docs.attentium.ai/api-reference" target="_blank" rel="noopener noreferrer">API Reference</FooterLink>
                         <FooterLink href="https://github.com/Attentium/Attentium-Public" target="_blank" rel="noopener noreferrer">GitHub</FooterLink>
-                        <FooterLink href="#">Whitepaper</FooterLink>
                     </FooterColumn>
 
                     {/* Community */}

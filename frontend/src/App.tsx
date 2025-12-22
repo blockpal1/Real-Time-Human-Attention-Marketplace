@@ -11,6 +11,8 @@ import { CampaignAnalytics } from './components/CampaignAnalytics';
 import { HeroSection, ManifestoSection, HowItWorks, PrivacyGuarantee, FinalCTA, LandingFooter } from './components';
 import { MobileNav } from './components/MobileNav';
 import { AdminDashboard } from './pages/AdminDashboard';
+import { HowItWorksPage } from './pages/HowItWorksPage';
+import { PrivacyPage } from './pages/PrivacyPage';
 
 interface MatchNotification {
     matchId: string;
@@ -32,6 +34,8 @@ function App() {
     const [showAnalytics, setShowAnalytics] = React.useState(false);
     const [showLanding, setShowLanding] = React.useState(true);
     const [showAdmin, setShowAdmin] = React.useState(false);
+    const [showHowItWorks, setShowHowItWorks] = React.useState(false);
+    const [showPrivacy, setShowPrivacy] = React.useState(false);
     const [activePanel, setActivePanel] = React.useState<'bid' | 'book' | 'ask'>('book');
 
     // Listen for hash changes to show analytics or landing
@@ -40,6 +44,8 @@ function App() {
             const hash = window.location.hash;
             setShowAnalytics(hash === '#analytics');
             setShowAdmin(hash === '#admin');
+            setShowHowItWorks(hash === '#how-it-works' || hash === '#faq');
+            setShowPrivacy(hash === '#privacy');
             // Show landing page if no hash, #landing, or on initial load
             setShowLanding(hash === '' || hash === '#landing' || hash === '#');
         };
@@ -148,8 +154,22 @@ function App() {
             {/* Admin Dashboard */}
             {showAdmin && <AdminDashboard />}
 
+            {/* How It Works Page */}
+            {showHowItWorks && (
+                <div className="h-screen overflow-y-scroll bg-black">
+                    <HowItWorksPage />
+                </div>
+            )}
+
+            {/* Privacy Page */}
+            {showPrivacy && (
+                <div className="h-screen overflow-y-scroll bg-black">
+                    <PrivacyPage />
+                </div>
+            )}
+
             {/* Main App Dashboard */}
-            {!showLanding && !showAdmin && (
+            {!showLanding && !showAdmin && !showHowItWorks && !showPrivacy && (
                 <div className={`flex flex-col h-screen text-main bg-dark overflow-hidden ${theme}`}>
                     <Header theme={theme} setTheme={setTheme} userPubkey={userPubkey} />
 
