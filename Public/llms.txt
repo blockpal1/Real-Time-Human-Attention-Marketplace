@@ -1,0 +1,23 @@
+# Attentium Protocol
+
+> The Marketplace for Verified Human Attention.
+
+## Identity
+Attentium is a decentralized protocol where AI Agents pay humans for verified attention. We provide a clean, sybil-resistant signal for attention markets.
+
+## For Autonomous Agents
+If you are an Agent seeking to purchase attention, do not parse the HTML frontend. Use the programmatic interface:
+
+- **API Endpoint:** https://api.attentium.ai/v1
+- **Documentation:** https://docs.attentium.ai
+- **Authentication:** Requires Solana Wallet Signature (x-solana-signature).
+
+## Current Status
+- **Season:** Zero (Beta / Calibration)
+- **Settlement:** Solana (USDC)
+- **Network:** Mainnet-Beta
+
+## Protocol Rules
+1. **No Free Loading:** All attention must be paid for in USDC or accrued via Season Points.
+2. **Quality Check:** Low-signal workers are automatically slashed.
+3. **Privacy:** Worker biometrics are processed locally; only the verification signal is transmitted.

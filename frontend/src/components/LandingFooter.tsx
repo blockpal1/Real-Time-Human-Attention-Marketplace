@@ -1,4 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { OriginModal } from './OriginModal';
+import { ContactModal } from './ContactModal';
+import { PrivacyPolicyModal } from './PrivacyPolicyModal';
+import { TermsOfServiceModal } from './TermsOfServiceModal';
 
 interface FooterLinkProps {
     href: string;
@@ -63,8 +67,17 @@ const AttentiumLogoSmall = () => (
  * LandingFooter - Comprehensive 4-column footer for landing page
  */
 export const LandingFooter: React.FC = () => {
+    const [showOrigin, setShowOrigin] = useState(false);
+    const [showContact, setShowContact] = useState(false);
+    const [showPolicy, setShowPolicy] = useState(false);
+    const [showTerms, setShowTerms] = useState(false);
+
     return (
         <footer className="bg-[#0a0f1a] border-t border-[#1e293b]">
+            <OriginModal isOpen={showOrigin} onClose={() => setShowOrigin(false)} />
+            <ContactModal isOpen={showContact} onClose={() => setShowContact(false)} />
+            <PrivacyPolicyModal isOpen={showPolicy} onClose={() => setShowPolicy(false)} />
+            <TermsOfServiceModal isOpen={showTerms} onClose={() => setShowTerms(false)} />
             {/* Main Footer Content */}
             <div className="max-w-6xl mx-auto px-6 py-20">
 
@@ -115,14 +128,22 @@ export const LandingFooter: React.FC = () => {
                                 Discord
                             </span>
                         </FooterLink>
-                        <FooterLink href="#">Blog</FooterLink>
                     </FooterColumn>
 
                     {/* Company */}
                     <FooterColumn title="Company">
-                        <FooterLink href="#">About</FooterLink>
-                        <FooterLink href="#">Contact</FooterLink>
-                        <FooterLink href="#">Careers</FooterLink>
+                        <button
+                            onClick={() => setShowOrigin(true)}
+                            className="text-gray-400 hover:text-[#0EA5E9] transition-colors duration-200 block text-left w-full"
+                        >
+                            Origin
+                        </button>
+                        <button
+                            onClick={() => setShowContact(true)}
+                            className="text-gray-400 hover:text-[#0EA5E9] transition-colors duration-200 block text-left w-full"
+                        >
+                            Contact
+                        </button>
                     </FooterColumn>
                 </div>
             </div>
@@ -133,9 +154,9 @@ export const LandingFooter: React.FC = () => {
                     <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 text-xs text-gray-500">
                         <span>© 2024 Attentium</span>
                         <span>•</span>
-                        <a href="#" className="hover:text-[#0EA5E9] transition-colors">Privacy Policy</a>
+                        <button onClick={() => setShowPolicy(true)} className="hover:text-[#0EA5E9] transition-colors">Privacy Policy</button>
                         <span>•</span>
-                        <a href="#" className="hover:text-[#0EA5E9] transition-colors">Terms of Service</a>
+                        <button onClick={() => setShowTerms(true)} className="hover:text-[#0EA5E9] transition-colors">Terms of Service</button>
                     </div>
                     <div className="flex items-center gap-2 text-xs text-gray-600">
                         <span>Built on</span>
