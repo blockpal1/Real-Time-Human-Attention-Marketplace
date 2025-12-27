@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Token, TokenAccount, Transfer};
 
-declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
+declare_id!("H4zbWKDAGnrJv9CTptjVvxKCDB59Mv2KpiVDx9d4jDaz");
 
 #[program]
 pub mod payment_router {
@@ -34,7 +34,7 @@ pub mod payment_router {
         let escrow = &mut ctx.accounts.escrow_account;
         escrow.agent = ctx.accounts.agent.key();
         escrow.balance += amount;
-        escrow.bump = *ctx.bumps.get("escrow_account").unwrap();
+        escrow.bump = ctx.bumps.escrow_account;
 
         Ok(())
     }

@@ -21,10 +21,14 @@ import { configService } from '../services/ConfigService';
 
 // Configuration
 const RPC_URL = process.env.SOLANA_RPC_URL || 'https://api.devnet.solana.com';
-const TREASURY = new PublicKey(process.env.SOLANA_TREASURY_WALLET || '2kDpvEhgoLkUbqFJqxMpUXMtr2gVYbfqNF8kGrfoZMAV');
+const TREASURY = new PublicKey(process.env.ATTENTIUM_VAULT_ADDRESS || '2kDpvEhgoLkUbqFJqxMpUXMtr2gVYbfqNF8kGrfoZMAV');
 const PAYMENT_ROUTER_PROGRAM_ID = new PublicKey(process.env.PAYMENT_ROUTER_PROGRAM_ID || 'Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS');
-const USDC_MINT = new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"); // Mainnet USDC
 const IS_DEVNET = RPC_URL.includes('devnet');
+
+// USDC Mint - Uses Devnet faucet mint when on Devnet
+const MAINNET_USDC_MINT = new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
+const DEVNET_USDC_MINT = new PublicKey("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"); // Standard Devnet USDC faucet mint
+const USDC_MINT = IS_DEVNET ? DEVNET_USDC_MINT : MAINNET_USDC_MINT;
 
 const connection = new Connection(RPC_URL, 'confirmed');
 
@@ -244,6 +248,7 @@ export async function x402Middleware(req: Request, res: Response, next: NextFunc
 
             // --- NON-CUSTODIAL SERIALIZED TRANSACTION GENERATION ---
             const agentKeyHeader = req.headers['x-agent-key'];
+            console.log('[x402] X-Agent-Key header:', agentKeyHeader, '| Type:', typeof agentKeyHeader);
 
             if (typeof agentKeyHeader === 'string') {
                 try {

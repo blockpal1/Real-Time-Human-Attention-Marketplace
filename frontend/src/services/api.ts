@@ -1,34 +1,7 @@
 const API_URL = 'http://localhost:3000/v1';
 
 export const api = {
-    async submitBid(bid: any) {
-        // Route through x402 middleware which applies spread at creation time
-        const headers: any = {
-            'Content-Type': 'application/json',
-            'X-Admin-Key': import.meta.env.VITE_ADMIN_SECRET || ''  // Read from .env
-        };
-
-        if (bid.builder_code) {
-            headers['X-Builder-Code'] = bid.builder_code;
-        }
-
-        const response = await fetch(`${API_URL}/verify`, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify({
-                duration: bid.duration_per_user,
-                quantity: bid.target_quantity,
-                bid_per_second: bid.max_price_per_second / 1_000_000, // Convert micros to USDC
-                content_url: bid.content_url,
-                validation_question: bid.validation_question
-            })
-        });
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`Bid failed: ${errorText || response.statusText}`);
-        }
-        return response.json();
-    },
+    // submitBid removed: Use useCampaign hook for non-custodial funding
 
     async startSession(pubkey: string, price: number) {
         const response = await fetch(`${API_URL}/users/session/start`, {

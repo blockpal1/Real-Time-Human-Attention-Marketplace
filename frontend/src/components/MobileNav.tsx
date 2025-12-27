@@ -22,7 +22,13 @@ export const MobileNav: React.FC<MobileNavProps> = ({ activePanel, setActivePane
                     return (
                         <button
                             key={tab.id}
-                            onClick={() => setActivePanel(tab.id)}
+                            onClick={() => {
+                                if (tab.id === 'bid') {
+                                    window.location.hash = '#campaigns';
+                                } else {
+                                    setActivePanel(tab.id);
+                                }
+                            }}
                             className={`flex-1 flex flex-col items-center justify-center h-full transition-all ${isActive ? 'opacity-100' : 'opacity-50'
                                 }`}
                             style={{

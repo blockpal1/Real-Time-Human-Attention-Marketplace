@@ -3,14 +3,13 @@ import { Header } from './components/Header';
 import { Footer } from './components/Footer';
 import { OrderBook } from './components/OrderBook';
 import { PriceFloorSetter } from './components/PriceFloorSetter';
-import { PlaceBid } from './components/PlaceBid';
 import { wsClient } from './services/wsClient';
 import { api } from './services/api';
 import { MatchNotificationModal } from './components/MatchNotificationModal';
-import { CampaignAnalytics } from './components/CampaignAnalytics';
 import { HeroSection, ManifestoSection, HowItWorks, PrivacyGuarantee, FinalCTA, LandingFooter } from './components';
 import { MobileNav } from './components/MobileNav';
 import { AdminDashboard } from './pages/AdminDashboard';
+import { CampaignPage } from './pages/CampaignPage';
 import { HowItWorksPage } from './pages/HowItWorksPage';
 import { PrivacyPage } from './pages/PrivacyPage';
 
@@ -31,9 +30,9 @@ function App() {
     const [liveFeed, setLiveFeed] = React.useState<{ id: string; text: string }[]>([]);
     const [sessionToken, setSessionToken] = React.useState<string | null>(null);
     const [userPubkey, setUserPubkey] = React.useState<string | null>(null);
-    const [showAnalytics, setShowAnalytics] = React.useState(false);
     const [showLanding, setShowLanding] = React.useState(true);
     const [showAdmin, setShowAdmin] = React.useState(false);
+    const [showCampaigns, setShowCampaigns] = React.useState(false);
     const [showHowItWorks, setShowHowItWorks] = React.useState(false);
     const [showPrivacy, setShowPrivacy] = React.useState(false);
     const [activePanel, setActivePanel] = React.useState<'bid' | 'book' | 'ask'>('book');
@@ -42,8 +41,8 @@ function App() {
     React.useEffect(() => {
         const handleHashChange = () => {
             const hash = window.location.hash;
-            setShowAnalytics(hash === '#analytics');
             setShowAdmin(hash === '#admin');
+            setShowCampaigns(hash === '#campaigns' || hash === '#analytics'); // Analytics also lives in CampaignPage now
             setShowHowItWorks(hash === '#how-it-works' || hash === '#faq');
             setShowPrivacy(hash === '#privacy');
             // Show landing page if no hash, #landing, or on initial load
@@ -154,6 +153,9 @@ function App() {
             {/* Admin Dashboard */}
             {showAdmin && <AdminDashboard />}
 
+            {/* Campaign Manager Page */}
+            {showCampaigns && <CampaignPage />}
+
             {/* How It Works Page */}
             {showHowItWorks && (
                 <div className="h-screen overflow-y-scroll bg-black">
@@ -169,7 +171,7 @@ function App() {
             )}
 
             {/* Main App Dashboard */}
-            {!showLanding && !showAdmin && !showHowItWorks && !showPrivacy && (
+            {!showLanding && !showAdmin && !showCampaigns && !showHowItWorks && !showPrivacy && (
                 <div className={`flex flex-col h-screen text-main bg-dark overflow-hidden ${theme}`}>
                     <Header theme={theme} setTheme={setTheme} userPubkey={userPubkey} />
 
@@ -184,28 +186,8 @@ function App() {
                     )}
 
                     <main className="flex flex-col md:flex-row flex-1 w-full overflow-hidden">
-                        {/* LEFT COLUMN: Campaign Logic or Analytics */}
-                        <div className={`panel-left bg-panel p-4 gap-4 overflow-y-auto pb-20 md:pb-4 ${activePanel === 'bid' ? 'active' : ''}`}>
-                            {showAnalytics ? (
-                                <>
-                                    <button
-                                        onClick={() => window.location.hash = '#app'}
-                                        className="text-left text-sm text-gray-400 hover:text-white transition-colors mb-2"
-                                    >
-                                        ← Back to Campaign Console
-                                    </button>
-                                    <CampaignAnalytics agentPubkey="mock-agent-pubkey" />
-                                </>
-                            ) : (
-                                <>
-                                    <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">Campaign Console</h2>
-                                    <PlaceBid duration={duration} setDuration={setDuration} />
-                                    <div className="p-4 border border-dashed border-gray-700 rounded text-center text-gray-500 text-sm">
-                                        [Escrow Manager Placeholder]
-                                    </div>
-                                </>
-                            )}
-                        </div>
+                        {/* LEFT COLUMN: Removed (Moved to CampaignPage) */}
+                        {/* We now only have Center (Market) and Right (Ask) */}
 
                         {/* CENTER COLUMN: The Market */}
                         <div className={`panel-center bg-dark p-4 gap-4 items-center overflow-y-auto pb-20 md:pb-4 ${activePanel === 'book' ? 'active' : ''}`}>
