@@ -1,13 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
-import { useWallets } from '@privy-io/react-auth';
-import { Transaction } from '@solana/web3.js';
-import { Buffer } from 'buffer';
-
-// Helper to ensure Buffer is available
-if (typeof window !== 'undefined' && !window.Buffer) {
-    window.Buffer = Buffer;
-}
+import { useClaim } from '../hooks/useClaim';
 
 interface EarningsDashboardProps {
     userPubkey: string;
@@ -20,9 +13,9 @@ export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({ userPubkey
     const [unclaimed, setUnclaimed] = useState<any>(null);
     const [history, setHistory] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
-    const [claiming, setClaiming] = useState(false);
 
-    const { wallets } = useWallets();
+    // Use custom hook for claiming
+    const { claiming, claimEarnings } = useClaim(userPubkey);
 
     useEffect(() => {
         if (isOpen && userPubkey) {
@@ -48,41 +41,12 @@ export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({ userPubkey
         }
     };
 
-    const handleClaim = async () => {
+    const onClaimClick = async () => {
         if (!unclaimed || unclaimed.usdc_balance <= 0.01) return;
-        setClaiming(true);
 
-        try {
-            // 1. Request TX from Backend
-            const { transaction, claimId, error } = await api.withdrawEarnings(userPubkey);
-            if (error) throw new Error(error);
-
-            // 2. Deserialize
-            const txBuffer = Buffer.from(transaction, 'base64');
-            const tx = Transaction.from(txBuffer);
-
-            // 3. Sign with Wallet
-            const wallet = wallets.find(w => w.address === userPubkey) || wallets[0];
-            if (!wallet) throw new Error("Wallet not connected");
-
-            // Privy signTransaction returns the signed transaction object
-            const signedTx = await (wallet as any).signTransaction(tx);
-
-            // 4. Serialize Signed TX
-            const signedBase64 = signedTx.serialize().toString('base64');
-
-            // 5. Submit to Backend for broadcasting/finalizing
-            await api.submitClaim(userPubkey, claimId, signedBase64);
-
-            alert("Claim Successful! Funds will arrive shortly.");
-            await loadData(); // Refresh UI
-
-        } catch (e: any) {
-            console.error(e);
-            alert(`Claim Failed: ${e.message}`);
-        } finally {
-            setClaiming(false);
-        }
+        await claimEarnings(() => {
+            loadData(); // Refresh UI on success
+        });
     };
 
     if (!isOpen) return null;
@@ -134,7 +98,7 @@ export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({ userPubkey
                                     </div>
                                 </div>
                                 <button
-                                    onClick={handleClaim}
+                                    onClick={onClaimClick}
                                     disabled={claiming || unclaimed.usdc_balance < 0.01}
                                     style={{
                                         backgroundColor: claiming || unclaimed.usdc_balance < 0.01 ? '#222' : '#00FF41',
