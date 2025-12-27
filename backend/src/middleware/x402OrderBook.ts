@@ -1,5 +1,19 @@
 import { Request, Response, NextFunction } from 'express';
-import { Connection, PublicKey } from '@solana/web3.js';
+import {
+    Connection,
+    PublicKey,
+    Transaction,
+    TransactionInstruction,
+    SystemProgram,
+    Keypair,
+    SYSVAR_RENT_PUBKEY
+} from '@solana/web3.js';
+import {
+    TOKEN_PROGRAM_ID,
+    ASSOCIATED_TOKEN_PROGRAM_ID,
+    getAssociatedTokenAddress,
+    createAssociatedTokenAccountIdempotentInstruction
+} from '@solana/spl-token';
 import crypto from 'crypto';
 import { redisClient } from '../utils/redis';
 import { moderationService } from '../services/ContentModerationService';
@@ -8,6 +22,7 @@ import { configService } from '../services/ConfigService';
 // Configuration
 const RPC_URL = process.env.SOLANA_RPC_URL || 'https://api.devnet.solana.com';
 const TREASURY = new PublicKey(process.env.SOLANA_TREASURY_WALLET || '2kDpvEhgoLkUbqFJqxMpUXMtr2gVYbfqNF8kGrfoZMAV');
+const PAYMENT_ROUTER_PROGRAM_ID = new PublicKey(process.env.PAYMENT_ROUTER_PROGRAM_ID || 'Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS');
 const USDC_MINT = new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"); // Mainnet USDC
 const IS_DEVNET = RPC_URL.includes('devnet');
 
@@ -44,6 +59,7 @@ export interface OrderRecord {
     read_key: string;           // Auth key for GET /campaigns/:tx_hash/results
     webhook_secret: string;     // HMAC signing key for webhook payloads
     callback_url: string | null; // Optional webhook URL
+    agent: string;              // Agent Public Key (Escrow Owner) - Required for settlement
 }
 
 // Cleanup Job: Runs every 60s to expire old open orders
@@ -105,78 +121,83 @@ export async function x402Middleware(req: Request, res: Response, next: NextFunc
         if (ADMIN_KEY && adminKeyHeader === ADMIN_KEY) {
             const { duration, quantity = 1, bid_per_second, content_url, validation_question, callback_url } = req.body;
 
-            if (duration === undefined || bid_per_second === undefined) {
-                return res.status(400).json({ error: "Missing required fields: duration, bid_per_second" });
-            }
+            // VIRTUAL BYPASS ONLY: Allow 0-bid campaigns for testing/points
+            if (bid_per_second === 0) {
+                if (duration === undefined) {
+                    return res.status(400).json({ error: "Missing required fields: duration, bid_per_second" });
+                }
 
-            if (!validation_question) {
-                return res.status(400).json({ error: "Missing validation_question" });
-            }
+                if (!validation_question) {
+                    return res.status(400).json({ error: "Missing validation_question" });
+                }
 
-            // Validate duration
-            if (![10, 30, 60].includes(duration)) {
-                return res.status(400).json({ error: "Invalid duration. Must be 10, 30, or 60." });
-            }
+                // Validate duration
+                if (![10, 30, 60].includes(duration)) {
+                    return res.status(400).json({ error: "Invalid duration. Must be 10, 30, or 60." });
+                }
 
-            // Generate random tx_hash for admin orders
-            const tx_hash = `admin_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
-            const totalEscrow = duration * quantity * bid_per_second;
+                // Generate random tx_hash for admin orders
+                const tx_hash = `admin_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+                const totalEscrow = duration * quantity * bid_per_second;
 
-            // Apply spread: agent pays gross, human sees net
-            const fees = await configService.getFees();
-            const netBid = bid_per_second * fees.workerMultiplier;  // 85% of gross
+                // Apply spread: agent pays gross, human sees net
+                const fees = await configService.getFees();
+                const netBid = bid_per_second * fees.workerMultiplier;  // 85% of gross
 
-            // Capture Builder Code
-            const builderCodeHeader = req.headers['x-builder-code'];
-            const builderCode = typeof builderCodeHeader === 'string' ? builderCodeHeader : null;
+                // Capture Builder Code
+                const builderCodeHeader = req.headers['x-builder-code'];
+                const builderCode = typeof builderCodeHeader === 'string' ? builderCodeHeader : null;
 
-            // Generate secure keys for webhook authentication
-            const read_key = crypto.randomBytes(16).toString('hex');
-            const webhook_secret = crypto.randomBytes(32).toString('hex');
+                // Generate secure keys for webhook authentication
+                const read_key = crypto.randomBytes(16).toString('hex');
+                const webhook_secret = crypto.randomBytes(32).toString('hex');
 
-            const orderRecord: OrderRecord = {
-                duration,
-                quantity,
-                bid: netBid,                    // NET (what human earns)
-                gross_bid: bid_per_second,      // GROSS (what agent paid)
-                total_escrow: totalEscrow,
-                tx_hash,
-                referrer: null,
-                builder_code: builderCode,
-                content_url: content_url || null,
-                validation_question: validation_question,
-                status: 'open',
-                created_at: Date.now(),
-                expires_at: Date.now() + (10 * 60 * 1000), // 10 minutes TTL
-                result: null,
-                read_key,
-                webhook_secret,
-                callback_url: callback_url || null
-            };
+                const orderRecord: OrderRecord = {
+                    duration,
+                    quantity,
+                    bid: netBid,                    // NET (what human earns)
+                    gross_bid: bid_per_second,      // GROSS (what agent paid)
+                    total_escrow: totalEscrow,
+                    tx_hash,
+                    referrer: null,
+                    builder_code: builderCode,
+                    content_url: content_url || null,
+                    validation_question: validation_question,
+                    status: 'open',
+                    created_at: Date.now(),
+                    expires_at: Date.now() + (10 * 60 * 1000), // 10 minutes TTL
+                    result: null,
+                    read_key,
+                    webhook_secret,
+                    callback_url: callback_url || null,
+                    agent: 'admin_virtual' // Placeholder for virtual points campaigns
+                };
 
-            req.order = orderRecord;
+                req.order = orderRecord;
 
-            // Save to Redis
-            if (redisClient.isOpen) {
-                await redisClient.setOrder(tx_hash, orderRecord);
+                // Save to Redis
+                if (redisClient.isOpen) {
+                    await redisClient.setOrder(tx_hash, orderRecord);
 
-                // Emit socket event (broadcast NET price to frontend)
-                await redisClient.client.publish('marketplace_events', JSON.stringify({
-                    type: 'BID_CREATED',
-                    payload: {
-                        bidId: tx_hash,
-                        price: netBid,                               // NET for display
-                        max_price_per_second: netBid * 1_000_000,    // NET in micros
-                        duration,
-                        quantity,
-                        contentUrl: content_url || null,
-                        validationQuestion: validation_question
-                    }
-                }));
-                console.log(`[x402] Admin bypass: Created order ${tx_hash} for ${quantity}x ${duration}s @ gross $${bid_per_second}/s (net $${netBid.toFixed(4)}/s)`);
+                    // Emit socket event (broadcast NET price to frontend)
+                    await redisClient.client.publish('marketplace_events', JSON.stringify({
+                        type: 'BID_CREATED',
+                        payload: {
+                            bidId: tx_hash,
+                            price: netBid,                               // NET for display
+                            max_price_per_second: netBid * 1_000_000,    // NET in micros
+                            duration,
+                            quantity,
+                            contentUrl: content_url || null,
+                            validationQuestion: validation_question
+                        }
+                    }));
+                    console.log(`[x402] Admin bypass: Created order ${tx_hash} for ${quantity}x ${duration}s @ gross $${bid_per_second}/s (net $${netBid.toFixed(4)}/s)`);
+                    return next();
+                }
                 return next();
             }
-        } // Close Admin Block
+        } // Close Admin Block (Fallthrough if bid > 0)
 
         // ========================================
         // STANDARD FLOW: Payment Required
@@ -220,7 +241,85 @@ export async function x402Middleware(req: Request, res: Response, next: NextFunc
         const txSignature = req.headers['x-solana-tx-signature'];
 
         if (!txSignature || typeof txSignature !== 'string') {
-            // ---> CHALLENGE (402)
+
+            // --- NON-CUSTODIAL SERIALIZED TRANSACTION GENERATION ---
+            const agentKeyHeader = req.headers['x-agent-key'];
+
+            if (typeof agentKeyHeader === 'string') {
+                try {
+                    const agentPubkey = new PublicKey(agentKeyHeader);
+
+                    // 1. Derive PDAs
+                    const [escrowPDA] = PublicKey.findProgramAddressSync(
+                        [Buffer.from("escrow"), agentPubkey.toBuffer()],
+                        PAYMENT_ROUTER_PROGRAM_ID
+                    );
+
+                    const vaultATA = await getAssociatedTokenAddress(USDC_MINT, escrowPDA, true);
+                    const agentATA = await getAssociatedTokenAddress(USDC_MINT, agentPubkey);
+
+                    // 2. Build Transaction
+                    const tx = new Transaction();
+
+                    // 2a. Create Vault ATA (Agent pays rent) - Idempotent
+                    tx.add(
+                        createAssociatedTokenAccountIdempotentInstruction(
+                            agentPubkey, // Payer
+                            vaultATA,    // Associated Account
+                            escrowPDA,   // Owner
+                            USDC_MINT    // Mint
+                        )
+                    );
+
+                    // 2b. Deposit Escrow Instruction (Anchor)
+                    const discriminator = Buffer.from('e2709eb0b2769980', 'hex'); // deposit_escrow
+                    const amountBuffer = Buffer.alloc(8);
+                    // Convert totalEscrow (USDC) to atomic units (6 decimals)
+                    // Note: totalEscrow is in dollars (e.g., 5.00)
+                    const atomicAmount = BigInt(Math.round(totalEscrow * 1_000_000));
+                    amountBuffer.writeBigUInt64LE(atomicAmount);
+
+                    const data = Buffer.concat([discriminator, amountBuffer]);
+
+                    const keys = [
+                        { pubkey: agentPubkey, isSigner: true, isWritable: true },
+                        { pubkey: agentATA, isSigner: false, isWritable: true },
+                        { pubkey: escrowPDA, isSigner: false, isWritable: true },
+                        { pubkey: vaultATA, isSigner: false, isWritable: true },
+                        { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+                        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+                        { pubkey: SYSVAR_RENT_PUBKEY, isSigner: false, isWritable: false }
+                    ];
+
+                    const ix = new TransactionInstruction({
+                        keys,
+                        programId: PAYMENT_ROUTER_PROGRAM_ID,
+                        data
+                    });
+
+                    tx.add(ix);
+
+                    // 2c. Finalize
+                    tx.feePayer = agentPubkey;
+                    const { blockhash } = await connection.getLatestBlockhash();
+                    tx.recentBlockhash = blockhash;
+
+                    const serializedTx = tx.serialize({ requireAllSignatures: false }).toString('base64');
+
+                    return res.status(402).json({
+                        error: "payment_required",
+                        message: "Sign the attached transaction to fund escrow.",
+                        transaction: serializedTx,
+                        amount: totalEscrow
+                    });
+
+                } catch (err) {
+                    console.error("[x402] Error generating tx:", err);
+                    // Fallthrough to standard invoice
+                }
+            }
+
+            // Fallback: Standard Invoice (Old Flow)
             return res.status(402).json({
                 error: "payment_required",
                 message: `Escrow required: ${totalEscrow} USDC`,
@@ -393,6 +492,11 @@ export async function x402Middleware(req: Request, res: Response, next: NextFunc
             const read_key = crypto.randomBytes(16).toString('hex');
             const webhook_secret = crypto.randomBytes(32).toString('hex');
 
+            // 5b. EXTRACT AGENT KEY FROM TRANSACTION (Signer 0 / FeePayer)
+            // In Solana, accountKeys[0] is usually the fee payer and signer
+            const accounts = txStatus.transaction.message.getAccountKeys();
+            const agentKey = accounts.get(0)!.toBase58();
+
             // ATTACH DATA TO REQUEST
             const orderRecord: OrderRecord = {
                 duration,
@@ -411,7 +515,8 @@ export async function x402Middleware(req: Request, res: Response, next: NextFunc
                 result: null,
                 read_key,
                 webhook_secret,
-                callback_url: callback_url || null
+                callback_url: callback_url || null,
+                agent: agentKey
             };
 
             req.order = orderRecord;

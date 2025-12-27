@@ -167,5 +167,41 @@ export const api = {
         }
         const data = await response.json();
         return data.points || 0;
+    },
+
+    // Non-Custodial Claims
+    async getClaimBalance(userPubkey: string) {
+        // Fetch aggregated unclaimed earnings
+        const response = await fetch(`${API_URL}/claims/balance?userPubkey=${userPubkey}`);
+        if (!response.ok) throw new Error('Failed to fetch claim balance');
+        return response.json();
+    },
+
+    async withdrawEarnings(userPubkey: string) {
+        // Request backend to prepare a transaction (Step 1)
+        const response = await fetch(`${API_URL}/claims/withdraw`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userPubkey })
+        });
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Withdraw failed');
+        }
+        return response.json();
+    },
+
+    async submitClaim(userPubkey: string, claimId: string, signature: string) {
+        // Submit signature to finalize claim (Step 2)
+        const response = await fetch(`${API_URL}/claims/submit`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userPubkey, claimId, signature })
+        });
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Claim submission failed');
+        }
+        return response.json();
     }
 };

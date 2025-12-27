@@ -1,5 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
+import { useWallets } from '@privy-io/react-auth';
+import { Transaction } from '@solana/web3.js';
+import { Buffer } from 'buffer';
+
+// Helper to ensure Buffer is available
+if (typeof window !== 'undefined' && !window.Buffer) {
+    window.Buffer = Buffer;
+}
 
 interface EarningsDashboardProps {
     userPubkey: string;
@@ -9,8 +17,12 @@ interface EarningsDashboardProps {
 
 export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({ userPubkey, isOpen, onClose }) => {
     const [earnings, setEarnings] = useState<any>(null);
+    const [unclaimed, setUnclaimed] = useState<any>(null);
     const [history, setHistory] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [claiming, setClaiming] = useState(false);
+
+    const { wallets } = useWallets();
 
     useEffect(() => {
         if (isOpen && userPubkey) {
@@ -21,16 +33,55 @@ export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({ userPubkey
     const loadData = async () => {
         setLoading(true);
         try {
-            const [earningsData, historyData] = await Promise.all([
+            const [earningsData, historyData, claimData] = await Promise.all([
                 api.getUserEarnings(userPubkey),
-                api.getSessionHistory(userPubkey, 20)
+                api.getSessionHistory(userPubkey, 20),
+                api.getClaimBalance(userPubkey)
             ]);
             setEarnings(earningsData);
             setHistory(historyData);
+            setUnclaimed(claimData);
         } catch (error) {
             console.error('Failed to load earnings data:', error);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleClaim = async () => {
+        if (!unclaimed || unclaimed.usdc_balance <= 0.01) return;
+        setClaiming(true);
+
+        try {
+            // 1. Request TX from Backend
+            const { transaction, claimId, error } = await api.withdrawEarnings(userPubkey);
+            if (error) throw new Error(error);
+
+            // 2. Deserialize
+            const txBuffer = Buffer.from(transaction, 'base64');
+            const tx = Transaction.from(txBuffer);
+
+            // 3. Sign with Wallet
+            const wallet = wallets.find(w => w.address === userPubkey) || wallets[0];
+            if (!wallet) throw new Error("Wallet not connected");
+
+            // Privy signTransaction returns the signed transaction object
+            const signedTx = await (wallet as any).signTransaction(tx);
+
+            // 4. Serialize Signed TX
+            const signedBase64 = signedTx.serialize().toString('base64');
+
+            // 5. Submit to Backend for broadcasting/finalizing
+            await api.submitClaim(userPubkey, claimId, signedBase64);
+
+            alert("Claim Successful! Funds will arrive shortly.");
+            await loadData(); // Refresh UI
+
+        } catch (e: any) {
+            console.error(e);
+            alert(`Claim Failed: ${e.message}`);
+        } finally {
+            setClaiming(false);
         }
     };
 
@@ -65,8 +116,41 @@ export const EarningsDashboard: React.FC<EarningsDashboardProps> = ({ userPubkey
                                 <div style={{ color: '#888', fontSize: '10px', letterSpacing: '1px', marginBottom: '8px' }}>ALL TIME</div>
                                 <div style={{ color: '#00FF41', fontSize: '18px', fontFamily: 'monospace', fontWeight: 'bold' }}>${earnings.allTime.toFixed(4)}</div>
                                 <div style={{ color: '#666', fontSize: '10px', marginTop: '4px' }}>{earnings.sessionsAllTime} sessions</div>
+                                <div style={{ color: '#00FF41', fontSize: '18px', fontFamily: 'monospace', fontWeight: 'bold' }}>${earnings.allTime.toFixed(4)}</div>
+                                <div style={{ color: '#666', fontSize: '10px', marginTop: '4px' }}>{earnings.sessionsAllTime} sessions</div>
                             </div>
                         </div>
+
+                        {/* Unclaimed Balance & Action */}
+                        {unclaimed && (
+                            <div style={{ backgroundColor: 'rgba(0,255,65,0.05)', border: '1px solid rgba(0,255,65,0.2)', borderRadius: '8px', padding: '16px', marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div>
+                                    <div style={{ color: '#888', fontSize: '10px', letterSpacing: '1px', marginBottom: '4px' }}>AVAILABLE TO CLAIM</div>
+                                    <div style={{ color: '#00FF41', fontSize: '24px', fontFamily: 'monospace', fontWeight: 'bold' }}>
+                                        ${unclaimed.usdc_balance.toFixed(4)} <span style={{ fontSize: '14px', color: '#666' }}>USDC</span>
+                                    </div>
+                                    <div style={{ color: '#555', fontSize: '10px' }}>
+                                        Processing: {unclaimed.pending_items || 0} items
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={handleClaim}
+                                    disabled={claiming || unclaimed.usdc_balance < 0.01}
+                                    style={{
+                                        backgroundColor: claiming || unclaimed.usdc_balance < 0.01 ? '#222' : '#00FF41',
+                                        color: claiming || unclaimed.usdc_balance < 0.01 ? '#666' : 'black',
+                                        border: 'none',
+                                        borderRadius: '6px',
+                                        padding: '10px 20px',
+                                        fontWeight: 'bold',
+                                        fontSize: '14px',
+                                        cursor: claiming || unclaimed.usdc_balance < 0.01 ? 'not-allowed' : 'pointer'
+                                    }}
+                                >
+                                    {claiming ? 'PROCESSING...' : unclaimed.usdc_balance < 0.01 ? 'MIN $0.01' : 'CLAIM NOW'}
+                                </button>
+                            </div>
+                        )}
 
                         {/* Session History */}
                         <div style={{ marginTop: '24px' }}>

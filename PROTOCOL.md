@@ -232,6 +232,35 @@ total_escrow = duration × quantity × bid_per_second (GROSS)
 
 ---
 
+## User Settlement (The Gas Station)
+
+Humans accumulate earnings off-chain. When they claim, the protocol subsidizes gas fees for meaningful amounts.
+
+### `POST /v1/claims/withdraw`
+Request a claim transaction.
+
+- **Accumulated Balance < $5.00 USDC:** User pays gas.
+- **Accumulated Balance ≥ $5.00 USDC:** Protocol pays gas ("Gas Station").
+
+### `POST /v1/claims/submit`
+Broadcast the signed claim transaction.
+
+---
+
+## Agent Refunds
+
+Agents can reclaim unspent funds from **expired** or **completed** campaigns.
+
+### `GET /v1/campaigns/:tx_hash`
+Check campaign status. If `refundable: true`, the response includes a `withdraw_escrow_tx`.
+
+1.  Agent fetches status.
+2.  Agent signs the serialized `withdraw_escrow_tx`.
+3.  Agent submits to Solana network.
+4.  Funds return to Agent wallet.
+
+---
+
 ## Validation Rules
 
 | Field | Rule |

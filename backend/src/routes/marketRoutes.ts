@@ -1,6 +1,14 @@
 import { Router } from 'express';
 import { redisClient } from '../utils/redis';
 import { configService } from '../services/ConfigService';
+import { Connection, PublicKey, Transaction, TransactionInstruction, SystemProgram } from '@solana/web3.js';
+import { TOKEN_PROGRAM_ID, getAssociatedTokenAddress } from '@solana/spl-token';
+
+const RPC_URL = process.env.SOLANA_RPC_URL || 'https://api.devnet.solana.com';
+const PAYMENT_ROUTER_PROGRAM_ID = new PublicKey(process.env.PAYMENT_ROUTER_PROGRAM_ID || 'Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS');
+const USDC_MINT = new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
+
+const connection = new Connection(RPC_URL, 'confirmed');
 
 const router = Router();
 
@@ -325,6 +333,102 @@ router.get('/campaigns/:tx_hash/results', async (req, res) => {
     } catch (error) {
         console.error('Get campaign results error:', error);
         res.status(500).json({ error: 'Failed to fetch campaign results' });
+    }
+});
+
+/**
+ * GET /v1/campaigns/:tx_hash
+ * Agent checks campaign status and requests refund if expired
+ */
+router.get('/campaigns/:tx_hash', async (req, res) => {
+    const { tx_hash } = req.params;
+
+    try {
+        const order = await redisClient.getOrder(tx_hash) as any;
+
+        if (!order) {
+            return res.status(404).json({ error: 'campaign_not_found' });
+        }
+
+        const isRefunable = (order.status === 'expired' || order.status === 'completed' || order.status === 'cancelled');
+        let withdrawTx: string | null = null;
+        let escrowBalance = 0;
+
+        // If refundable, check chain balance and build tx
+        if (isRefunable && order.agent_key) {
+            const agentKey = new PublicKey(order.agent_key);
+            const [escrowPDA] = PublicKey.findProgramAddressSync(
+                [Buffer.from("escrow"), agentKey.toBuffer()],
+                PAYMENT_ROUTER_PROGRAM_ID
+            );
+
+            // Check balance
+            const vaultATA = await getAssociatedTokenAddress(USDC_MINT, escrowPDA, true);
+            try {
+                const balance = await connection.getTokenAccountBalance(vaultATA);
+                escrowBalance = balance.value.uiAmount || 0;
+            } catch (e) {
+                // Account might not exist if fully withdrawn
+                escrowBalance = 0;
+            }
+
+            if (escrowBalance > 0) {
+                // Build Withdraw Tx
+                const discriminator = Buffer.from('5154e280f52f6068', 'hex'); // withdraw_escrow
+                const dataBuffer = Buffer.alloc(8 + 8);
+                dataBuffer.set(discriminator, 0);
+                const nonce = BigInt(Date.now());
+                dataBuffer.writeBigUInt64LE(nonce, 8);
+
+                const agentATA = await getAssociatedTokenAddress(USDC_MINT, agentKey);
+                const [marketConfigPDA] = PublicKey.findProgramAddressSync(
+                    [Buffer.from("market_config")],
+                    PAYMENT_ROUTER_PROGRAM_ID
+                );
+
+                const keys = [
+                    { pubkey: agentKey, isSigner: true, isWritable: true },
+                    { pubkey: agentATA, isSigner: false, isWritable: true },
+                    { pubkey: escrowPDA, isSigner: false, isWritable: true },
+                    { pubkey: vaultATA, isSigner: false, isWritable: true },
+                    { pubkey: marketConfigPDA, isSigner: false, isWritable: false },
+                    { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+                    { pubkey: PublicKey.default, isSigner: false, isWritable: false } // System Program (default placeholder if not imported? SystemProgram.programId)
+                ];
+                // Wait, importing SystemProgram?
+                // I missed SystemProgram import. I'll use new PublicKey('11111111111111111111111111111111') or import it.
+                // I'll stick to a hardcoded ID for safety in this chunk, or rely on import if I add it.
+                // I'll add SystemProgram to imports.
+
+                const ix = new TransactionInstruction({
+                    keys,
+                    programId: PAYMENT_ROUTER_PROGRAM_ID,
+                    data: dataBuffer
+                });
+
+                const { blockhash } = await connection.getLatestBlockhash();
+                const tx = new Transaction();
+                tx.recentBlockhash = blockhash;
+                tx.feePayer = agentKey; // Agent pays for refund
+                tx.add(ix);
+
+                withdrawTx = tx.serialize({ requireAllSignatures: false }).toString('base64');
+            }
+        }
+
+        res.json({
+            tx_hash: order.tx_hash,
+            status: order.status,
+            escrow_balance: escrowBalance,
+            refundable: isRefunable && escrowBalance > 0,
+            withdraw_escrow_tx: withdrawTx,
+            created_at: order.created_at,
+            agent: order.agent_key
+        });
+
+    } catch (error) {
+        console.error('Get campaign info error:', error);
+        res.status(500).json({ error: 'Failed to fetch campaign info' });
     }
 });
 

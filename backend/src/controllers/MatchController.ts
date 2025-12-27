@@ -170,6 +170,22 @@ export const completeMatch = async (req: Request, res: Response) => {
                             await redisClient.incrementPoints(userWallet, pointsEarned);
                         }
 
+                        // NON-CUSTODIAL: Log specific settlement owed by this Agent
+                        if (order.agent) {
+                            await redisClient.logPendingSettlement(userWallet, {
+                                bidId,
+                                agent: order.agent,
+                                amount: workerPay,
+                                points: pointsEarned,
+                                duration: duration,
+                                price: order.gross_bid || order.bid,
+                                timestamp: Date.now()
+                            });
+                            console.log(`[x402] Logged pending settlement: ${workerPay.toFixed(4)} USDC from Agent ${order.agent.slice(0, 8)}...`);
+                        } else {
+                            console.warn(`[x402] Warning: Order ${bidId} missing 'agent' field. Cannot settle on-chain.`);
+                        }
+
                         // Record in user history
                         await redisClient.addToHistory(userWallet, {
                             matchId,

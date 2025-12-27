@@ -151,6 +151,86 @@ class RedisClient {
         return items.map(item => JSON.parse(item));
     }
 
+    // ===== Settlement Logging (Non-Custodial) =====
+
+    async logPendingSettlement(wallet: string, matchData: any): Promise<void> {
+        const key = `user:${wallet}:pending_settlements`;
+        await this.client.lPush(key, JSON.stringify(matchData));
+    }
+
+    async getPendingSettlements(wallet: string, limit = 1000): Promise<any[]> {
+        const key = `user:${wallet}:pending_settlements`;
+        const items = await this.client.lRange(key, 0, limit - 1);
+        return items.map(item => JSON.parse(item));
+    }
+
+    async clearPendingSettlements(wallet: string): Promise<void> {
+        await this.client.del(`user:${wallet}:pending_settlements`);
+    }
+
+    /**
+     * Atomically moves all pending items to a processing list.
+     * Returns the list of items moved.
+     */
+    async lockPendingSettlements(wallet: string, claimId: string): Promise<any[]> {
+        const sourceKey = `user:${wallet}:pending_settlements`;
+        const destKey = `claim:${claimId}:processing`;
+
+        // Rename is atomic. If source doesn't exist, it throws.
+        // But we want to 'move' contents.
+        // RENAME is risky if we have concurrent pushes.
+        // Lua script or Multi/Exec is safer.
+        // Simplest: GET items, DEL source, SET dest. (Not atomic if crash in between)
+        // Better: RENAME (assuming single consumer for wallet).
+        // Since we lock the wallet UI, RENAME is acceptable.
+
+        try {
+            // Check if exists
+            const len = await this.client.lLen(sourceKey);
+            if (len === 0) return [];
+
+            // Move entire list by renaming key
+            await this.client.rename(sourceKey, destKey);
+
+            // Set TTL on processing key (e.g. 10 mins) to auto-expire if stuck?
+            // If it expires, data is lost!
+            // So NO TTL. We need a cleanup job.
+            // Or set a long TTL (24h).
+            await this.client.expire(destKey, 86400);
+
+            // Return items
+            const items = await this.client.lRange(destKey, 0, -1);
+            return items.map(i => JSON.parse(i));
+        } catch (e) {
+            return [];
+        }
+    }
+
+    async getProcessingSettlements(claimId: string): Promise<any[]> {
+        const key = `claim:${claimId}:processing`;
+        const items = await this.client.lRange(key, 0, -1);
+        return items.map(i => JSON.parse(i));
+    }
+
+    async deleteProcessingSettlements(claimId: string): Promise<void> {
+        await this.client.del(`claim:${claimId}:processing`);
+    }
+
+    // Restore items from processing back to pending (on failure)
+    async restoreProcessingToPending(wallet: string, claimId: string): Promise<void> {
+        const processingKey = `claim:${claimId}:processing`;
+        const pendingKey = `user:${wallet}:pending_settlements`;
+
+        const items = await this.client.lRange(processingKey, 0, -1);
+        if (items.length > 0) {
+            // Push back to head or tail? 
+            // Doesn't matter for settlement usually, 
+            // but let's push to list.
+            await this.client.rPush(pendingKey, items);
+        }
+        await this.client.del(processingKey);
+    }
+
     // ===== Order Book =====
 
     async setOrder(txHash: string, orderData: any): Promise<void> {
