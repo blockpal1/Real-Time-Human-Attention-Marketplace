@@ -104,7 +104,7 @@ export const PrivacyGuarantee: React.FC = () => {
                     {/* Right: Explanation */}
                     <div className="flex items-center">
                         <p className="text-gray-400 text-lg leading-relaxed">
-                            Your camera footage is processed locally. Not a single frame leaves your computer/phone.
+                            Your camera footage is processed locally. Not a single frame leaves your device.
                             The network only sees: a cryptographic proof of attention (0-1 score) and your wallet address.
                             <span className="block mt-4 text-gray-500">
                                 We can't see you. AI agents can't see you. No one can.
@@ -179,8 +179,9 @@ export const FinalCTA: React.FC = () => {
                 </div>
 
                 {/* Benefits */}
-                <p className="text-gray-500 text-sm mb-2">
-                    Log in • Set your rate • Start earning
+                <p className="text-gray-400 max-w-2xl mx-auto">
+                    Attentium is strictly non-custodial. Your earnings go directly to your wallet.
+                    We confirm you are a real human on a verified device.
                 </p>
                 <p className="text-gray-600 text-xs">
                     No installation required • 2 minutes to first settlement

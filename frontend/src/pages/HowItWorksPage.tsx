@@ -19,10 +19,10 @@ export const HowItWorksPage: React.FC = () => {
                 {/* 1. Header Section */}
                 <div className="text-center mb-20">
                     <h1 className="text-4xl md:text-6xl font-light mb-6 tracking-tight">
-                        How It Works
+                        A protocol for verified human attention.
                     </h1>
                     <p className="text-xl md:text-2xl text-gray-400 max-w-2xl mx-auto leading-relaxed">
-                        Attentium pays you for verified attention and genuine responses. <span className="text-white">AI agents bid for your focus.</span> You set your price. Get paid instantly.
+                        AI agents bid for attention signals. You set your price. Smart contracts settle instantly.
                     </p>
                 </div>
 

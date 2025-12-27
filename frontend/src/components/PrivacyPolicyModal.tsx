@@ -32,163 +32,163 @@ export const PrivacyPolicyModal: React.FC<PrivacyPolicyModalProps> = ({ isOpen, 
                     </button>
                 </div>
 
-                {/* Scrollable Content */}
                 <div className="p-8 overflow-y-auto custom-scrollbar text-sm text-gray-400 leading-relaxed">
                     <div className="space-y-8">
 
                         <div>
                             <p className="mb-4"><strong>Last Updated:</strong> December 23, 2025</p>
                             <p>
-                                This Privacy Policy describes how Blockpal LLC, a Wyoming limited liability company (“we,” “us,” or the “Protocol”), collects, uses, and discloses information, and what rights you have with respect to that information.
+                                This Privacy Policy describes how Blockpal LLC (“we,” “us,” or the “Interface Operator”) processes limited off-chain information in connection with the Attentium Protocol.
                             </p>
                             <p className="mt-2">
-                                By connecting your Solana wallet or using the Attentium interface (the “Interface”), you agree to the practices described in this policy.
+                                The Attentium Protocol itself is a decentralized system of smart contracts deployed on the Solana blockchain. Blockpal LLC does not control on-chain data, transactions, or settlement.
                             </p>
                         </div>
 
                         {/* 1. Data Controller */}
                         <section>
                             <h3 className="text-white text-lg font-semibold mb-3">1. Data Controller</h3>
-                            <p className="mb-2">For purposes of applicable data protection laws, including the General Data Protection Regulation (“GDPR”) and the California Consumer Privacy Act (“CCPA”), the data controller is:</p>
+                            <p className="mb-2">For purposes of applicable data protection laws, Blockpal LLC is the data controller only with respect to off-chain data processed via the Interface and oracle systems.</p>
                             <div className="bg-gray-900 p-4 rounded border border-gray-800">
                                 <p className="text-white">Blockpal LLC</p>
                                 <p>Wyoming, United States</p>
-                                <p>Email: <span className="text-[#0EA5E9]">support@attentium.ai</span></p>
+                                <p>Email: <a href="mailto:support@attentium.ai" className="text-[#0EA5E9] hover:underline">support@attentium.ai</a></p>
                             </div>
+                            <p className="mt-2 text-sm italic">Blockpal LLC is not the controller of on-chain blockchain data.</p>
                         </section>
 
-                        {/* 2. Information We Collect */}
+                        {/* 2. Information We Process */}
                         <section>
-                            <h3 className="text-white text-lg font-semibold mb-3">2. Information We Collect</h3>
+                            <h3 className="text-white text-lg font-semibold mb-3">2. Information We Process</h3>
 
                             <h4 className="text-white font-medium mb-2 mt-4">A. Information You Provide</h4>
                             <ul className="list-disc pl-5 space-y-2 mb-4">
-                                <li><strong>Communication Data:</strong> If you contact us via email, we collect your email address and message content.</li>
-                                <li><strong>Profile Data:</strong> We may collect voluntary inputs like usernames or preference settings linked to your wallet.</li>
+                                <li><strong>Communication Data:</strong> If you contact us, we process your email address and message content.</li>
+                                <li><strong>Optional Profile Inputs:</strong> You may voluntarily submit usernames or preferences associated with a public wallet address.</li>
                             </ul>
 
-                            <h4 className="text-white font-medium mb-2 mt-4">B. Information Collected Automatically</h4>
-                            <p className="mb-2"><strong>Device Telemetry:</strong> To prevent Sybil attacks and verify “Proof of Human Attention,” we collect limited technical signals, including:</p>
-                            <ul className="list-disc pl-5 space-y-2 mb-2">
-                                <li>User agent and browser type</li>
-                                <li>Screen resolution and operating system</li>
+                            <h4 className="text-white font-medium mb-2 mt-4">B. Information Processed Automatically</h4>
+                            <p className="mb-2"><strong>Oracle & Security Telemetry:</strong> To support oracle verification and protocol security, we process limited technical signals such as:</p>
+                            <ul className="list-disc pl-5 space-y-1 mb-2">
+                                <li>Browser and device metadata</li>
                                 <li>Session timing and interaction signals</li>
                             </ul>
-                            <p className="italic bg-gray-900/50 p-2 rounded">These signals are not used for personal identification, combined to uniquely identify individuals, or used to create long-term behavioral profiles.</p>
-
-                            <div className="mt-4 space-y-2">
-                                <p><strong>Network Activity:</strong> We use Cloudflare for security. Cloudflare may process IP addresses per its policy.</p>
-                                <p><strong>Blockchain Data:</strong> Your public Solana wallet address and on-chain transactions are public by design.</p>
+                            <div className="bg-gray-900/50 p-2 rounded mb-2">
+                                <p className="font-semibold text-white mb-1">These signals:</p>
+                                <ul className="list-disc pl-5 space-y-1">
+                                    <li>Are not used for personal identification</li>
+                                    <li>Are not used for advertising or profiling</li>
+                                    <li>Are processed solely to generate Oracle Signals and detect abuse</li>
+                                </ul>
                             </div>
+                            <p className="mb-1"><strong>Network Data:</strong> Cloudflare may process IP addresses and headers for security and availability purposes.</p>
+                            <p><strong>Blockchain Data:</strong> Wallet addresses and transaction data are public by design and outside our control.</p>
 
-                            <h4 className="text-white font-medium mb-2 mt-4">C. Biometric & Zero-Knowledge Verification Policy</h4>
+                            <h4 className="text-white font-medium mb-2 mt-4">C. Biometric & Zero-Knowledge Verification</h4>
                             <div className="border-l-2 border-[#0EA5E9] pl-4 space-y-2">
                                 <p><strong>We do not collect, store, or transmit raw biometric data.</strong></p>
-                                <p><strong>Client-Side Processing:</strong> Verification occurs locally on your device.</p>
-                                <p><strong>Cryptographic Proofs Only:</strong> Only a proof (hash) is transmitted. No images/templates.</p>
-                                <p><strong>No Central Database:</strong> We hold no facial databases.</p>
+                                <ul className="list-disc pl-5 space-y-1">
+                                    <li>All liveness checks or biometric-style verifications occur locally on your device.</li>
+                                    <li>Only cryptographic proofs or verification signals are transmitted.</li>
+                                    <li>No biometric databases are maintained.</li>
+                                </ul>
                             </div>
+
+                            <h4 className="text-white font-medium mb-2 mt-4">D. Oracle Processing and AI Systems</h4>
+                            <p className="mb-2">Blockpal LLC operates oracle software that processes off-chain inputs to generate verification signals submitted to smart contracts.</p>
+                            <ul className="list-disc pl-5 space-y-1">
+                                <li>Oracle processing may involve artificial intelligence systems</li>
+                                <li>Oracle outputs are attestations, not discretionary decisions</li>
+                                <li>No oracle process results in custody or control of user funds</li>
+                                <li>Raw inputs are not published on-chain</li>
+                            </ul>
+                            <p className="mt-2">Oracle systems are designed under principles of data minimization and security.</p>
                         </section>
 
                         {/* 3. How We Use Information */}
                         <section>
                             <h3 className="text-white text-lg font-semibold mb-3">3. How We Use Information</h3>
-                            <ul className="list-disc pl-5 space-y-2">
-                                <li><strong>Operate the Protocol:</strong> Facilitate Agent-Human interactions.</li>
-                                <li><strong>Security & Anti-Fraud:</strong> Detect bots and Sybil attacks.</li>
-                                <li><strong>Protocol Improvement:</strong> Analyze aggregated usage trends.</li>
+                            <p className="mb-2">We process limited off-chain data to:</p>
+                            <ul className="list-disc pl-5 space-y-1">
+                                <li>Operate the Interface</li>
+                                <li>Generate and submit Oracle Signals</li>
+                                <li>Detect fraud, abuse, or Sybil attacks</li>
+                                <li>Maintain protocol security and reliability</li>
                             </ul>
                             <p className="mt-4 text-[#0EA5E9]">We do not sell personal data.</p>
                         </section>
 
-                        {/* 4. Blockchain-Specific Disclosures */}
+                        {/* 4. Third-Party Service Providers */}
                         <section>
-                            <h3 className="text-white text-lg font-semibold mb-3">4. Blockchain-Specific Disclosures</h3>
-                            <p className="mb-2">Your Solana wallet address may become permanently associated with on-chain actions.</p>
-                            <ul className="list-disc pl-5 space-y-2">
-                                <li><strong>Immutability:</strong> Blockchain data cannot be altered or deleted.</li>
-                                <li><strong>Public Visibility:</strong> Anyone may view interactions with Attentium smart contracts.</li>
-                            </ul>
-                        </section>
-
-                        {/* 5. Third-Party Service Providers */}
-                        <section>
-                            <h3 className="text-white text-lg font-semibold mb-3">5. Third-Party Service Providers</h3>
-                            <p className="mb-2">We share limited info with infrastructure providers:</p>
+                            <h3 className="text-white text-lg font-semibold mb-3">4. Third-Party Service Providers</h3>
+                            <p className="mb-2">We rely on infrastructure providers, including:</p>
                             <ul className="list-disc pl-5 space-y-1">
                                 <li><strong>Privy:</strong> Wallet infrastructure</li>
-                                <li><strong>RPC Providers:</strong> Solana blockchain access</li>
-                                <li><strong>Cloudflare:</strong> Network security</li>
-                                <li><strong>Mintlify:</strong> Documentation</li>
+                                <li><strong>RPC Providers:</strong> Blockchain connectivity</li>
+                                <li><strong>Cloudflare:</strong> DNS, CDN, and security</li>
+                                <li><strong>Mintlify:</strong> Documentation hosting</li>
                             </ul>
+                            <p className="mt-2 text-sm italic">These providers process data only as necessary to perform their services.</p>
                         </section>
 
-                        {/* 6. Cookies & Local Storage */}
+                        {/* 5. Cookies & Local Storage */}
                         <section>
-                            <h3 className="text-white text-lg font-semibold mb-3">6. Cookies & Local Storage</h3>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div className="bg-green-900/20 p-4 rounded border border-green-900/30">
-                                    <strong className="text-green-500 block mb-2">We Use:</strong>
-                                    <ul className="list-disc pl-4 space-y-1">
-                                        <li>Wallet connection state</li>
-                                        <li>Session integrity</li>
-                                    </ul>
-                                </div>
-                                <div className="bg-red-900/20 p-4 rounded border border-red-900/30">
-                                    <strong className="text-red-500 block mb-2">We DO NOT Use:</strong>
-                                    <ul className="list-disc pl-4 space-y-1">
-                                        <li>Advertising cookies</li>
-                                        <li>Cross-site tracking</li>
-                                        <li>Third-party marketing analytics</li>
-                                    </ul>
-                                </div>
-                            </div>
+                            <h3 className="text-white text-lg font-semibold mb-3">5. Cookies & Local Storage</h3>
+                            <p className="mb-2">We use strictly necessary cookies and local storage to maintain session integrity and wallet connectivity.</p>
+                            <p className="text-red-400">We do not use advertising cookies or third-party marketing analytics.</p>
                         </section>
 
-                        {/* 7. Data Retention */}
+                        {/* 6. Data Retention */}
                         <section>
-                            <h3 className="text-white text-lg font-semibold mb-3">7. Data Retention</h3>
-                            <p>We retain off-chain data only as long as necessary. Blockchain data is permanent and outside our control.</p>
+                            <h3 className="text-white text-lg font-semibold mb-3">6. Data Retention</h3>
+                            <p className="mb-2">Off-chain data is retained only as long as necessary to operate the Interface, generate Oracle Signals, maintain security, or comply with legal obligations.</p>
+                            <p>Blockchain data is permanent and outside our control.</p>
                         </section>
 
-                        {/* 8. Your Rights */}
+                        {/* 7. Your Rights */}
                         <section>
-                            <h3 className="text-white text-lg font-semibold mb-3">8. Your Rights</h3>
+                            <h3 className="text-white text-lg font-semibold mb-3">7. Your Rights</h3>
                             <div className="space-y-4">
                                 <div>
-                                    <strong className="text-white">EU / UK (GDPR):</strong> Access, correct, delete off-chain data, restrict processing, portability.
+                                    <strong className="text-white block mb-1">EU / UK (GDPR)</strong>
+                                    <p>You may have rights to access, correct, delete, restrict, object to processing, or request portability of off-chain personal data.</p>
                                 </div>
                                 <div>
-                                    <strong className="text-white">California (CCPA / CPRA):</strong> Know collected data, request deletion, opt out of sale (we don't sell).
+                                    <strong className="text-white block mb-1">California (CCPA / CPRA)</strong>
+                                    <p>You may have rights to know, delete, and receive equal service regardless of exercising your rights. We do not sell personal data.</p>
+                                </div>
+                                <div>
+                                    <strong className="text-white block mb-1">Limitations</strong>
+                                    <p>We cannot delete or modify blockchain data.</p>
                                 </div>
                                 <div className="bg-gray-900 p-3 rounded text-sm">
-                                    <p><strong>Exercising Your Rights:</strong> Email <span className="text-[#0EA5E9]">support@attentium.ai</span> with subject "Privacy Request."</p>
+                                    <p><strong>To exercise rights:</strong> Email <a href="mailto:support@attentium.ai" className="text-[#0EA5E9] hover:underline">support@attentium.ai</a> with the subject “Privacy Request.”</p>
                                 </div>
                             </div>
                         </section>
 
-                        {/* 9. Children’s Information */}
+                        {/* 8. Children’s Information */}
                         <section>
-                            <h3 className="text-white text-lg font-semibold mb-3">9. Children’s Information</h3>
-                            <p>The Protocol is not directed to individuals under 13.</p>
+                            <h3 className="text-white text-lg font-semibold mb-3">8. Children’s Information</h3>
+                            <p>The Protocol is not directed to individuals under 13. We do not knowingly process children’s personal data.</p>
                         </section>
 
-                        {/* 10. Security */}
+                        {/* 9. Security */}
                         <section>
-                            <h3 className="text-white text-lg font-semibold mb-3">10. Security</h3>
-                            <p>We use industry-standard safeguards (TLS/SSL). However, use of the Protocol is at your own risk.</p>
+                            <h3 className="text-white text-lg font-semibold mb-3">9. Security</h3>
+                            <p>We use industry-standard safeguards, including TLS/SSL encryption. No system is completely secure.</p>
                         </section>
 
-                        {/* 11. Updates */}
+                        {/* 10. Updates */}
                         <section>
-                            <h3 className="text-white text-lg font-semibold mb-3">11. Updates to This Policy</h3>
-                            <p>Updates will be posted here with a revised effective date.</p>
+                            <h3 className="text-white text-lg font-semibold mb-3">10. Updates</h3>
+                            <p>We may update this policy from time to time. Continued use constitutes acceptance.</p>
                         </section>
 
-                        {/* 12. Contact Us */}
+                        {/* 11. Contact */}
                         <section>
-                            <h3 className="text-white text-lg font-semibold mb-3">12. Contact Us</h3>
-                            <p>Email: <span className="text-[#0EA5E9]">support@attentium.ai</span></p>
+                            <h3 className="text-white text-lg font-semibold mb-3">11. Contact</h3>
+                            <p>For legal inquiries: <a href="mailto:support@attentium.ai" className="text-[#0EA5E9] hover:underline">support@attentium.ai</a></p>
                         </section>
 
                     </div>
