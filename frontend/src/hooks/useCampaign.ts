@@ -49,6 +49,7 @@ export const useCampaign = () => {
             // 2. Call API to Verify & Get Transaction
             // The backend returns 402 with the serialized transaction if payment is required
             let serializedTx: string | null = null;
+            let campaignIdFromServer: string | null = null;
 
             try {
                 // We use the existing verify endpoint.
@@ -85,6 +86,7 @@ export const useCampaign = () => {
                 if (response.status === 402) {
                     const data = await response.json();
                     serializedTx = data.transaction; // "transaction" field from backend
+                    campaignIdFromServer = data.campaign_id; // For X-Campaign-Id header on confirmation
                 } else if (!response.ok) {
                     const err = await response.json();
                     throw new Error(err.error || 'Failed to verify campaign');
@@ -170,6 +172,9 @@ export const useCampaign = () => {
             }
             if (params.builder_code) {
                 confirmHeaders['X-Builder-Code'] = params.builder_code;
+            }
+            if (campaignIdFromServer) {
+                confirmHeaders['X-Campaign-Id'] = campaignIdFromServer;
             }
 
             const confirmResponse = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/v1/verify`, {

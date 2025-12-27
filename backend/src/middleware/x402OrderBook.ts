@@ -266,6 +266,9 @@ export async function x402Middleware(req: Request, res: Response, next: NextFunc
                     // 2. Build Transaction
                     const tx = new Transaction();
 
+                    // Generate a unique Campaign ID for this escrow
+                    const campaignId = crypto.randomBytes(16).toString('hex');
+
                     // 2a. Create Vault ATA (Agent pays rent) - Idempotent
                     tx.add(
                         createAssociatedTokenAccountIdempotentInstruction(
@@ -304,7 +307,15 @@ export async function x402Middleware(req: Request, res: Response, next: NextFunc
 
                     tx.add(ix);
 
-                    // 2c. Finalize
+                    // 2c. Add Memo Instruction (binds payment to campaign_id)
+                    const memoIx = new TransactionInstruction({
+                        keys: [],
+                        programId: new PublicKey(MEMO_PROGRAM),
+                        data: Buffer.from(campaignId, 'utf-8')
+                    });
+                    tx.add(memoIx);
+
+                    // 2d. Finalize
                     tx.feePayer = agentPubkey;
                     const { blockhash } = await connection.getLatestBlockhash();
                     tx.recentBlockhash = blockhash;
@@ -315,7 +326,8 @@ export async function x402Middleware(req: Request, res: Response, next: NextFunc
                         error: "payment_required",
                         message: "Sign the attached transaction to fund escrow.",
                         transaction: serializedTx,
-                        amount: totalEscrow
+                        amount: totalEscrow,
+                        campaign_id: campaignId  // Frontend must send this back as X-Campaign-Id
                     });
 
                 } catch (err) {
@@ -369,9 +381,15 @@ export async function x402Middleware(req: Request, res: Response, next: NextFunc
             return res.status(400).json({ error: "missing_campaign_id", message: "X-Campaign-Id header required" });
         }
 
-        // Parse memo from transaction
+        // Check if transaction invokes Payment Router program
         const accountKeys = txStatus.transaction.message.getAccountKeys();
         const compiledInstructions = txStatus.transaction.message.compiledInstructions;
+
+        const isPaymentRouterTx = compiledInstructions.some(
+            (ix: any) => accountKeys.get(ix.programIdIndex)?.equals(PAYMENT_ROUTER_PROGRAM_ID)
+        );
+
+        // Parse memo from transaction
         const memoInstruction = compiledInstructions.find(
             (ix: any) => accountKeys.get(ix.programIdIndex)?.toBase58() === MEMO_PROGRAM
         );
@@ -389,7 +407,7 @@ export async function x402Middleware(req: Request, res: Response, next: NextFunc
                 received: memoData
             });
         }
-        console.log(`[x402] Memo validated: ${campaignId.slice(0, 8)}...`);
+        console.log(`[x402] Memo validated: ${campaignId.slice(0, 8)}... | Payment Router: ${isPaymentRouterTx}`);
 
         // --- VALIDATION LOGIC ---
         let isValidPayment = false;
@@ -400,15 +418,21 @@ export async function x402Middleware(req: Request, res: Response, next: NextFunc
             return res.status(403).json({ error: "expired_transaction" });
         }
 
-        // Check 2: Devnet Bypass (Native SOL) - REQUIRES EXPLICIT OPT-IN
-        if (IS_DEVNET && ALLOW_DEVNET_BYPASS) {
+        // Check 2: Payment Router Escrow Deposit
+        if (isPaymentRouterTx) {
+            console.log('[x402] Payment Router escrow deposit accepted');
+            isValidPayment = true;
+        }
+
+        // Check 3: Devnet Bypass (Native SOL) - REQUIRES EXPLICIT OPT-IN
+        if (!isValidPayment && IS_DEVNET && ALLOW_DEVNET_BYPASS) {
             const devnetAccountKeys = txStatus.transaction.message.getAccountKeys();
             const nativeTransfer = devnetAccountKeys.staticAccountKeys.some(k => k.equals(TREASURY));
             if (nativeTransfer) {
                 console.log('[x402] Devnet bypass: Accepted native SOL transfer (ALLOW_DEVNET_BYPASS=true)');
                 isValidPayment = true;
             }
-        } else if (IS_DEVNET && !ALLOW_DEVNET_BYPASS) {
+        } else if (IS_DEVNET && !ALLOW_DEVNET_BYPASS && !isValidPayment) {
             console.warn('[x402] Devnet RPC detected but ALLOW_DEVNET_BYPASS not set - requiring USDC');
         }
 

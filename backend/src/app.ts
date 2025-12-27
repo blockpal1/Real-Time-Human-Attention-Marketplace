@@ -8,7 +8,7 @@ const app = express();
 
 app.use(cors({
     exposedHeaders: ['x-admin-key'],
-    allowedHeaders: ['Content-Type', 'x-admin-key', 'x-builder-code', 'x-agent-key', 'x-solana-tx-signature']
+    allowedHeaders: ['Content-Type', 'x-admin-key', 'x-builder-code', 'x-agent-key', 'x-solana-tx-signature', 'x-campaign-id']
 }));
 app.use(express.json());
 
