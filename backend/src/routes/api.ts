@@ -120,6 +120,23 @@ router.get('/users/:wallet/balance', async (req, res) => {
     }
 });
 
+// Get user lifetime earnings (sum of all completed match payouts)
+router.get('/users/:wallet/earnings', async (req, res) => {
+    const { wallet } = req.params;
+    try {
+        // Get history and sum up all earnings
+        const history = await redisClient.getHistory(wallet, 1000);
+        const allTime = history.reduce((sum: number, entry: any) => {
+            // History entries have grossPay (or workerPay for net)
+            return sum + (entry.grossPay || entry.workerPay || entry.amount || 0);
+        }, 0);
+        res.json({ wallet, allTime });
+    } catch (error) {
+        console.error('Get Earnings Error:', error);
+        res.status(500).json({ error: 'Failed to fetch earnings' });
+    }
+});
+
 // Get user Season Zero points
 router.get('/users/:wallet/season-points', async (req, res) => {
     const { wallet } = req.params;

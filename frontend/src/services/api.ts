@@ -126,10 +126,11 @@ export const api = {
         }
         const data = await response.json();
         // Backend returns { wallet, balance }
-        // For now, treat balance as wallet balance, pending is calculated separately
+        // balance = pending claimable earnings from completed tasks
+        // wallet = already claimed (on-chain balance) - not tracked yet
         return {
-            wallet: data.balance || 0,
-            pending: 0 // TODO: Backend needs to track pending separately
+            pending: data.balance || 0,  // Claimable earnings (from Redis)
+            wallet: 0  // TODO: Query on-chain wallet balance
         };
     },
 
