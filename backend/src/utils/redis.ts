@@ -90,6 +90,10 @@ class RedisClient {
         return balance ? parseFloat(balance) : 0;
     }
 
+    async resetBalance(wallet: string): Promise<void> {
+        await this.client.set(`user:${wallet}:balance`, '0');
+    }
+
     async incrementPoints(wallet: string, points: number, season = 'season_1'): Promise<void> {
         await this.client.zIncrBy(`campaign:${season}`, points, wallet);
     }

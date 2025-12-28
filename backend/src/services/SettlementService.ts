@@ -258,6 +258,7 @@ export class SettlementService {
             // 5. Success: Cleanup
             await redisClient.deleteClaimIntent(claimId);
             await redisClient.deleteProcessingSettlements(claimId);
+            await redisClient.resetBalance(intent.userPubkey);  // Clear pending balance counter
 
             console.log(`[Settlement] Claim ${claimId} SUCCESS: ${txHash}`);
 

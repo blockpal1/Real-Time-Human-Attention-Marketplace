@@ -125,12 +125,40 @@ export const api = {
             throw new Error('Failed to fetch balance');
         }
         const data = await response.json();
-        // Backend returns { wallet, balance }
-        // balance = pending claimable earnings from completed tasks
-        // wallet = already claimed (on-chain balance) - not tracked yet
+
+        // Query on-chain USDC balance
+        let onChainBalance = 0;
+        try {
+            const { Connection, PublicKey } = await import('@solana/web3.js');
+            const { getAssociatedTokenAddress, getAccount } = await import('@solana/spl-token');
+
+            const RPC_URL = import.meta.env.VITE_SOLANA_RPC_URL || 'https://api.devnet.solana.com';
+            const IS_DEVNET = RPC_URL.includes('devnet');
+            const USDC_MINT = new PublicKey(
+                IS_DEVNET
+                    ? '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU'  // Devnet USDC
+                    : 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'  // Mainnet USDC
+            );
+
+            const connection = new Connection(RPC_URL, 'confirmed');
+            const userPubkey = new PublicKey(wallet);
+            const userATA = await getAssociatedTokenAddress(USDC_MINT, userPubkey);
+
+            try {
+                const tokenAccount = await getAccount(connection, userATA);
+                // USDC has 6 decimals
+                onChainBalance = Number(tokenAccount.amount) / 1_000_000;
+            } catch {
+                // Token account doesn't exist yet - balance is 0
+                onChainBalance = 0;
+            }
+        } catch (e) {
+            console.error('Failed to fetch on-chain balance:', e);
+        }
+
         return {
             pending: data.balance || 0,  // Claimable earnings (from Redis)
-            wallet: 0  // TODO: Query on-chain wallet balance
+            wallet: onChainBalance  // Actual on-chain USDC balance
         };
     },
 
