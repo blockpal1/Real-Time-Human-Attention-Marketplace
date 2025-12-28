@@ -1,28 +1,24 @@
 import express from 'express';
-import { Connection } from '@solana/web3.js';
 import { SettlementService } from '../services/SettlementService';
 import { redisClient } from '../utils/redis';
-
-const RPC_URL = process.env.SOLANA_RPC_URL || 'https://api.devnet.solana.com';
-const connection = new Connection(RPC_URL, 'confirmed');
 
 const router = express.Router();
 
 /**
  * POST /withdraw
- * Prepares a claim transaction for the user.
- * Locks pending settlements and returns a serialized Solana transaction.
+ * Creates a claim intent (Deferred Locking).
+ * Reads pending settlements WITHOUT locking, builds transaction, stores intent.
+ * If user abandons, intent expires in 5 minutes - no harm done.
  */
 router.post('/withdraw', async (req, res) => {
     try {
         const { userPubkey } = req.body;
 
-        // Input validation
         if (!userPubkey) {
             return res.status(400).json({ error: "Missing userPubkey" });
         }
 
-        const result = await SettlementService.prepareClaim(userPubkey);
+        const result = await SettlementService.createClaimIntent(userPubkey);
 
         if (result.error) {
             return res.status(400).json({ error: result.error });
@@ -31,50 +27,34 @@ router.post('/withdraw', async (req, res) => {
         res.json(result);
 
     } catch (e: any) {
-        console.error("[Claim] Withdraw Error:", e);
+        console.error("[Claim] Create Intent Error:", e);
         res.status(500).json({ error: e.message || "Internal Server Error" });
     }
 });
 
 /**
  * POST /submit
- * Finalizes the claim after the user broadcasts the transaction.
- * Only deletes the pending logs. Does NOT broadcast itself (frontend does it).
+ * Executes the claim intent (Deferred Locking).
+ * NOW locks funds atomically, broadcasts transaction, handles cleanup.
  */
 router.post('/submit', async (req, res) => {
     try {
-        const { userPubkey, claimId, signedTransaction } = req.body;
+        const { claimId, signedTransaction } = req.body;
 
-        if (!userPubkey || !claimId || !signedTransaction) {
-            return res.status(400).json({ error: "Missing required fields" });
+        if (!claimId || !signedTransaction) {
+            return res.status(400).json({ error: "Missing claimId or signedTransaction" });
         }
 
-        // 1. Decode and Broadcast
-        const txBuffer = Buffer.from(signedTransaction, 'base64');
-        const signature = await connection.sendRawTransaction(txBuffer, {
-            skipPreflight: false,
-            preflightCommitment: 'confirmed'
-        });
+        const result = await SettlementService.executeClaimIntent(claimId, signedTransaction);
 
-        console.log(`[Claim] Broadcasted tx: ${signature}`);
-
-        // 2. Wait for confirmation (Optimistic check)
-        // In production, we might want to return immediately and check status async.
-        // But for UX, waiting 2-3s is fine to ensure finality.
-        const confirmation = await connection.confirmTransaction(signature, 'confirmed');
-
-        if (confirmation.value.err) {
-            console.error("[Claim] Transaction failed on-chain:", confirmation.value.err);
-            return res.status(400).json({ error: "Transaction failed on-chain" });
+        if (result.error) {
+            return res.status(400).json({ error: result.error });
         }
 
-        // 3. Finalize (Delete Logs)
-        await SettlementService.finalizeClaim(userPubkey, claimId);
-
-        res.json({ success: true, txHash: signature });
+        res.json(result);
 
     } catch (e: any) {
-        console.error("[Claim] Finalize Error:", e);
+        console.error("[Claim] Execute Intent Error:", e);
         res.status(500).json({ error: e.message });
     }
 });

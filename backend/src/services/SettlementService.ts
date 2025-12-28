@@ -3,15 +3,10 @@ import {
     PublicKey,
     Transaction,
     TransactionInstruction,
-    SystemProgram,
-    Keypair,
-    SYSVAR_RENT_PUBKEY,
-    TransactionMessage,
-    VersionedTransaction
+    Keypair
 } from '@solana/web3.js';
 import {
     TOKEN_PROGRAM_ID,
-    ASSOCIATED_TOKEN_PROGRAM_ID,
     getAssociatedTokenAddress,
     createAssociatedTokenAccountIdempotentInstruction
 } from '@solana/spl-token';
@@ -19,14 +14,19 @@ import { redisClient } from '../utils/redis';
 
 // Configuration
 const RPC_URL = process.env.SOLANA_RPC_URL || 'https://api.devnet.solana.com';
+const IS_DEVNET = RPC_URL.includes('devnet');
 const PAYMENT_ROUTER_PROGRAM_ID = new PublicKey(process.env.PAYMENT_ROUTER_PROGRAM_ID || 'Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS');
-const USDC_MINT = new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"); // Mainnet/Devnet specific
+
+// USDC Mint - different on Devnet vs Mainnet
+const MAINNET_USDC_MINT = new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
+const DEVNET_USDC_MINT = new PublicKey("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"); // Standard Devnet USDC
+const USDC_MINT = IS_DEVNET ? DEVNET_USDC_MINT : MAINNET_USDC_MINT;
+
 const GAS_STATION_THRESHOLD = 5.00; // $5.00 USDC
 
 const connection = new Connection(RPC_URL, 'confirmed');
 
 // Load Router Admin Keypair (Authority)
-// Required for signing close_settlement instructions
 const getRouterAdminKeypair = (): Keypair => {
     const secret = process.env.ROUTER_ADMIN_KEYPAIR;
     if (!secret) throw new Error("Missing ROUTER_ADMIN_KEYPAIR env");
@@ -39,7 +39,6 @@ const getRouterAdminKeypair = (): Keypair => {
 };
 
 // Load Fee Payer Keypair (Platform Wallet)
-// Used when subsidizing gas
 const getFeePayerKeypair = (): Keypair => {
     const secret = process.env.FEE_PAYER_KEYPAIR || process.env.ROUTER_ADMIN_KEYPAIR;
     if (!secret) throw new Error("Missing FEE_PAYER_KEYPAIR env");
@@ -54,31 +53,29 @@ const getFeePayerKeypair = (): Keypair => {
 export class SettlementService {
 
     /**
-     * Phase 1: Prepare Claim
-     * Locks pending settlements, aggregates them, and builds the signed transaction.
-     * Returns the transaction and claimId.
+     * Phase 1: Create Claim Intent (Deferred Locking)
+     * 
+     * READS pending settlements WITHOUT locking them.
+     * Builds transaction and stores a "claim intent" with 5-min TTL.
+     * If user abandons, intent expires harmlessly - funds never locked.
      */
-    static async prepareClaim(userPubkey: string) {
-        // Generate Claim ID
+    static async createClaimIntent(userPubkey: string) {
         const claimId = `claim_${Date.now()}`;
 
-        // 1. Atomically move logs to processing
-        const pendingSettlements = await redisClient.lockPendingSettlements(userPubkey, claimId);
+        // 1. READ ONLY - no locking
+        const pendingSettlements = await redisClient.getPendingSettlements(userPubkey);
 
         if (!pendingSettlements || pendingSettlements.length === 0) {
             return { error: "No pending earnings to claim" };
         }
 
-        console.log(`[Settlement] Preparing claim ${claimId} with ${pendingSettlements.length} items for ${userPubkey}`);
+        console.log(`[Settlement] Creating intent ${claimId} with ${pendingSettlements.length} items for ${userPubkey}`);
 
         try {
-
             // 2. Aggregate by Campaign (BidId)
-            // Map: bidId -> { totalSeconds, price, agent, points, totalAmount }
             const campaignMap: Record<string, { totalSeconds: number, price: number, agent: string, points: number, totalAmount: number }> = {};
 
             for (const item of pendingSettlements) {
-                // Skip invalid items
                 if (!item.agent || !item.price || !item.duration) continue;
 
                 if (!campaignMap[item.bidId]) {
@@ -102,34 +99,30 @@ export class SettlementService {
             const routerAdmin = getRouterAdminKeypair();
 
             let totalUSDCToClaim = 0;
-
-            // Ensure User ATA exists
             const userATA = await getAssociatedTokenAddress(USDC_MINT, userKey);
 
-            // Calculate Total FIRST
             for (const campaign of Object.values(campaignMap)) {
                 totalUSDCToClaim += campaign.totalAmount;
             }
 
-            // Conditional Gas Logic
             const isSubsidized = totalUSDCToClaim >= GAS_STATION_THRESHOLD;
             const feePayerKey = isSubsidized ? getFeePayerKeypair().publicKey : userKey;
 
-            // Add ATA creation instruction (Idempotent)
+            // ATA creation instruction
             instructions.push(
                 createAssociatedTokenAccountIdempotentInstruction(
-                    feePayerKey, // Payer of rent
-                    userATA,     // Associated Account
-                    userKey,     // Owner
-                    USDC_MINT    // Mint
+                    feePayerKey,
+                    userATA,
+                    userKey,
+                    USDC_MINT
                 )
             );
 
             // Build CloseSettlement instructions
-            const discriminator = Buffer.from('2df753b718660044', 'hex'); // close_settlement
+            const discriminator = Buffer.from('2df753b718660044', 'hex');
 
             for (const [bidId, data] of Object.entries(campaignMap)) {
-                if (data.totalAmount < 0.000001) continue; // Skip dust
+                if (data.totalAmount < 0.000001) continue;
 
                 const agentKey = new PublicKey(data.agent);
                 const [escrowPDA] = PublicKey.findProgramAddressSync(
@@ -142,24 +135,19 @@ export class SettlementService {
                     PAYMENT_ROUTER_PROGRAM_ID
                 );
 
-                // Instruction Data: discriminator + verified_seconds + agreed_price + nonce
                 const dataBuffer = Buffer.alloc(8 + 8 + 8 + 8);
                 dataBuffer.set(discriminator, 0);
                 dataBuffer.writeBigUInt64LE(BigInt(Math.floor(data.totalSeconds)), 8);
-
-                // Convert Price to Atomic Units (6 decimals)
                 const atomicPrice = BigInt(Math.round(data.price * 1_000_000));
                 dataBuffer.writeBigUInt64LE(atomicPrice, 16);
-
-                // Nonce: Use timestamp + random for unique tx
                 const nonce = BigInt(Date.now());
                 dataBuffer.writeBigUInt64LE(nonce, 24);
 
                 const keys = [
-                    { pubkey: routerAdmin.publicKey, isSigner: true, isWritable: false }, // Router Authority
+                    { pubkey: routerAdmin.publicKey, isSigner: true, isWritable: false },
                     { pubkey: escrowPDA, isSigner: false, isWritable: true },
                     { pubkey: vaultATA, isSigner: false, isWritable: true },
-                    { pubkey: userATA, isSigner: false, isWritable: true }, // User Wallet (ATA)
+                    { pubkey: userATA, isSigner: false, isWritable: true },
                     { pubkey: marketConfigPDA, isSigner: false, isWritable: false },
                     { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false }
                 ];
@@ -172,8 +160,6 @@ export class SettlementService {
             }
 
             if (totalUSDCToClaim === 0 && instructions.length <= 1) {
-                // Nothing to claim, revert lock
-                await this.abortClaim(userPubkey, claimId);
                 return { error: "No valid USDC settlements found." };
             }
 
@@ -184,15 +170,11 @@ export class SettlementService {
             tx.feePayer = feePayerKey;
             tx.add(...instructions);
 
-            // 5. Signing Logic
-            // Router Admin always signs (as Authority)
+            // 5. Partial sign with Router Admin (Authority)
             tx.partialSign(routerAdmin);
 
-            // If Subsidized, Fee Payer (Server) signs
             if (isSubsidized) {
                 const feePayer = getFeePayerKeypair();
-                // If feePayer is distinct from routerAdmin, sign with it too
-                // Note: If routerAdmin == feePayer, it's already signed both roles
                 if (!feePayer.publicKey.equals(routerAdmin.publicKey)) {
                     tx.partialSign(feePayer);
                 }
@@ -201,44 +183,103 @@ export class SettlementService {
             // 6. Serialize
             const serializedTx = tx.serialize({ requireAllSignatures: false }).toString('base64');
 
+            // 7. Store Claim Intent (NOT locking funds yet!)
+            await redisClient.setClaimIntent(claimId, {
+                userPubkey,
+                amount: totalUSDCToClaim,
+                settlements: pendingSettlements,
+                transactionBase64: serializedTx,
+                createdAt: Date.now()
+            });
+
+            console.log(`[Settlement] Intent ${claimId} created: $${totalUSDCToClaim.toFixed(4)} USDC`);
+
             return {
                 transaction: serializedTx,
                 isSubsidized,
                 amount: totalUSDCToClaim,
                 claimId,
-                status: 'processing'
+                status: 'pending_signature'
             };
 
         } catch (error) {
-            console.error(`[Settlement] CRASH in prepareClaim:`, error);
-            // AUTO-ABORT: Restore data to pending so user can retry
-            await this.abortClaim(userPubkey, claimId);
+            console.error(`[Settlement] Error creating intent:`, error);
             throw error;
         }
     }
 
     /**
-     * Phase 2: Finalize Claim
-     * Called after transaction is confirmed on-chain (or if broadcast by backend).
-     * Deletes the processing logs, effectively updating the user's ledger.
+     * Phase 2: Execute Claim Intent (Deferred Locking)
+     * 
+     * Called when user submits signed transaction.
+     * NOW we atomically lock funds, then broadcast.
      */
-    static async finalizeClaim(userPubkey: string, claimId: string) {
-        await redisClient.deleteProcessingSettlements(claimId);
-        console.log(`[Settlement] Claim ${claimId} finalized for ${userPubkey}`);
+    static async executeClaimIntent(claimId: string, signedTransaction: string) {
+        // 1. Validate intent exists
+        const intent = await redisClient.getClaimIntent(claimId);
+        if (!intent) {
+            return { error: "Claim expired or already processed. Please try again." };
+        }
 
-        // Optionally update the scalar "Virtual Balance" to 0 (or sync) 
-        // But since we are aggregating logs, scalar balance might drift or be redundant.
-        // For UI consistency, we should decrement the scalar balance by the claimed amount?
-        // Wait, Redis scalar balance is for fast display.
-        // Ideally we reset it?
-        // But we might have new earnings incoming while claim is processing.
-        // Complex. For now, leave scalar balance as "Lifetime Earnings" or assume frontend deducts locally?
-        // Or we assume log-based truth.
+        console.log(`[Settlement] Executing intent ${claimId} for ${intent.userPubkey}`);
+
+        // 2. Atomically lock the settlements NOW
+        const locked = await redisClient.atomicLockSettlements(
+            intent.userPubkey,
+            claimId,
+            intent.settlements
+        );
+
+        if (!locked) {
+            // Settlements were already claimed (maybe by another intent)
+            await redisClient.deleteClaimIntent(claimId);
+            return { error: "Settlements already claimed or modified. Please refresh and try again." };
+        }
+
+        try {
+            // 3. Deserialize and broadcast the signed transaction
+            const txBuffer = Buffer.from(signedTransaction, 'base64');
+            const tx = Transaction.from(txBuffer);
+
+            console.log(`[Settlement] Broadcasting transaction for ${claimId}...`);
+            const txHash = await connection.sendRawTransaction(tx.serialize(), {
+                skipPreflight: false,
+                preflightCommitment: 'confirmed'
+            });
+
+            console.log(`[Settlement] Transaction sent: ${txHash}`);
+
+            // 4. Wait for confirmation
+            const confirmation = await connection.confirmTransaction(txHash, 'confirmed');
+            if (confirmation.value.err) {
+                throw new Error(`Transaction failed: ${JSON.stringify(confirmation.value.err)}`);
+            }
+
+            // 5. Success: Cleanup
+            await redisClient.deleteClaimIntent(claimId);
+            await redisClient.deleteProcessingSettlements(claimId);
+
+            console.log(`[Settlement] Claim ${claimId} SUCCESS: ${txHash}`);
+
+            return {
+                success: true,
+                txHash,
+                amount: intent.amount
+            };
+
+        } catch (error: any) {
+            console.error(`[Settlement] Broadcast failed for ${claimId}:`, error);
+
+            // 6. Failure: Restore funds to pending
+            await redisClient.restoreProcessingToPending(intent.userPubkey, claimId);
+            await redisClient.deleteClaimIntent(claimId);
+
+            return { error: `Transaction failed: ${error.message}` };
+        }
     }
 
     /**
-     * Abort Claim
-     * Restores logs from processing back to pending.
+     * Legacy: Abort Claim (for manual recovery if needed)
      */
     static async abortClaim(userPubkey: string, claimId: string) {
         await redisClient.restoreProcessingToPending(userPubkey, claimId);

@@ -238,6 +238,73 @@ class RedisClient {
         await this.client.del(processingKey);
     }
 
+    // ===== Claim Intent (Deferred Locking) =====
+
+    async setClaimIntent(claimId: string, data: {
+        userPubkey: string;
+        amount: number;
+        settlements: any[];
+        transactionBase64: string;
+        createdAt: number;
+    }): Promise<void> {
+        const key = `claim_intent:${claimId}`;
+        await this.client.set(key, JSON.stringify(data), { EX: 300 }); // 5 min TTL
+        console.log(`[Redis] Created claim intent: ${claimId} (TTL: 5min)`);
+    }
+
+    async getClaimIntent(claimId: string): Promise<{
+        userPubkey: string;
+        amount: number;
+        settlements: any[];
+        transactionBase64: string;
+        createdAt: number;
+    } | null> {
+        const key = `claim_intent:${claimId}`;
+        const data = await this.client.get(key);
+        if (!data) return null;
+        return JSON.parse(data);
+    }
+
+    async deleteClaimIntent(claimId: string): Promise<void> {
+        await this.client.del(`claim_intent:${claimId}`);
+    }
+
+    /**
+     * Atomically lock ALL settlements from pending to processing.
+     * Uses RENAME for atomic move (no JSON comparison issues).
+     * Returns true if items were locked.
+     */
+    async atomicLockSettlements(wallet: string, claimId: string, _settlements: any[]): Promise<boolean> {
+        const sourceKey = `user:${wallet}:pending_settlements`;
+        const destKey = `claim:${claimId}:processing`;
+
+        try {
+            // Check if source has items
+            const len = await this.client.lLen(sourceKey);
+            if (len === 0) {
+                console.log(`[Redis] Atomic lock: No items in ${sourceKey}`);
+                return false;
+            }
+
+            // Atomic rename - moves entire list
+            await this.client.rename(sourceKey, destKey);
+
+            // Set TTL on processing key
+            await this.client.expire(destKey, 600);
+
+            console.log(`[Redis] Atomic lock: ${len} items moved to ${destKey}`);
+            return true;
+        } catch (e: any) {
+            // RENAME fails if source doesn't exist (already claimed)
+            if (e.message?.includes('no such key')) {
+                console.log(`[Redis] Atomic lock: Source key already claimed`);
+                return false;
+            }
+            console.error(`[Redis] Atomic lock failed:`, e);
+            return false;
+        }
+    }
+
     // ===== Order Book =====
 
     async setOrder(txHash: string, orderData: any): Promise<void> {
