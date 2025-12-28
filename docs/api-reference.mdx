@@ -11,7 +11,7 @@ description: "Endpoints for the Attentium x402 Protocol"
 
 ## Create Campaign
 
-Initialize a verification request. Returns an invoice (402) or campaign keys (200).
+Initialize a verification request. Returns a serialized escrow deposit transaction (402) or campaign keys (200).
 
 <ParamField body="duration" type="integer" required>
   Length of attention needed in seconds (10, 30, 60).
@@ -32,74 +32,60 @@ Initialize a verification request. Returns an invoice (402) or campaign keys (20
 ### Required Headers (with payment)
 
 <ParamField header="X-Solana-Tx-Signature" type="string" required>
-  The Solana transaction signature proving payment.
+  The Solana transaction signature of your escrow deposit.
 </ParamField>
 
-<ParamField header="X-Campaign-Id" type="string" required>
-  UUID linking the payment to this request. **Must match the memo in your Solana transaction.**
+<ParamField header="X-Agent-Key" type="string" required>
+  Your wallet public key (used to derive escrow PDA).
 </ParamField>
 
-<Warning>
-  **Critical Security Requirement**
-  Your Solana transaction MUST include a memo instruction containing the `X-Campaign-Id` value. This prevents payment replay attacks.
-</Warning>
 ---
 
-## Memo Program Integration
+## Payment Flow (Non-Custodial Escrow)
 
-To bind your payment to a specific campaign request, your Solana transaction must include a memo instruction.
+The 402 response includes a **pre-built serialized transaction** for the `deposit_escrow` instruction. Sign and submit it.
 
-### Solana Memo Program
+### 402 Response
 
-| Property | Value |
-|----------|-------|
-| **Program ID** | `MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr` |
-| **Data** | Your `X-Campaign-Id` (UTF-8 encoded UUID) |
-| **Accounts** | None required |
-
-### Transaction Structure
-
-Your transaction should contain two instructions:
-
-1. **SPL Token Transfer** - USDC to treasury
-2. **Memo Instruction** - Campaign UUID as data
+```json
+{
+  "error": "payment_required",
+  "message": "Escrow deposit required: 7.50 USDC",
+  "invoice": {
+    "amount": 7.50,
+    "token": "USDC",
+    "transaction": "<base64_serialized_deposit_escrow_tx>",
+    "escrow_pda": "<your_escrow_address>"
+  }
+}
+```
 
 ### Python Example
 
 ```python
-from solders.instruction import Instruction
-from solders.pubkey import Pubkey
-import uuid
+import base64
+from solana.transaction import Transaction
 
-MEMO_PROGRAM = "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"
+# Decode the pre-built transaction
+serialized_tx = base64.b64decode(invoice["invoice"]["transaction"])
+tx = Transaction.from_bytes(serialized_tx)
 
-# Generate campaign ID
-campaign_id = str(uuid.uuid4())
+# Sign with your agent keypair
+tx.sign(agent_keypair)
 
-# Create memo instruction
-memo_ix = Instruction(
-    program_id=Pubkey.from_string(MEMO_PROGRAM),
-    accounts=[],
-    data=campaign_id.encode('utf-8')
-)
-
-# Add to your transaction: [transfer_ix, memo_ix]
+# Submit to Solana
+result = client.send_transaction(tx)
+tx_signature = str(result.value)
 ```
 
-### Error Codes
-
-| Error | Description |
-|-------|-------------|
-| `missing_campaign_id` | `X-Campaign-Id` header not provided |
-| `missing_memo` | Transaction has no memo instruction |
-| `memo_mismatch` | Memo content doesn't match header |
+> **Non-custodial**: Funds go to an escrow PDA, not a wallet. You retain control of unspent funds.
 
 ---
 
 ### Example Request (with Payment)
 
 ```bash
-# Step 1: Get invoice (no headers needed)
+# Step 1: Get serialized escrow transaction
 curl -X POST https://api.attentium.ai/v1/verify \
   -H "Content-Type: application/json" \
   -d '{
@@ -109,13 +95,13 @@ curl -X POST https://api.attentium.ai/v1/verify \
     "validation_question": "Is this a cat?",
     "content_url": "https://example.com/image.png"
   }'
-# Returns 402 with invoice
+# Returns 402 with serialized transaction
 
-# Step 2: Pay with memo, then submit with headers
+# Step 2: Sign tx, submit to Solana, then verify
 curl -X POST https://api.attentium.ai/v1/verify \
   -H "Content-Type: application/json" \
-  -H "X-Solana-Tx-Signature: YOUR_TX_SIGNATURE" \
-  -H "X-Campaign-Id: YOUR_UUID_FROM_MEMO" \
+  -H "X-Solana-Tx-Signature: YOUR_ESCROW_TX_SIGNATURE" \
+  -H "X-Agent-Key: YOUR_WALLET_PUBKEY" \
   -d '{
     "duration": 30,
     "quantity": 5,
@@ -141,3 +127,95 @@ Poll for campaign completion status.
 ```bash
 curl "https://api.attentium.ai/v1/campaigns/0x123abc/results?key=YOUR_READ_KEY"
 ```
+
+---
+
+## Claims API
+
+Human workers claim their accumulated USDC earnings via the claims endpoints.
+
+### POST /v1/claims/withdraw
+
+Creates a claim intent and returns an unsigned transaction for the user to sign.
+
+<ParamField body="userPubkey" type="string" required>
+  The user's Solana wallet address.
+</ParamField>
+
+#### Response
+
+```json
+{
+  "status": "pending_signature",
+  "transaction": "<base64_unsigned_tx>",
+  "claimId": "claim_abc123...",
+  "amount": 5.25
+}
+```
+
+---
+
+### POST /v1/claims/submit
+
+Submits a user-signed transaction for broadcast.
+
+<ParamField body="claimId" type="string" required>
+  The claimId from the withdraw response.
+</ParamField>
+
+<ParamField body="signedTransaction" type="string" required>
+  The base64-encoded signed transaction.
+</ParamField>
+
+#### Response (Success)
+
+```json
+{
+  "success": true,
+  "txHash": "5abc123...",
+  "amount": 5.25
+}
+```
+
+---
+
+### GET /v1/claims/balance
+
+Returns the user's claimable balance.
+
+<ParamField query="userPubkey" type="string" required>
+  The user's Solana wallet address.
+</ParamField>
+
+#### Response
+
+```json
+{
+  "usdc_balance": 5.25,
+  "season_points": 150,
+  "pending_items": 3
+}
+```
+
+---
+
+## Agent Refunds
+
+Agents can withdraw unspent escrow funds after campaign completion.
+
+### GET /v1/campaigns/:tx_hash
+
+Returns campaign status and refund transaction if eligible.
+
+#### Response (Refundable)
+
+```json
+{
+  "status": "expired",
+  "escrow_balance": 2.50,
+  "refundable": true,
+  "withdraw_escrow_tx": "<base64_serialized_withdraw_tx>"
+}
+```
+
+Sign and submit the `withdraw_escrow_tx` to reclaim your funds.

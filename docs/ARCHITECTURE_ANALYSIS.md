@@ -134,10 +134,79 @@ sequenceDiagram
 
 | Component | Current State | Target Non-Custodial State |
 | :--- | :--- | :--- |
-| **Agent Payment** | Transfer to Keypair Wallet | Deposit to PDA Escrow Vault |
-| **Escrow** | None (Funds mixed in Treasury) | Segregated per Agent on-chain |
-| **Balance Tracking** | Redis Database | On-Chain Escrow State |
-| **Payout** | Manual / Missing | Smart Contract Settlement |
-| **Role of Backend** | Custodian & Ledger | Oracle & Validator |
+| **Agent Payment** | Transfer to Keypair Wallet | ✅ Deposit to PDA Escrow Vault |
+| **Escrow** | None (Funds mixed in Treasury) | ✅ Segregated per Agent on-chain |
+| **Balance Tracking** | Redis Database | ✅ On-Chain Escrow State + Redis Cache |
+| **Payout** | Manual / Missing | ✅ Smart Contract Settlement |
+| **Role of Backend** | Custodian & Ledger | ✅ Oracle & Validator |
 
-This plan utilizes the existing `payment_router` code which is already written but currently dormant.
+This plan utilizes the existing `payment_router` code which is now **active on Devnet**.
+
+---
+
+## 3. Deferred Locking (Implemented)
+
+To prevent "stranded funds" (where a user's balance is locked during claim but the transaction fails), the claim flow uses **deferred locking**:
+
+### Two-Phase Claim Flow
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Backend
+    participant Redis
+    participant Solana
+
+    Note over User, Backend: Phase 1: Create Intent (NO LOCKING)
+    User->>Backend: POST /claims/withdraw
+    Backend->>Redis: Read pending_settlements
+    Backend->>Backend: Build unsigned transaction
+    Backend->>Redis: Store claim_intent (5-min TTL)
+    Backend->>User: Return serialized tx + claimId
+
+    Note over User, Backend: Phase 2: Execute (ATOMIC LOCK)
+    User->>User: Sign transaction
+    User->>Backend: POST /claims/submit
+    Backend->>Redis: atomicLockSettlements()
+    Backend->>Solana: Broadcast signed tx
+    alt Success
+        Solana->>Backend: Confirmed
+        Backend->>Redis: Delete processing, reset balance
+    else Failure
+        Backend->>Redis: Restore to pending
+    end
+```
+
+### Key Benefits
+
+1. **No Stranded Funds**: Funds are only locked AFTER user signature is received
+2. **Safe Abandonment**: If user closes browser before signing, intent expires harmlessly
+3. **Atomic Rollback**: If Solana broadcast fails, funds are automatically restored
+
+### Implementation Files
+
+- `backend/src/services/SettlementService.ts` - `createClaimIntent()` and `executeClaimIntent()`
+- `backend/src/utils/redis.ts` - `atomicLockSettlements()` and `restoreProcessingToPending()`
+
+---
+
+## 4. Setup Requirements
+
+### One-Time Initialization
+
+The Payment Router program requires the `market_config` PDA to be initialized:
+
+```bash
+cd backend
+npx ts-node src/init_market_config.ts
+```
+
+### Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `PAYMENT_ROUTER_PROGRAM_ID` | `H4zbWKDAGnrJv9CTptjVvxKCDB59Mv2KpiVDx9d4jDaz` |
+| `ROUTER_ADMIN_KEYPAIR` | JSON array of keypair bytes (Router Authority) |
+| `FEE_PAYER_KEYPAIR` | Platform wallet for subsidized gas (optional) |
+| `SOLANA_RPC_URL` | Devnet: `https://api.devnet.solana.com` |
+
