@@ -170,7 +170,7 @@ export const api = {
         const response = await fetch(`${API_URL}/claims/submit`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userPubkey, claimId, signature })
+            body: JSON.stringify({ userPubkey, claimId, signedTransaction: signature })
         });
         if (!response.ok) {
             const error = await response.json();

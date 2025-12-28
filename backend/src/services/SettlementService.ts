@@ -71,141 +71,150 @@ export class SettlementService {
 
         console.log(`[Settlement] Preparing claim ${claimId} with ${pendingSettlements.length} items for ${userPubkey}`);
 
-        // 2. Aggregate by Campaign (BidId)
-        // Map: bidId -> { totalSeconds, price, agent, points, totalAmount }
-        const campaignMap: Record<string, { totalSeconds: number, price: number, agent: string, points: number, totalAmount: number }> = {};
+        try {
 
-        for (const item of pendingSettlements) {
-            // Skip invalid items
-            if (!item.agent || !item.price || !item.duration) continue;
+            // 2. Aggregate by Campaign (BidId)
+            // Map: bidId -> { totalSeconds, price, agent, points, totalAmount }
+            const campaignMap: Record<string, { totalSeconds: number, price: number, agent: string, points: number, totalAmount: number }> = {};
 
-            if (!campaignMap[item.bidId]) {
-                campaignMap[item.bidId] = {
-                    totalSeconds: 0,
-                    price: item.price,
-                    agent: item.agent,
-                    points: 0,
-                    totalAmount: 0
-                };
+            for (const item of pendingSettlements) {
+                // Skip invalid items
+                if (!item.agent || !item.price || !item.duration) continue;
+
+                if (!campaignMap[item.bidId]) {
+                    campaignMap[item.bidId] = {
+                        totalSeconds: 0,
+                        price: item.price,
+                        agent: item.agent,
+                        points: 0,
+                        totalAmount: 0
+                    };
+                }
+
+                campaignMap[item.bidId].totalSeconds += item.duration;
+                campaignMap[item.bidId].points += (item.points || 0);
+                campaignMap[item.bidId].totalAmount += (item.amount || 0);
             }
 
-            campaignMap[item.bidId].totalSeconds += item.duration;
-            campaignMap[item.bidId].points += (item.points || 0);
-            campaignMap[item.bidId].totalAmount += (item.amount || 0);
-        }
+            // 3. Build Instructions
+            const instructions: TransactionInstruction[] = [];
+            const userKey = new PublicKey(userPubkey);
+            const routerAdmin = getRouterAdminKeypair();
 
-        // 3. Build Instructions
-        const instructions: TransactionInstruction[] = [];
-        const userKey = new PublicKey(userPubkey);
-        const routerAdmin = getRouterAdminKeypair();
+            let totalUSDCToClaim = 0;
 
-        let totalUSDCToClaim = 0;
+            // Ensure User ATA exists
+            const userATA = await getAssociatedTokenAddress(USDC_MINT, userKey);
 
-        // Ensure User ATA exists
-        const userATA = await getAssociatedTokenAddress(USDC_MINT, userKey);
+            // Calculate Total FIRST
+            for (const campaign of Object.values(campaignMap)) {
+                totalUSDCToClaim += campaign.totalAmount;
+            }
 
-        // Calculate Total FIRST
-        for (const campaign of Object.values(campaignMap)) {
-            totalUSDCToClaim += campaign.totalAmount;
-        }
+            // Conditional Gas Logic
+            const isSubsidized = totalUSDCToClaim >= GAS_STATION_THRESHOLD;
+            const feePayerKey = isSubsidized ? getFeePayerKeypair().publicKey : userKey;
 
-        // Conditional Gas Logic
-        const isSubsidized = totalUSDCToClaim >= GAS_STATION_THRESHOLD;
-        const feePayerKey = isSubsidized ? getFeePayerKeypair().publicKey : userKey;
-
-        // Add ATA creation instruction (Idempotent)
-        instructions.push(
-            createAssociatedTokenAccountIdempotentInstruction(
-                feePayerKey, // Payer of rent
-                userATA,     // Associated Account
-                userKey,     // Owner
-                USDC_MINT    // Mint
-            )
-        );
-
-        // Build CloseSettlement instructions
-        const discriminator = Buffer.from('2df753b718660044', 'hex'); // close_settlement
-
-        for (const [bidId, data] of Object.entries(campaignMap)) {
-            if (data.totalAmount < 0.000001) continue; // Skip dust
-
-            const agentKey = new PublicKey(data.agent);
-            const [escrowPDA] = PublicKey.findProgramAddressSync(
-                [Buffer.from("escrow"), agentKey.toBuffer()],
-                PAYMENT_ROUTER_PROGRAM_ID
-            );
-            const vaultATA = await getAssociatedTokenAddress(USDC_MINT, escrowPDA, true);
-            const [marketConfigPDA] = PublicKey.findProgramAddressSync(
-                [Buffer.from("market_config")],
-                PAYMENT_ROUTER_PROGRAM_ID
+            // Add ATA creation instruction (Idempotent)
+            instructions.push(
+                createAssociatedTokenAccountIdempotentInstruction(
+                    feePayerKey, // Payer of rent
+                    userATA,     // Associated Account
+                    userKey,     // Owner
+                    USDC_MINT    // Mint
+                )
             );
 
-            // Instruction Data: discriminator + verified_seconds + agreed_price + nonce
-            const dataBuffer = Buffer.alloc(8 + 8 + 8 + 8);
-            dataBuffer.set(discriminator, 0);
-            dataBuffer.writeBigUInt64LE(BigInt(Math.floor(data.totalSeconds)), 8);
+            // Build CloseSettlement instructions
+            const discriminator = Buffer.from('2df753b718660044', 'hex'); // close_settlement
 
-            // Convert Price to Atomic Units (6 decimals)
-            const atomicPrice = BigInt(Math.round(data.price * 1_000_000));
-            dataBuffer.writeBigUInt64LE(atomicPrice, 16);
+            for (const [bidId, data] of Object.entries(campaignMap)) {
+                if (data.totalAmount < 0.000001) continue; // Skip dust
 
-            // Nonce: Use timestamp + random for unique tx
-            const nonce = BigInt(Date.now());
-            dataBuffer.writeBigUInt64LE(nonce, 24);
+                const agentKey = new PublicKey(data.agent);
+                const [escrowPDA] = PublicKey.findProgramAddressSync(
+                    [Buffer.from("escrow"), agentKey.toBuffer()],
+                    PAYMENT_ROUTER_PROGRAM_ID
+                );
+                const vaultATA = await getAssociatedTokenAddress(USDC_MINT, escrowPDA, true);
+                const [marketConfigPDA] = PublicKey.findProgramAddressSync(
+                    [Buffer.from("market_config")],
+                    PAYMENT_ROUTER_PROGRAM_ID
+                );
 
-            const keys = [
-                { pubkey: routerAdmin.publicKey, isSigner: true, isWritable: false }, // Router Authority
-                { pubkey: escrowPDA, isSigner: false, isWritable: true },
-                { pubkey: vaultATA, isSigner: false, isWritable: true },
-                { pubkey: userATA, isSigner: false, isWritable: true }, // User Wallet (ATA)
-                { pubkey: marketConfigPDA, isSigner: false, isWritable: false },
-                { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false }
-            ];
+                // Instruction Data: discriminator + verified_seconds + agreed_price + nonce
+                const dataBuffer = Buffer.alloc(8 + 8 + 8 + 8);
+                dataBuffer.set(discriminator, 0);
+                dataBuffer.writeBigUInt64LE(BigInt(Math.floor(data.totalSeconds)), 8);
 
-            instructions.push(new TransactionInstruction({
-                keys,
-                programId: PAYMENT_ROUTER_PROGRAM_ID,
-                data: dataBuffer
-            }));
-        }
+                // Convert Price to Atomic Units (6 decimals)
+                const atomicPrice = BigInt(Math.round(data.price * 1_000_000));
+                dataBuffer.writeBigUInt64LE(atomicPrice, 16);
 
-        if (totalUSDCToClaim === 0 && instructions.length <= 1) {
-            // Nothing to claim, revert lock
+                // Nonce: Use timestamp + random for unique tx
+                const nonce = BigInt(Date.now());
+                dataBuffer.writeBigUInt64LE(nonce, 24);
+
+                const keys = [
+                    { pubkey: routerAdmin.publicKey, isSigner: true, isWritable: false }, // Router Authority
+                    { pubkey: escrowPDA, isSigner: false, isWritable: true },
+                    { pubkey: vaultATA, isSigner: false, isWritable: true },
+                    { pubkey: userATA, isSigner: false, isWritable: true }, // User Wallet (ATA)
+                    { pubkey: marketConfigPDA, isSigner: false, isWritable: false },
+                    { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false }
+                ];
+
+                instructions.push(new TransactionInstruction({
+                    keys,
+                    programId: PAYMENT_ROUTER_PROGRAM_ID,
+                    data: dataBuffer
+                }));
+            }
+
+            if (totalUSDCToClaim === 0 && instructions.length <= 1) {
+                // Nothing to claim, revert lock
+                await this.abortClaim(userPubkey, claimId);
+                return { error: "No valid USDC settlements found." };
+            }
+
+            // 4. Build Transaction
+            const { blockhash } = await connection.getLatestBlockhash();
+            const tx = new Transaction();
+            tx.recentBlockhash = blockhash;
+            tx.feePayer = feePayerKey;
+            tx.add(...instructions);
+
+            // 5. Signing Logic
+            // Router Admin always signs (as Authority)
+            tx.partialSign(routerAdmin);
+
+            // If Subsidized, Fee Payer (Server) signs
+            if (isSubsidized) {
+                const feePayer = getFeePayerKeypair();
+                // If feePayer is distinct from routerAdmin, sign with it too
+                // Note: If routerAdmin == feePayer, it's already signed both roles
+                if (!feePayer.publicKey.equals(routerAdmin.publicKey)) {
+                    tx.partialSign(feePayer);
+                }
+            }
+
+            // 6. Serialize
+            const serializedTx = tx.serialize({ requireAllSignatures: false }).toString('base64');
+
+            return {
+                transaction: serializedTx,
+                isSubsidized,
+                amount: totalUSDCToClaim,
+                claimId,
+                status: 'processing'
+            };
+
+        } catch (error) {
+            console.error(`[Settlement] CRASH in prepareClaim:`, error);
+            // AUTO-ABORT: Restore data to pending so user can retry
             await this.abortClaim(userPubkey, claimId);
-            return { error: "No valid USDC settlements found." };
+            throw error;
         }
-
-        // 4. Build Transaction
-        const { blockhash } = await connection.getLatestBlockhash();
-        const tx = new Transaction();
-        tx.recentBlockhash = blockhash;
-        tx.feePayer = feePayerKey;
-        tx.add(...instructions);
-
-        // 5. Signing Logic
-        // Router Admin always signs (as Authority)
-        tx.partialSign(routerAdmin);
-
-        // If Subsidized, Fee Payer (Server) signs
-        if (isSubsidized) {
-            const feePayer = getFeePayerKeypair();
-            // If feePayer is distinct from routerAdmin, sign with it too
-            // Note: If routerAdmin == feePayer, it's already signed both roles
-            if (!feePayer.publicKey.equals(routerAdmin.publicKey)) {
-                tx.partialSign(feePayer);
-            }
-        }
-
-        // 6. Serialize
-        const serializedTx = tx.serialize({ requireAllSignatures: false }).toString('base64');
-
-        return {
-            transaction: serializedTx,
-            isSubsidized,
-            amount: totalUSDCToClaim,
-            claimId,
-            status: 'processing'
-        };
     }
 
     /**

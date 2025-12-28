@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { LoginButton } from './LoginButton';
 import { EarningsDashboard } from './EarningsDashboard';
+import { useClaim } from '../hooks/useClaim';
 import { api } from '../services/api';
 
 interface HeaderProps {
@@ -28,6 +29,9 @@ export const Header: React.FC<HeaderProps> = ({ theme, setTheme, userPubkey }) =
     // Get wallet address from Privy
     const embeddedWallet = wallets.find((wallet) => wallet.walletClientType === 'privy');
     const walletAddress = embeddedWallet?.address || user?.wallet?.address;
+
+    // Claim hook for USDC withdrawals
+    const { claiming, claimEarnings } = useClaim(walletAddress || '');
 
     // Listen for refresh event from match completion
     useEffect(() => {
@@ -190,10 +194,14 @@ export const Header: React.FC<HeaderProps> = ({ theme, setTheme, userPubkey }) =
                                         </div>
 
                                         <button
-                                            disabled
-                                            className="w-full py-2 bg-[#0088FF]/20 text-[#0088FF] rounded-lg font-bold text-xs uppercase tracking-wider opacity-50 cursor-not-allowed"
+                                            onClick={() => claimEarnings(() => loadEarnings())}
+                                            disabled={claiming || pendingEarnings === 0}
+                                            className={`w-full py-2 rounded-lg font-bold text-xs uppercase tracking-wider transition-all ${claiming || pendingEarnings === 0
+                                                ? 'bg-[#0088FF]/20 text-[#0088FF] opacity-50 cursor-not-allowed'
+                                                : 'bg-[#0088FF] text-white hover:bg-[#0066CC] cursor-pointer'
+                                                }`}
                                         >
-                                            Claim to Wallet
+                                            {claiming ? 'Claiming...' : 'Claim to Wallet'}
                                         </button>
                                     </div>
                                 </div>

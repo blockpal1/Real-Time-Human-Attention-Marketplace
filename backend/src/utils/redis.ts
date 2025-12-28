@@ -185,8 +185,12 @@ class RedisClient {
         // Since we lock the wallet UI, RENAME is acceptable.
 
         try {
+            console.log(`[Redis] Locking settlements for ${wallet}. Key: ${sourceKey} -> ${destKey}`);
+
             // Check if exists
             const len = await this.client.lLen(sourceKey);
+            console.log(`[Redis] Source Key Length: ${len}`);
+
             if (len === 0) return [];
 
             // Move entire list by renaming key
@@ -200,8 +204,11 @@ class RedisClient {
 
             // Return items
             const items = await this.client.lRange(destKey, 0, -1);
+            console.log(`[Redis] Moved to ${destKey}. Found ${items.length} items.`);
+            console.log(`[Redis] Item 0: ${items[0]}`);
             return items.map(i => JSON.parse(i));
         } catch (e) {
+            console.error("[Redis] Lock/Parse Error:", e);
             return [];
         }
     }
