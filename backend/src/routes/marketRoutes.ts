@@ -374,31 +374,27 @@ router.get('/campaigns/:tx_hash', async (req, res) => {
 
             if (escrowBalance > 0) {
                 // Build Withdraw Tx
+                // withdraw_escrow instruction takes amount: u64
                 const discriminator = Buffer.from('5154e280f52f6068', 'hex'); // withdraw_escrow
+
+                // Convert USDC amount to lamports (6 decimals)
+                const amountLamports = BigInt(Math.floor(escrowBalance * 1_000_000));
+
                 const dataBuffer = Buffer.alloc(8 + 8);
-                dataBuffer.set(discriminator, 0);
-                const nonce = BigInt(Date.now());
-                dataBuffer.writeBigUInt64LE(nonce, 8);
+                discriminator.copy(dataBuffer, 0);
+                dataBuffer.writeBigUInt64LE(amountLamports, 8);
 
                 const agentATA = await getAssociatedTokenAddress(USDC_MINT, agentKey);
-                const [marketConfigPDA] = PublicKey.findProgramAddressSync(
-                    [Buffer.from("market_config")],
-                    PAYMENT_ROUTER_PROGRAM_ID
-                );
 
+                // WithdrawEscrow accounts (from lib.rs):
+                // agent (signer, mut), agent_token_account (mut), escrow_account (mut), vault (mut), token_program
                 const keys = [
                     { pubkey: agentKey, isSigner: true, isWritable: true },
                     { pubkey: agentATA, isSigner: false, isWritable: true },
                     { pubkey: escrowPDA, isSigner: false, isWritable: true },
                     { pubkey: vaultATA, isSigner: false, isWritable: true },
-                    { pubkey: marketConfigPDA, isSigner: false, isWritable: false },
-                    { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
-                    { pubkey: PublicKey.default, isSigner: false, isWritable: false } // System Program (default placeholder if not imported? SystemProgram.programId)
+                    { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false }
                 ];
-                // Wait, importing SystemProgram?
-                // I missed SystemProgram import. I'll use new PublicKey('11111111111111111111111111111111') or import it.
-                // I'll stick to a hardcoded ID for safety in this chunk, or rely on import if I add it.
-                // I'll add SystemProgram to imports.
 
                 const ix = new TransactionInstruction({
                     keys,

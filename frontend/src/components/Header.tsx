@@ -31,7 +31,7 @@ export const Header: React.FC<HeaderProps> = ({ theme, setTheme, userPubkey }) =
     const walletAddress = embeddedWallet?.address || user?.wallet?.address;
 
     // Claim hook for USDC withdrawals
-    const { claiming, claimEarnings } = useClaim(walletAddress || '');
+    const { claiming, claimEarnings, claimState, claimResult, getStatusText, resetClaimState } = useClaim(walletAddress || '');
 
     // Listen for refresh event from match completion
     useEffect(() => {
@@ -193,15 +193,57 @@ export const Header: React.FC<HeaderProps> = ({ theme, setTheme, userPubkey }) =
                                             </div>
                                         </div>
 
+                                        {/* Claim Result Toast */}
+                                        {claimResult && (
+                                            <div className={`mb-3 p-3 rounded-lg text-xs ${claimResult.success
+                                                ? 'bg-green-500/20 border border-green-500/50 text-green-400'
+                                                : 'bg-red-500/20 border border-red-500/50 text-red-400'}`}
+                                            >
+                                                {claimResult.success ? (
+                                                    <div>
+                                                        <div className="font-bold">✓ Claimed ${claimResult.amount?.toFixed(4)} USDC</div>
+                                                        {claimResult.explorerUrl && (
+                                                            <a
+                                                                href={claimResult.explorerUrl}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="text-blue-400 hover:underline block mt-1"
+                                                            >
+                                                                View on Solana Explorer →
+                                                            </a>
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    <div>
+                                                        <div className="font-bold">Claim failed</div>
+                                                        <div className="text-gray-400 mt-1">{claimResult.error}</div>
+                                                        <div className="text-gray-500 mt-1">Your balance is safe. Try again.</div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+
                                         <button
-                                            onClick={() => claimEarnings(() => loadEarnings())}
-                                            disabled={claiming || pendingEarnings === 0}
-                                            className={`w-full py-2 rounded-lg font-bold text-xs uppercase tracking-wider transition-all ${claiming || pendingEarnings === 0
-                                                ? 'bg-[#0088FF]/20 text-[#0088FF] opacity-50 cursor-not-allowed'
-                                                : 'bg-[#0088FF] text-white hover:bg-[#0066CC] cursor-pointer'
+                                            onClick={() => {
+                                                if (claimState === 'confirmed' || claimState === 'failed') {
+                                                    resetClaimState();
+                                                }
+                                                claimEarnings(() => loadEarnings());
+                                            }}
+                                            disabled={claiming || (pendingEarnings === 0 && claimState === 'idle')}
+                                            className={`w-full py-2 rounded-lg font-bold text-xs uppercase tracking-wider transition-all ${claimState === 'confirmed'
+                                                    ? 'bg-green-500 text-white'
+                                                    : claimState === 'failed'
+                                                        ? 'bg-red-500/80 text-white hover:bg-red-500 cursor-pointer'
+                                                        : claiming || pendingEarnings === 0
+                                                            ? 'bg-[#0088FF]/20 text-[#0088FF] opacity-50 cursor-not-allowed'
+                                                            : 'bg-[#0088FF] text-white hover:bg-[#0066CC] cursor-pointer'
                                                 }`}
                                         >
-                                            {claiming ? 'Claiming...' : 'Claim to Wallet'}
+                                            {claiming && (
+                                                <span className="inline-block w-3 h-3 mr-2 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                            )}
+                                            {getStatusText()}
                                         </button>
                                     </div>
                                 </div>
