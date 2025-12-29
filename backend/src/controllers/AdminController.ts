@@ -218,7 +218,7 @@ export const createBuilderCode = async (req: Request, res: Response) => {
         // ON-CHAIN REGISTRATION
         // ==========================================
         try {
-            const PAYMENT_ROUTER_PROGRAM_ID = new PublicKey(process.env.PAYMENT_ROUTER_PROGRAM_ID || 'FaD881QPFmCu7yoym5BRiwFbaJHN1N5N4KpNhcVVnPmU');
+            const PAYMENT_ROUTER_PROGRAM_ID = new PublicKey(process.env.PAYMENT_ROUTER_PROGRAM_ID || '3NkmHpKX4ToYGC5kmLJYU5neMiTNePjnbsuwzFLcPVzF');
             const RPC_URL = process.env.SOLANA_RPC_URL || 'https://api.devnet.solana.com';
             const connection = new Connection(RPC_URL, 'confirmed');
 
@@ -366,7 +366,7 @@ export const listBuilderCodes = async (req: Request, res: Response) => {
  */
 export const sweepProtocolFees = async (req: Request, res: Response) => {
     try {
-        const PAYMENT_ROUTER_PROGRAM_ID = new PublicKey(process.env.PAYMENT_ROUTER_PROGRAM_ID || 'FaD881QPFmCu7yoym5BRiwFbaJHN1N5N4KpNhcVVnPmU');
+        const PAYMENT_ROUTER_PROGRAM_ID = new PublicKey(process.env.PAYMENT_ROUTER_PROGRAM_ID || '3NkmHpKX4ToYGC5kmLJYU5neMiTNePjnbsuwzFLcPVzF');
         const RPC_URL = process.env.SOLANA_RPC_URL || 'https://api.devnet.solana.com';
         const connection = new Connection(RPC_URL, 'confirmed');
 

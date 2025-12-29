@@ -1,6 +1,6 @@
 const { Connection, PublicKey } = require('@solana/web3.js');
 
-const PROGRAM_ID = new PublicKey("FaD881QPFmCu7yoym5BRiwFbaJHN1N5N4KpNhcVVnPmU");
+const PROGRAM_ID = new PublicKey("3NkmHpKX4ToYGC5kmLJYU5neMiTNePjnbsuwzFLcPVzF");
 const SEED = Buffer.from("market_config");
 
 async function main() {

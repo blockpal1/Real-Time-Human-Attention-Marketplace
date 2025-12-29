@@ -17,7 +17,7 @@ import { redisClient } from '../utils/redis';
 // Configuration
 const RPC_URL = process.env.SOLANA_RPC_URL || 'https://api.devnet.solana.com';
 const IS_DEVNET = RPC_URL.includes('devnet');
-const PAYMENT_ROUTER_PROGRAM_ID = new PublicKey(process.env.PAYMENT_ROUTER_PROGRAM_ID || 'FaD881QPFmCu7yoym5BRiwFbaJHN1N5N4KpNhcVVnPmU');
+const PAYMENT_ROUTER_PROGRAM_ID = new PublicKey(process.env.PAYMENT_ROUTER_PROGRAM_ID || '3NkmHpKX4ToYGC5kmLJYU5neMiTNePjnbsuwzFLcPVzF');
 console.log('[SettlementService] PAYMENT_ROUTER_PROGRAM_ID:', PAYMENT_ROUTER_PROGRAM_ID.toBase58());
 console.log('[SettlementService] ENV value:', process.env.PAYMENT_ROUTER_PROGRAM_ID || '(USING FALLBACK)');
 

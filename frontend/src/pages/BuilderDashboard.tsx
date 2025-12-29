@@ -16,8 +16,27 @@ export const BuilderDashboard: React.FC = () => {
     const [showUpdateModal, setShowUpdateModal] = useState(false);
     const [statusMsg, setStatusMsg] = useState<string | null>(null);
 
-    // Get active wallet
-    const activeWallet = wallets[0]; // Simplification: use first connected wallet
+    // Get active wallet - check Privy wallets first, then fallback to native Phantom
+    const privyWallet = wallets.find(w => w.address && !w.address.startsWith('0x')) || wallets[0];
+
+    // For external wallets (Phantom), access directly
+    const getPhantomAddress = (): string | undefined => {
+        try {
+            return (window as any).phantom?.solana?.publicKey?.toString();
+        } catch {
+            return undefined;
+        }
+    };
+
+    const activeAddress = privyWallet?.address || getPhantomAddress();
+    const activeWallet = privyWallet || (window as any).phantom?.solana;
+
+    // DEBUG: Log wallet comparison
+    console.log('[BuilderDashboard] privyWallets:', wallets.length);
+    console.log('[BuilderDashboard] phantomAddress:', getPhantomAddress());
+    console.log('[BuilderDashboard] activeAddress:', activeAddress);
+    console.log('[BuilderDashboard] builderData?.wallet:', builderData?.wallet);
+    console.log('[BuilderDashboard] Match:', activeAddress === builderData?.wallet);
 
     // Load code from local storage on mount
     useEffect(() => {
@@ -41,23 +60,10 @@ export const BuilderDashboard: React.FC = () => {
         }
 
         // Check if active wallet matches registered wallet
-        if (builderData && activeWallet.address !== builderData.wallet) {
-            // Warn but allow (maybe they are using a different signer but paying fees?) 
-            // Actually, for claim_builder_balance, the wallet MUST sign. 
-            // The instruction expects `builder_wallet` to accept SOL (rent back?) or just be signer?
-            // In lib.rs:
-            // #[account(mut)]
-            // public user: Signer<'info>, // Can be anyone paying fees?
-            // No, `builder_wallet` is just a destination address?
-            // "builder_wallet" is where funds go.
-            // "authority" (signer) must match registered wallet?
-            // Let's check `claim_builder_balance` in lib.rs.
-            // It expects `builder` (PDA) and `builder_wallet` (SystemAccount/TokenAccount?).
-            // Actually, usually claims are signed by the owner.
-            // Update: We'll assume the connected wallet must be the registered wallet.
-
-            if (activeWallet.address !== builderData.wallet) {
-                if (!confirm(`Warning: Your connected wallet (${activeWallet.address.slice(0, 6)}...) does not match the registered builder wallet (${builderData.wallet.slice(0, 6)}...). Transaction may fail if signature is required.`)) {
+        if (builderData && activeAddress !== builderData.wallet) {
+            // Warn but allow
+            if (activeAddress !== builderData.wallet) {
+                if (!confirm(`Warning: Your connected wallet (${activeAddress?.slice(0, 6)}...) does not match the registered builder wallet (${builderData.wallet.slice(0, 6)}...). Transaction may fail if signature is required.`)) {
                     return;
                 }
             }
@@ -141,7 +147,7 @@ export const BuilderDashboard: React.FC = () => {
 
                                     <button
                                         onClick={handleClaim}
-                                        disabled={loading || builderData.claimableBalance < 0.01}
+                                        disabled={loading || builderData.claimableBalance < 0.0001}
                                         className="w-full mt-4 bg-green-600 hover:bg-green-500 disabled:bg-gray-700 disabled:cursor-not-allowed text-white py-2 rounded-lg font-bold text-sm uppercase transition-all"
                                     >
                                         Claim Earnings
@@ -172,7 +178,7 @@ export const BuilderDashboard: React.FC = () => {
                                         <span className="text-gray-400 text-sm">Registered Wallet</span>
                                         <div className="text-right">
                                             <div className="font-mono text-xs text-white break-all">{builderData.wallet}</div>
-                                            {activeWallet?.address === builderData.wallet ? (
+                                            {activeAddress === builderData.wallet ? (
                                                 <span className="text-[10px] text-green-400 bg-green-900/20 px-1 rounded">CONNECTED</span>
                                             ) : (
                                                 <span className="text-[10px] text-yellow-400 bg-yellow-900/20 px-1 rounded">DIFFERENT WALLET CONNECTED</span>

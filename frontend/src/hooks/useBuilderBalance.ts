@@ -38,40 +38,49 @@ export const useBuilderBalance = () => {
     }, []);
 
     const claimEarnings = useCallback(async (code: string, wallet: any) => { // wallet object from adapter
-        if (!builderData || !wallet) return;
+        console.log('[useBuilderBalance] claimEarnings called', { code, wallet });
+        if (!builderData || !wallet) {
+            console.warn('[useBuilderBalance] Missing builderData or wallet', { builderData, wallet });
+            return;
+        }
         setLoading(true);
         try {
             // 1. Get unsigned transaction
+            console.log('[useBuilderBalance] Fetching claim tx...');
+            const walletPubkey = wallet.publicKey?.toBase58 ? wallet.publicKey.toBase58() : wallet.publicKey?.toString();
+            console.log('[useBuilderBalance] Wallet Pubkey:', walletPubkey);
+
             const res = await fetch(`${API_BASE}/builders/${code}/claim`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ wallet: wallet.publicKey.toBase58() })
+                body: JSON.stringify({ wallet: walletPubkey })
             });
             if (!res.ok) throw new Error((await res.json()).error);
             const { transaction } = await res.json();
+            console.log('[useBuilderBalance] Tx fetched, deserializing...');
 
             // 2. Sign and Send
             const txBuffer = Buffer.from(transaction, 'base64');
             const tx = Transaction.from(txBuffer);
 
+            console.log('[useBuilderBalance] Requesting signature...');
             const signedTx = await wallet.signTransaction(tx);
+            console.log('[useBuilderBalance] Signed. Sending to network...');
 
-            // 3. Send via connection (Frontend usually has connection)
-            // Or backend could send if we send back signed tx? 
-            // The backend endpoint `executeClaimIntent` was for users. 
-            // For builders, `claim_builder_balance` is a direct on-chain instruction. 
-            // We can send it directly from frontend if we have RPC connection.
-            // Let's assume we have connection.
-            const connection = new Connection('https://api.devnet.solana.com', 'confirmed'); // Todo: use env
+            // 3. Send via connection
+            const connection = new Connection(import.meta.env.VITE_SOLANA_RPC_URL || 'https://api.devnet.solana.com', 'confirmed');
             const sig = await connection.sendRawTransaction(signedTx.serialize());
+            console.log('[useBuilderBalance] Tx Sent:', sig);
+
             await connection.confirmTransaction(sig, 'confirmed');
+            console.log('[useBuilderBalance] Confirmed!');
 
             // Refresh
             await fetchBalance(code);
             return sig;
 
         } catch (err: any) {
-            console.error(err);
+            console.error('[useBuilderBalance] Error:', err);
             setError(err.message || 'Claim failed');
             throw err;
         } finally {
