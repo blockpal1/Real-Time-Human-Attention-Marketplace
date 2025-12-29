@@ -392,10 +392,14 @@ export const sweepProtocolFees = async (req: Request, res: Response) => {
         );
 
         // Admin Wallet ATA (Where USDC goes)
-        // Assume adminKeypair.publicKey is the destination
+        // Use PROTOCOL_FEE_DESTINATION if set, otherwise fallback to admin signer
+        const destinationWallet = process.env.PROTOCOL_FEE_DESTINATION
+            ? new PublicKey(process.env.PROTOCOL_FEE_DESTINATION)
+            : adminKeypair.publicKey;
+
         const adminATA = await getAssociatedTokenAddress(
-            new PublicKey("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"), // Devnet USDC Mint (Hardcoded for devnet, should switch based on env)
-            adminKeypair.publicKey
+            new PublicKey("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"), // Devnet USDC Mint
+            destinationWallet
         );
         // Note: USDC_MINT const is not imported here, but I can copy it or move it to a shared file. 
         // For now, I'll use the env check or hardcode devnet since RPC_URL default is devnet.
@@ -404,7 +408,7 @@ export const sweepProtocolFees = async (req: Request, res: Response) => {
             ? new PublicKey("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU")
             : new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
 
-        const adminATAResolved = await getAssociatedTokenAddress(USDC_MINT, adminKeypair.publicKey);
+        const adminATAResolved = await getAssociatedTokenAddress(USDC_MINT, destinationWallet);
 
         // Discriminator: claim_protocol_fees
         // sha256("global:claim_protocol_fees").slice(0, 8)
