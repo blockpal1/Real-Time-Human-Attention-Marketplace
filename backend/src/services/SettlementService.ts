@@ -17,7 +17,9 @@ import { redisClient } from '../utils/redis';
 // Configuration
 const RPC_URL = process.env.SOLANA_RPC_URL || 'https://api.devnet.solana.com';
 const IS_DEVNET = RPC_URL.includes('devnet');
-const PAYMENT_ROUTER_PROGRAM_ID = new PublicKey(process.env.PAYMENT_ROUTER_PROGRAM_ID || 'H4zbWKDAGnrJv9CTptjVvxKCDB59Mv2KpiVDx9d4jDaz');
+const PAYMENT_ROUTER_PROGRAM_ID = new PublicKey(process.env.PAYMENT_ROUTER_PROGRAM_ID || 'FaD881QPFmCu7yoym5BRiwFbaJHN1N5N4KpNhcVVnPmU');
+console.log('[SettlementService] PAYMENT_ROUTER_PROGRAM_ID:', PAYMENT_ROUTER_PROGRAM_ID.toBase58());
+console.log('[SettlementService] ENV value:', process.env.PAYMENT_ROUTER_PROGRAM_ID || '(USING FALLBACK)');
 
 // USDC Mint - different on Devnet vs Mainnet
 const MAINNET_USDC_MINT = new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
@@ -177,8 +179,17 @@ export class SettlementService {
                             [Buffer.from("builder"), builderCodeBytes],
                             PAYMENT_ROUTER_PROGRAM_ID
                         );
-                        builderBalancePDA = pda;
-                        hasBuilder = true;
+
+                        // CRITICAL: Check if builder account exists on-chain
+                        // If not, omit builder code so human can still claim earnings
+                        const builderAccountInfo = await connection.getAccountInfo(pda);
+                        if (builderAccountInfo) {
+                            builderBalancePDA = pda;
+                            hasBuilder = true;
+                        } else {
+                            console.warn(`[Settlement] Builder account for code "${data.builderCode}" not initialized on-chain. Proceeding without builder split.`);
+                            hasBuilder = false;
+                        }
                     }
                 }
 
@@ -221,8 +232,8 @@ export class SettlementService {
                     { pubkey: feeVaultStatePDA, isSigner: false, isWritable: true },
                     { pubkey: feeVaultPDA, isSigner: false, isWritable: true },
 
-                    // Builder Balance (Optional) - Pass ProgramID if None
-                    { pubkey: hasBuilder ? builderBalancePDA : PAYMENT_ROUTER_PROGRAM_ID, isSigner: false, isWritable: hasBuilder }, // Writable if real PDA
+                    // Builder Balance (Optional) - Pass program ID for None (Anchor convention for Option<Account>)
+                    { pubkey: hasBuilder ? builderBalancePDA : PAYMENT_ROUTER_PROGRAM_ID, isSigner: false, isWritable: hasBuilder },
 
                     { pubkey: marketConfigPDA, isSigner: false, isWritable: false },
                     { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false }

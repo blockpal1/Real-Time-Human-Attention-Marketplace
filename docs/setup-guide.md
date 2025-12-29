@@ -25,42 +25,60 @@ Expected output includes `Program Id: H4zbWKDAGnrJv9CTptjVvxKCDB59Mv2KpiVDx9d4jD
 
 ---
 
-## 2. Initialize Market Config
-
-The `market_config` PDA must be initialized once per program deployment. This stores the router authority and fee settings.
-
+## 2. Initialize Market Config & Fee Vault
+ 
+The `market_config` and `fee_vault` PDAs must be initialized once per program deployment. This stores the router authority, fee settings, and fee collection vault.
+ 
 ### Run Initialization Script
-
+ 
+We use a unified script that loads configuration from `frontend/.env`.
+ 
 ```bash
-cd backend
-npx ts-node src/init_market_config.ts
+cd payment-router
+npx ts-node scripts/init_market.ts
 ```
-
+ 
 ### Expected Output
-
+ 
 ```
-=== Initializing Market Config (Anchor) ===
-Program ID: H4zbWKDAGnrJv9CTptjVvxKCDB59Mv2KpiVDx9d4jDaz
-Admin Pubkey: 4BTmGg6w7wQiqMqJmrHdacKE8gvhqepDAt5WE8o3DtdE
-Market Config PDA: 7jF3keTaq7LNnBZzWSbJEHvuMxSeMVWjkwmvKrdTFGc2
-✅ Market Config initialized!
+Loading config from: .../frontend/.env
+Initializing Payment Router...
+Program ID: ...
+✅ Market Config initialized successfully.
+✅ Fee Vault initialized successfully.
 ```
-
+ 
 If already initialized, you'll see:
 ```
-✅ Market Config already initialized!
+✅ Market Config already initialized.
+✅ Fee Vault already initialized.
 ```
-
+ 
 ---
-
+ 
 ## 3. Environment Variables
-
-Add these to `backend/.env`:
-
+ 
+### Public Configuration (`frontend/.env`)
+ 
+The initialization script reads these values directly from your frontend configuration:
+ 
+```env
+# Program ID for the Payment Router
+VITE_PAYMENT_ROUTER_PROGRAM_ID=EofaQa9USK8GtzfnCbqdfnhjeUrRTJoWL2jjSCD6c4Y2
+ 
+# (Optional) Devnet/Mainnet RPC URL - defaults to Devnet if unset
+ANCHOR_PROVIDER_URL=https://api.devnet.solana.com
+```
+ 
+### Backend Secrets (`backend/.env`)
+ 
+Add these secrets to `backend/.env` for the Settlement Service:
+ 
 ```env
 # Solana Configuration
 SOLANA_RPC_URL=https://api.devnet.solana.com
-PAYMENT_ROUTER_PROGRAM_ID=H4zbWKDAGnrJv9CTptjVvxKCDB59Mv2KpiVDx9d4jDaz
+# Must match the frontend VITE_ var above
+PAYMENT_ROUTER_PROGRAM_ID=EofaQa9USK8GtzfnCbqdfnhjeUrRTJoWL2jjSCD6c4Y2
 
 # Router Authority (JSON array of keypair bytes)
 # This is the admin who can call close_settlement
@@ -85,7 +103,8 @@ cat ~/.config/solana/id.json
 ### Check Market Config Exists
 
 ```bash
-npx ts-node src/init_market_config.ts
+cd payment-router
+npx ts-node scripts/init_market.ts
 # Should show "already initialized"
 ```
 

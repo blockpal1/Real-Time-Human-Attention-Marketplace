@@ -9,7 +9,7 @@ import { redisClient } from '../utils/redis';
 
 // Config
 const RPC_URL = process.env.SOLANA_RPC_URL || 'https://api.devnet.solana.com';
-const PAYMENT_ROUTER_PROGRAM_ID = new PublicKey(process.env.PAYMENT_ROUTER_PROGRAM_ID || 'H4zbWKDAGnrJv9CTptjVvxKCDB59Mv2KpiVDx9d4jDaz');
+const PAYMENT_ROUTER_PROGRAM_ID = new PublicKey(process.env.PAYMENT_ROUTER_PROGRAM_ID || 'FaD881QPFmCu7yoym5BRiwFbaJHN1N5N4KpNhcVVnPmU');
 const connection = new Connection(RPC_URL, 'confirmed');
 
 export class BuilderController {

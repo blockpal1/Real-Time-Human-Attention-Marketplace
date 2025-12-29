@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Token, TokenAccount, Transfer};
 
-declare_id!("H4zbWKDAGnrJv9CTptjVvxKCDB59Mv2KpiVDx9d4jDaz");
+declare_id!("FaD881QPFmCu7yoym5BRiwFbaJHN1N5N4KpNhcVVnPmU");
 
 #[program]
 pub mod payment_router {
@@ -208,7 +208,7 @@ pub mod payment_router {
         // Seeds for Fee Vault Authority
         let bump = ctx.accounts.fee_vault_state.bump;
         let seeds = &[
-            b"fee_vault_state",
+            b"fee_vault_state" as &[u8],
             &[bump],
         ];
         // Wait, the fee vault authority typically needs its own PDA or use the state PDA if it owns the token account.
@@ -242,7 +242,7 @@ pub mod payment_router {
         // Seeds for signing
         let bump = state.bump;
         let seeds = &[
-            b"fee_vault_state",
+            b"fee_vault_state" as &[u8],
             &[bump],
         ];
         let signer = &[&seeds[..]];
