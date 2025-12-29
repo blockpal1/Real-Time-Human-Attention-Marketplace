@@ -1,21 +1,52 @@
 import express from 'express';
+import nacl from 'tweetnacl';
+import bs58 from 'bs58';
 import { SettlementService } from '../services/SettlementService';
 import { redisClient } from '../utils/redis';
 
 const router = express.Router();
 
 /**
+ * Verify wallet ownership via Ed25519 signature
+ * CRIT-1 FIX: Prevent attackers from creating claims for other wallets
+ */
+function verifyWalletOwnership(publicKey: string, message: string, signature: string): boolean {
+    try {
+        const pubkeyBytes = bs58.decode(publicKey);
+        const messageBytes = new TextEncoder().encode(message);
+        const signatureBytes = bs58.decode(signature);
+        return nacl.sign.detached.verify(messageBytes, signatureBytes, pubkeyBytes);
+    } catch {
+        return false;
+    }
+}
+
+/**
  * POST /withdraw
  * Creates a claim intent (Deferred Locking).
- * Reads pending settlements WITHOUT locking, builds transaction, stores intent.
- * If user abandons, intent expires in 5 minutes - no harm done.
+ * Requires wallet signature to prove ownership (CRIT-1 FIX).
  */
 router.post('/withdraw', async (req, res) => {
     try {
-        const { userPubkey } = req.body;
+        const { userPubkey, signature, timestamp } = req.body;
 
-        if (!userPubkey) {
-            return res.status(400).json({ error: "Missing userPubkey" });
+        // Validate required fields
+        if (!userPubkey || !signature || !timestamp) {
+            return res.status(400).json({
+                error: "Missing required fields: userPubkey, signature, timestamp"
+            });
+        }
+
+        // Verify timestamp is within 5 minutes (prevent replay attacks)
+        const now = Date.now();
+        if (Math.abs(now - timestamp) > 5 * 60 * 1000) {
+            return res.status(400).json({ error: "Expired timestamp" });
+        }
+
+        // Verify signature proves wallet ownership
+        const message = `Claim request for ${userPubkey} at ${timestamp}`;
+        if (!verifyWalletOwnership(userPubkey, message, signature)) {
+            return res.status(403).json({ error: "Invalid signature - cannot verify wallet ownership" });
         }
 
         const result = await SettlementService.createClaimIntent(userPubkey);

@@ -117,11 +117,6 @@ export async function x402Middleware(req: Request, res: Response, next: NextFunc
         // ========================================
         const adminKeyHeader = req.headers['x-admin-key'];
 
-        console.log('[ADMIN BYPASS DEBUG]');
-        console.log('  Header value:', adminKeyHeader);
-        console.log('  Expected value:', ADMIN_KEY);
-        console.log('  Match:', adminKeyHeader === ADMIN_KEY);
-
         if (ADMIN_KEY && adminKeyHeader === ADMIN_KEY) {
             const { duration, quantity = 1, bid_per_second, content_url, validation_question, callback_url } = req.body;
 
@@ -345,12 +340,6 @@ export async function x402Middleware(req: Request, res: Response, next: NextFunc
                     destination: TREASURY.toBase58(),
                     token: IS_DEVNET ? "SOL_OR_USDC" : "USDC",
                     referrer: referrer // Echo back so Agent knows we saw it
-                },
-                // DEBUG: Admin key comparison
-                debug: {
-                    adminKeyReceived: req.headers['x-admin-key'],
-                    adminKeyExpected: ADMIN_KEY,
-                    match: req.headers['x-admin-key'] === ADMIN_KEY
                 }
             });
         }

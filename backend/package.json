@@ -21,10 +21,12 @@
         "jsonwebtoken": "^9.0.3",
         "openai": "^6.15.0",
         "redis": "^5.10.0",
+        "tweetnacl": "^1.0.3",
         "ws": "^8.18.3",
         "zod": "^4.1.13"
     },
     "devDependencies": {
+        "@types/bs58": "^4.0.4",
         "@types/cors": "^2.8.13",
         "@types/express": "^4.17.17",
         "@types/node": "^24.10.1",

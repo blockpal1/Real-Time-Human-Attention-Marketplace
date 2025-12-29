@@ -17,6 +17,7 @@ declare global {
                 isPhantom: boolean;
                 publicKey: { toString: () => string };
                 signTransaction: (tx: Transaction) => Promise<Transaction>;
+                signMessage: (message: Uint8Array, encoding: string) => Promise<{ signature: Uint8Array }>;
                 connect: () => Promise<{ publicKey: { toString: () => string } }>;
             };
         };
@@ -108,16 +109,38 @@ export const useClaim = (userPubkey: string) => {
                 throw new Error("No wallet signer available. Please ensure Phantom is installed and connected.");
             }
 
-            // 2. Request TX from Backend
+            // 2. Create signMessage function for claim authentication (CRIT-1 FIX)
+            let signMessage: (message: Uint8Array) => Promise<Uint8Array>;
+
+            if (privyWallet) {
+                signMessage = async (message: Uint8Array) => {
+                    // Privy wallets can sign messages
+                    const wallet = privyWallet as any;
+                    if (wallet.signMessage) {
+                        return await wallet.signMessage(message);
+                    }
+                    throw new Error("Privy wallet does not support signMessage");
+                };
+            } else if (window.phantom?.solana) {
+                const phantom = window.phantom.solana;
+                signMessage = async (message: Uint8Array) => {
+                    const result = await phantom.signMessage(message, 'utf8');
+                    return result.signature;
+                };
+            } else {
+                throw new Error("No wallet available for message signing");
+            }
+
+            // 3. Request TX from Backend (now with signature for CRIT-1 auth)
             console.log(`[Claim] State: building - Requesting transaction from backend...`);
-            const { transaction, claimId, amount, error } = await api.withdrawEarnings(userPubkey);
+            const { transaction, claimId, amount, error } = await api.withdrawEarnings(userPubkey, signMessage);
             if (error) throw new Error(error);
 
-            // 3. Transition to signing state
+            // 4. Transition to signing state
             setClaimState('signing');
             console.log(`[Claim] State: signing - Waiting for wallet signature...`);
 
-            // 4. Deserialize and Sign
+            // 5. Deserialize and Sign
             const txBuffer = Buffer.from(transaction, 'base64');
             const tx = Transaction.from(txBuffer);
             const signedTx = await signTransaction(tx);

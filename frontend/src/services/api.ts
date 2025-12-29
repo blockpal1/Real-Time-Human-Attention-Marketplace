@@ -179,12 +179,31 @@ export const api = {
         return response.json();
     },
 
-    async withdrawEarnings(userPubkey: string) {
+    async withdrawEarnings(userPubkey: string, signMessage?: (message: Uint8Array) => Promise<Uint8Array>) {
+        // CRIT-1 FIX: Include signed message for wallet ownership verification
+        const timestamp = Date.now();
+        const message = `Claim request for ${userPubkey} at ${timestamp}`;
+
+        let signature: string | undefined;
+        if (signMessage) {
+            try {
+                const { encode } = await import('bs58');
+                const messageBytes = new TextEncoder().encode(message);
+                const signatureBytes = await signMessage(messageBytes);
+                signature = encode(signatureBytes);
+            } catch (e) {
+                console.error('Failed to sign claim message:', e);
+                throw new Error('Wallet signature required to claim earnings');
+            }
+        } else {
+            throw new Error('signMessage function required for secure claims');
+        }
+
         // Request backend to prepare a transaction (Step 1)
         const response = await fetch(`${API_URL}/claims/withdraw`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userPubkey })
+            body: JSON.stringify({ userPubkey, signature, timestamp })
         });
         if (!response.ok) {
             const error = await response.json();

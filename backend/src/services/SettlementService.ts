@@ -10,6 +10,7 @@ import {
     getAssociatedTokenAddress,
     createAssociatedTokenAccountIdempotentInstruction
 } from '@solana/spl-token';
+import crypto from 'crypto';
 import { redisClient } from '../utils/redis';
 
 // Configuration
@@ -60,7 +61,8 @@ export class SettlementService {
      * If user abandons, intent expires harmlessly - funds never locked.
      */
     static async createClaimIntent(userPubkey: string) {
-        const claimId = `claim_${Date.now()}`;
+        // CRIT-5 FIX: Use cryptographically random claim ID instead of predictable Date.now()
+        const claimId = `claim_${crypto.randomBytes(16).toString('hex')}`;
 
         // 1. READ ONLY - no locking
         const pendingSettlements = await redisClient.getPendingSettlements(userPubkey);
@@ -237,12 +239,45 @@ export class SettlementService {
         }
 
         try {
-            // 3. Deserialize and broadcast the signed transaction
+            // 3. Deserialize the signed transaction
             const txBuffer = Buffer.from(signedTransaction, 'base64');
-            const tx = Transaction.from(txBuffer);
+            const signedTx = Transaction.from(txBuffer);
 
-            console.log(`[Settlement] Broadcasting transaction for ${claimId}...`);
-            const txHash = await connection.sendRawTransaction(tx.serialize(), {
+            // CRIT-2 FIX: Verify signed transaction matches original intent
+            const originalTx = Transaction.from(Buffer.from(intent.transactionBase64, 'base64'));
+
+            // Compare instruction count
+            if (signedTx.instructions.length !== originalTx.instructions.length) {
+                await redisClient.restoreProcessingToPending(intent.userPubkey, claimId);
+                await redisClient.deleteClaimIntent(claimId);
+                return { error: "Transaction modified: instruction count mismatch" };
+            }
+
+            // Compare each instruction's program, data, and accounts
+            for (let i = 0; i < signedTx.instructions.length; i++) {
+                const signedIx = signedTx.instructions[i];
+                const originalIx = originalTx.instructions[i];
+
+                if (!signedIx.programId.equals(originalIx.programId) ||
+                    !signedIx.data.equals(originalIx.data) ||
+                    signedIx.keys.length !== originalIx.keys.length) {
+                    await redisClient.restoreProcessingToPending(intent.userPubkey, claimId);
+                    await redisClient.deleteClaimIntent(claimId);
+                    return { error: "Transaction modified: instruction data mismatch" };
+                }
+
+                // Verify all account keys match (prevents recipient substitution)
+                for (let j = 0; j < signedIx.keys.length; j++) {
+                    if (!signedIx.keys[j].pubkey.equals(originalIx.keys[j].pubkey)) {
+                        await redisClient.restoreProcessingToPending(intent.userPubkey, claimId);
+                        await redisClient.deleteClaimIntent(claimId);
+                        return { error: "Transaction modified: account keys changed" };
+                    }
+                }
+            }
+
+            console.log(`[Settlement] Transaction verified, broadcasting for ${claimId}...`);
+            const txHash = await connection.sendRawTransaction(signedTx.serialize(), {
                 skipPreflight: false,
                 preflightCommitment: 'confirmed'
             });

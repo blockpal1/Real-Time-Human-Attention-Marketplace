@@ -144,7 +144,6 @@ pub struct InitializeMarketConfig<'info> {
 pub struct DepositEscrow<'info> {
     #[account(mut)]
     pub agent: Signer<'info>,
-    // Token account holding the agent's USDC
     #[account(mut)]
     pub agent_token_account: Account<'info, TokenAccount>, 
     #[account(
@@ -155,8 +154,11 @@ pub struct DepositEscrow<'info> {
         bump
     )]
     pub escrow_account: Account<'info, EscrowAccount>,
-    #[account(mut)]
-    pub vault: Account<'info, TokenAccount>, // Should be a PDA derived token account
+    #[account(
+        mut,
+        constraint = vault.owner == escrow_account.key() @ ErrorCode::InvalidVault
+    )]
+    pub vault: Account<'info, TokenAccount>,
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
     pub rent: Sysvar<'info, Rent>,
@@ -174,7 +176,10 @@ pub struct WithdrawEscrow<'info> {
         bump = escrow_account.bump
     )]
     pub escrow_account: Account<'info, EscrowAccount>,
-    #[account(mut)]
+    #[account(
+        mut,
+        constraint = vault.owner == escrow_account.key() @ ErrorCode::InvalidVault
+    )]
     pub vault: Account<'info, TokenAccount>,
     pub token_program: Program<'info, Token>,
 }
@@ -189,7 +194,10 @@ pub struct CloseSettlement<'info> {
         bump = escrow_account.bump
     )]
     pub escrow_account: Account<'info, EscrowAccount>,
-    #[account(mut)]
+    #[account(
+        mut,
+        constraint = vault.owner == escrow_account.key() @ ErrorCode::InvalidVault
+    )]
     pub vault: Account<'info, TokenAccount>,
     #[account(mut)]
     pub user_wallet: Account<'info, TokenAccount>,
@@ -220,4 +228,6 @@ pub enum ErrorCode {
     MathOverflow,
     #[msg("Insufficient funds in escrow")]
     InsufficientFunds,
+    #[msg("Invalid vault account - must be owned by escrow PDA")]
+    InvalidVault,
 }
