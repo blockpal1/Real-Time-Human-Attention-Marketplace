@@ -12,6 +12,7 @@ import { AdminDashboard } from './pages/AdminDashboard';
 import { CampaignPage } from './pages/CampaignPage';
 import { HowItWorksPage } from './pages/HowItWorksPage';
 import { PrivacyPage } from './pages/PrivacyPage';
+import { BuilderDashboard } from './pages/BuilderDashboard';
 
 interface MatchNotification {
     matchId: string;
@@ -35,6 +36,7 @@ function App() {
     const [showCampaigns, setShowCampaigns] = React.useState(false);
     const [showHowItWorks, setShowHowItWorks] = React.useState(false);
     const [showPrivacy, setShowPrivacy] = React.useState(false);
+    const [showBuilder, setShowBuilder] = React.useState(false);
     const [activePanel, setActivePanel] = React.useState<'bid' | 'book' | 'ask'>('book');
 
     // Listen for hash changes to show analytics or landing
@@ -45,6 +47,7 @@ function App() {
             setShowCampaigns(hash === '#campaigns' || hash === '#analytics'); // Analytics also lives in CampaignPage now
             setShowHowItWorks(hash === '#how-it-works' || hash === '#faq');
             setShowPrivacy(hash === '#privacy');
+            setShowBuilder(hash === '#builders');
             // Show landing page if no hash, #landing, or on initial load
             setShowLanding(hash === '' || hash === '#landing' || hash === '#');
         };
@@ -170,8 +173,11 @@ function App() {
                 </div>
             )}
 
+            {/* Builder Dashboard */}
+            {showBuilder && <BuilderDashboard />}
+
             {/* Main App Dashboard */}
-            {!showLanding && !showAdmin && !showCampaigns && !showHowItWorks && !showPrivacy && (
+            {!showLanding && !showAdmin && !showCampaigns && !showHowItWorks && !showPrivacy && !showBuilder && (
                 <div className={`flex flex-col h-screen text-main bg-dark overflow-hidden ${theme}`}>
                     <Header theme={theme} setTheme={setTheme} userPubkey={userPubkey} />
 

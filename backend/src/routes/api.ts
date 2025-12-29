@@ -11,7 +11,8 @@ import {
     getX402FlaggedContent,
     reviewX402Content,
     createBuilderCode,
-    listBuilderCodes
+    listBuilderCodes,
+    sweepProtocolFees
 } from '../controllers/AdminController';
 import debugRoutes from './debugRoutes';
 import signalQualityRoutes from './signalQualityRoutes';
@@ -53,6 +54,9 @@ router.post('/admin/content/x402/:tx_hash/review', authenticateAdmin, reviewX402
 // Genesis Builder Codes
 router.get('/admin/builders', authenticateAdmin, listBuilderCodes);
 router.post('/admin/builders/create', authenticateAdmin, createBuilderCode);
+
+// Protocol Fees
+router.post('/admin/fees/sweep', authenticateAdmin, sweepProtocolFees);
 
 // === x402 Payment Protocol ===
 // Agent verification with HTTP 402 payment required

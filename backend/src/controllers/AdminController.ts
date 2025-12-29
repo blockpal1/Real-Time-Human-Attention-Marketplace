@@ -1,6 +1,15 @@
 import { Request, Response } from 'express';
 import { redisClient } from '../utils/redis';
 import { configService } from '../services/ConfigService';
+import {
+    Connection,
+    PublicKey,
+    Keypair,
+    Transaction,
+    TransactionInstruction,
+    SystemProgram
+} from '@solana/web3.js';
+import { TOKEN_PROGRAM_ID, getAssociatedTokenAddress } from '@solana/spl-token';
 
 /**
  * Get platform status and configuration
@@ -176,12 +185,16 @@ function getModeDescription(mode: string): string {
 }
 
 /**
- * Create a new Genesis Builder Code
+ * Create a new Genesis Builder Code (and register on-chain)
  * POST /v1/admin/builders/create
  */
 export const createBuilderCode = async (req: Request, res: Response) => {
     try {
         let { code, owner_email, description, payout_wallet } = req.body;
+
+        if (!payout_wallet) {
+            return res.status(400).json({ error: "payout_wallet is required for on-chain registration" });
+        }
 
         // Generate random code if not provided
         if (!code) {
@@ -201,6 +214,77 @@ export const createBuilderCode = async (req: Request, res: Response) => {
             });
         }
 
+        // ==========================================
+        // ON-CHAIN REGISTRATION
+        // ==========================================
+        try {
+            const PAYMENT_ROUTER_PROGRAM_ID = new PublicKey(process.env.PAYMENT_ROUTER_PROGRAM_ID || 'H4zbWKDAGnrJv9CTptjVvxKCDB59Mv2KpiVDx9d4jDaz');
+            const RPC_URL = process.env.SOLANA_RPC_URL || 'https://api.devnet.solana.com';
+            const connection = new Connection(RPC_URL, 'confirmed');
+
+            const secret = process.env.ROUTER_ADMIN_KEYPAIR;
+            if (!secret) throw new Error("Missing ROUTER_ADMIN_KEYPAIR env");
+            const secretKey = Uint8Array.from(JSON.parse(secret));
+            const adminKeypair = Keypair.fromSecretKey(secretKey);
+
+            // Derive Builder PDA
+            const codeBuffer = Buffer.alloc(32);
+            Buffer.from(code).copy(codeBuffer);
+
+            const [builderPDA] = PublicKey.findProgramAddressSync(
+                [Buffer.from("builder"), codeBuffer],
+                PAYMENT_ROUTER_PROGRAM_ID
+            );
+
+            // Check if already initialized
+            const accountInfo = await connection.getAccountInfo(builderPDA);
+            if (accountInfo) {
+                console.log(`[Admin] Builder PDA already exists for ${code}`);
+            } else {
+                console.log(`[Admin] Initializing Builder PDA for ${code}...`);
+
+                // Discriminator for register_builder
+                // sha256("global:register_builder").slice(0, 8) 
+                // Using crypto to calculate
+                const crypto = require('crypto');
+                const discriminator = crypto.createHash('sha256').update('global:register_builder').digest().subarray(0, 8);
+
+                // Instruction Data: Discriminator + BuilderCode (32 bytes)
+                const data = Buffer.concat([discriminator, codeBuffer]);
+
+                const builderWalletKey = new PublicKey(payout_wallet);
+
+                const ix = new TransactionInstruction({
+                    programId: PAYMENT_ROUTER_PROGRAM_ID,
+                    keys: [
+                        { pubkey: adminKeypair.publicKey, isSigner: true, isWritable: true },
+                        { pubkey: builderPDA, isSigner: false, isWritable: true },
+                        { pubkey: builderWalletKey, isSigner: false, isWritable: false },
+                        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+                    ],
+                    data: data
+                });
+
+                const tx = new Transaction().add(ix);
+                tx.feePayer = adminKeypair.publicKey;
+                const { blockhash } = await connection.getLatestBlockhash();
+                tx.recentBlockhash = blockhash;
+
+                // Sign and Send
+                tx.sign(adminKeypair);
+                const sig = await connection.sendRawTransaction(tx.serialize());
+                await connection.confirmTransaction(sig, 'confirmed');
+                console.log(`[Admin] On-chain registration success: ${sig}`);
+            }
+        } catch (chainError: any) {
+            console.error('[Admin] On-chain registration failed:', chainError);
+            return res.status(500).json({ error: `On-chain registration failed: ${chainError.message}` });
+        }
+
+        // ==========================================
+        // REDIS SAVE
+        // ==========================================
+
         // Save to registry set
         await redisClient.client.sAdd('builders:registry', code);
 
@@ -208,7 +292,7 @@ export const createBuilderCode = async (req: Request, res: Response) => {
         await redisClient.client.hSet(`builder:${code}:info`, {
             owner_email: owner_email || '',
             description: description || '',
-            payout_wallet: payout_wallet || 'pending',
+            payout_wallet: payout_wallet,
             created_at: Date.now().toString(),
             status: 'active'
         });
@@ -218,7 +302,7 @@ export const createBuilderCode = async (req: Request, res: Response) => {
         res.json({
             success: true,
             code,
-            message: `Builder code "${code}" created successfully`
+            message: `Builder code "${code}" created and registered on-chain successfully`
         });
     } catch (error) {
         console.error('Create builder code error:', error);
@@ -273,5 +357,94 @@ export const listBuilderCodes = async (req: Request, res: Response) => {
     } catch (error) {
         console.error('List builder codes error:', error);
         res.status(500).json({ error: 'Failed to list builder codes' });
+    }
+};
+
+/**
+ * Claim/Sweep Protocol Fees from Fee Vault
+ * POST /v1/admin/fees/sweep
+ */
+export const sweepProtocolFees = async (req: Request, res: Response) => {
+    try {
+        const PAYMENT_ROUTER_PROGRAM_ID = new PublicKey(process.env.PAYMENT_ROUTER_PROGRAM_ID || 'H4zbWKDAGnrJv9CTptjVvxKCDB59Mv2KpiVDx9d4jDaz');
+        const RPC_URL = process.env.SOLANA_RPC_URL || 'https://api.devnet.solana.com';
+        const connection = new Connection(RPC_URL, 'confirmed');
+
+        const secret = process.env.ROUTER_ADMIN_KEYPAIR;
+        if (!secret) throw new Error("Missing ROUTER_ADMIN_KEYPAIR env");
+        const secretKey = Uint8Array.from(JSON.parse(secret));
+        const adminKeypair = Keypair.fromSecretKey(secretKey);
+
+        // Fee Payer (Platform Wallet)
+        const feePayerSecret = process.env.FEE_PAYER_KEYPAIR || process.env.ROUTER_ADMIN_KEYPAIR;
+        const feePayerKeypair = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(feePayerSecret!)));
+
+        // Derive Fee Vault State
+        const [feeVaultStatePDA] = PublicKey.findProgramAddressSync(
+            [Buffer.from("fee_vault_state")],
+            PAYMENT_ROUTER_PROGRAM_ID
+        );
+
+        // Derive Fee Vault ATA
+        const [feeVaultPDA] = PublicKey.findProgramAddressSync(
+            [Buffer.from("fee_vault"), feeVaultStatePDA.toBuffer()],
+            PAYMENT_ROUTER_PROGRAM_ID
+        );
+
+        // Admin Wallet ATA (Where USDC goes)
+        // Assume adminKeypair.publicKey is the destination
+        const adminATA = await getAssociatedTokenAddress(
+            new PublicKey("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"), // Devnet USDC Mint (Hardcoded for devnet, should switch based on env)
+            adminKeypair.publicKey
+        );
+        // Note: USDC_MINT const is not imported here, but I can copy it or move it to a shared file. 
+        // For now, I'll use the env check or hardcode devnet since RPC_URL default is devnet.
+        // Better:
+        const USDC_MINT = RPC_URL.includes('devnet')
+            ? new PublicKey("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU")
+            : new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
+
+        const adminATAResolved = await getAssociatedTokenAddress(USDC_MINT, adminKeypair.publicKey);
+
+        // Discriminator: claim_protocol_fees
+        // sha256("global:claim_protocol_fees").slice(0, 8)
+        const crypto = require('crypto');
+        const discriminator = crypto.createHash('sha256').update('global:claim_protocol_fees').digest().subarray(0, 8);
+
+        const keys = [
+            { pubkey: adminKeypair.publicKey, isSigner: true, isWritable: true },
+            { pubkey: feeVaultStatePDA, isSigner: false, isWritable: true },
+            { pubkey: feeVaultPDA, isSigner: false, isWritable: true },
+            { pubkey: adminATAResolved, isSigner: false, isWritable: true }, // admin_wallet
+            { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+        ];
+
+        const ix = new TransactionInstruction({
+            programId: PAYMENT_ROUTER_PROGRAM_ID,
+            keys,
+            data: discriminator
+        });
+
+        const tx = new Transaction().add(ix);
+        tx.feePayer = feePayerKeypair.publicKey;
+        const { blockhash } = await connection.getLatestBlockhash();
+        tx.recentBlockhash = blockhash;
+
+        tx.sign(feePayerKeypair, adminKeypair); // Both sign if different, or admin signs as authority
+
+        const sig = await connection.sendRawTransaction(tx.serialize());
+        await connection.confirmTransaction(sig, 'confirmed');
+
+        console.log(`[Admin] Protocol fees swept: ${sig}`);
+
+        res.json({
+            success: true,
+            tx_hash: sig,
+            message: "Protocol fees swept successfully"
+        });
+
+    } catch (error: any) {
+        console.error('Sweep fees error:', error);
+        res.status(500).json({ error: `Failed to sweep fees: ${error.message}` });
     }
 };

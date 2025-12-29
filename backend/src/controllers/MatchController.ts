@@ -175,6 +175,7 @@ export const completeMatch = async (req: Request, res: Response) => {
                             await redisClient.logPendingSettlement(userWallet, {
                                 bidId,
                                 agent: order.agent,
+                                builderCode: builderCode, // Persist builder code for close_settlement
                                 amount: workerPay,
                                 points: pointsEarned,
                                 duration: duration,

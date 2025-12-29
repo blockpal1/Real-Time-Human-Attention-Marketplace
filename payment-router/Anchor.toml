@@ -7,7 +7,6 @@ seeds = false
 skip-lint = false
 [programs.localnet]
 payment_router = "Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS"
-fee_splitter = "FeeSpL1tXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
 
 [registry]
 url = "https://api.apr.dev"

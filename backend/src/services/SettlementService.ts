@@ -3,7 +3,8 @@ import {
     PublicKey,
     Transaction,
     TransactionInstruction,
-    Keypair
+    Keypair,
+    SystemProgram
 } from '@solana/web3.js';
 import {
     TOKEN_PROGRAM_ID,
@@ -16,7 +17,7 @@ import { redisClient } from '../utils/redis';
 // Configuration
 const RPC_URL = process.env.SOLANA_RPC_URL || 'https://api.devnet.solana.com';
 const IS_DEVNET = RPC_URL.includes('devnet');
-const PAYMENT_ROUTER_PROGRAM_ID = new PublicKey(process.env.PAYMENT_ROUTER_PROGRAM_ID || 'Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS');
+const PAYMENT_ROUTER_PROGRAM_ID = new PublicKey(process.env.PAYMENT_ROUTER_PROGRAM_ID || 'H4zbWKDAGnrJv9CTptjVvxKCDB59Mv2KpiVDx9d4jDaz');
 
 // USDC Mint - different on Devnet vs Mainnet
 const MAINNET_USDC_MINT = new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
@@ -75,7 +76,14 @@ export class SettlementService {
 
         try {
             // 2. Aggregate by Campaign (BidId)
-            const campaignMap: Record<string, { totalSeconds: number, price: number, agent: string, points: number, totalAmount: number }> = {};
+            const campaignMap: Record<string, {
+                totalSeconds: number,
+                price: number,
+                agent: string,
+                points: number,
+                totalAmount: number,
+                builderCode: string | null
+            }> = {};
 
             for (const item of pendingSettlements) {
                 if (!item.agent || !item.price || !item.duration) continue;
@@ -86,7 +94,8 @@ export class SettlementService {
                         price: item.price,
                         agent: item.agent,
                         points: 0,
-                        totalAmount: 0
+                        totalAmount: 0,
+                        builderCode: item.builderCode || null
                     };
                 }
 
@@ -121,7 +130,22 @@ export class SettlementService {
             );
 
             // Build CloseSettlement instructions
+            // Discriminator for close_settlement: global:close_settlement
+            // sha256("global:close_settlement").slice(0, 8) = 2df753b718660044
             const discriminator = Buffer.from('2df753b718660044', 'hex');
+
+            // Fee Vault State derivation
+            const [feeVaultStatePDA] = PublicKey.findProgramAddressSync(
+                [Buffer.from("fee_vault_state")],
+                PAYMENT_ROUTER_PROGRAM_ID
+            );
+            // Fee Vault Token Account (owned by FeeVaultState)
+            // Seeds: [b"fee_vault", fee_vault_state.key().as_ref()]
+            const [feeVaultPDA] = PublicKey.findProgramAddressSync(
+                [Buffer.from("fee_vault"), feeVaultStatePDA.toBuffer()],
+                PAYMENT_ROUTER_PROGRAM_ID
+            );
+
 
             for (const [bidId, data] of Object.entries(campaignMap)) {
                 if (data.totalAmount < 0.000001) continue;
@@ -137,19 +161,69 @@ export class SettlementService {
                     PAYMENT_ROUTER_PROGRAM_ID
                 );
 
-                const dataBuffer = Buffer.alloc(8 + 8 + 8 + 8);
-                dataBuffer.set(discriminator, 0);
-                dataBuffer.writeBigUInt64LE(BigInt(Math.floor(data.totalSeconds)), 8);
+                // Handle Builder Code logic
+                let builderBalancePDA = PAYMENT_ROUTER_PROGRAM_ID; // Placeholder if none
+                let builderCodeBytes = Buffer.alloc(32);
+                let hasBuilder = false;
+
+                if (data.builderCode) {
+                    // Pad string to 32 bytes
+                    const codeBuffer = Buffer.from(data.builderCode);
+                    if (codeBuffer.length <= 32) {
+                        codeBuffer.copy(builderCodeBytes);
+
+                        // Derive BuilderBalance PDA
+                        const [pda] = PublicKey.findProgramAddressSync(
+                            [Buffer.from("builder"), builderCodeBytes],
+                            PAYMENT_ROUTER_PROGRAM_ID
+                        );
+                        builderBalancePDA = pda;
+                        hasBuilder = true;
+                    }
+                }
+
+                // Data Buffer Layout:
+                // 8 bytes discriminator
+                // 8 bytes verified_seconds (u64)
+                // 8 bytes price_per_second (u64)
+                // 8 bytes nonce (u64)
+                // 1 byte option tag (0 or 1)
+                // 32 bytes builder_code (only if option=1)
+
+                const dataSize = 8 + 8 + 8 + 8 + 1 + (hasBuilder ? 32 : 0);
+                const dataBuffer = Buffer.alloc(dataSize);
+
+                let offset = 0;
+                dataBuffer.set(discriminator, offset); offset += 8;
+
+                dataBuffer.writeBigUInt64LE(BigInt(Math.floor(data.totalSeconds)), offset); offset += 8;
+
                 const atomicPrice = BigInt(Math.round(data.price * 1_000_000));
-                dataBuffer.writeBigUInt64LE(atomicPrice, 16);
+                dataBuffer.writeBigUInt64LE(atomicPrice, offset); offset += 8;
+
                 const nonce = BigInt(Date.now());
-                dataBuffer.writeBigUInt64LE(nonce, 24);
+                dataBuffer.writeBigUInt64LE(nonce, offset); offset += 8;
+
+                if (hasBuilder) {
+                    dataBuffer.writeUInt8(1, offset); offset += 1; // Some
+                    builderCodeBytes.copy(dataBuffer, offset); offset += 32;
+                } else {
+                    dataBuffer.writeUInt8(0, offset); offset += 1; // None
+                }
 
                 const keys = [
                     { pubkey: routerAdmin.publicKey, isSigner: true, isWritable: false },
                     { pubkey: escrowPDA, isSigner: false, isWritable: true },
                     { pubkey: vaultATA, isSigner: false, isWritable: true },
                     { pubkey: userATA, isSigner: false, isWritable: true },
+
+                    // Fee Vault Accounts
+                    { pubkey: feeVaultStatePDA, isSigner: false, isWritable: true },
+                    { pubkey: feeVaultPDA, isSigner: false, isWritable: true },
+
+                    // Builder Balance (Optional) - Pass ProgramID if None
+                    { pubkey: hasBuilder ? builderBalancePDA : PAYMENT_ROUTER_PROGRAM_ID, isSigner: false, isWritable: hasBuilder }, // Writable if real PDA
+
                     { pubkey: marketConfigPDA, isSigner: false, isWritable: false },
                     { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false }
                 ];
