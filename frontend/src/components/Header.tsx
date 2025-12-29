@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
+import { Home, Megaphone, Hammer, ShieldAlert } from 'lucide-react';
 import { LoginButton } from './LoginButton';
 import { EarningsDashboard } from './EarningsDashboard';
 import { useClaim } from '../hooks/useClaim';
@@ -25,6 +26,7 @@ export const Header: React.FC<HeaderProps> = ({ theme, setTheme, userPubkey }) =
     const [signalQuality, setSignalQuality] = useState<number | null>(null);
     const [qualityStatus, setQualityStatus] = useState<'high' | 'medium' | 'low' | 'banned' | 'new'>('new');
     const [seasonPoints, setSeasonPoints] = useState(0);
+    const [activePath, setActivePath] = useState(window.location.hash || '#');
 
     // Get wallet address from Privy
     const embeddedWallet = wallets.find((wallet) => wallet.walletClientType === 'privy');
@@ -32,6 +34,13 @@ export const Header: React.FC<HeaderProps> = ({ theme, setTheme, userPubkey }) =
 
     // Claim hook for USDC withdrawals
     const { claiming, claimEarnings, claimState, claimResult, getStatusText, resetClaimState } = useClaim(walletAddress || '');
+
+    // Listen for hash changes to update active path
+    useEffect(() => {
+        const handleHashChange = () => setActivePath(window.location.hash || '#');
+        window.addEventListener('hashchange', handleHashChange);
+        return () => window.removeEventListener('hashchange', handleHashChange);
+    }, []);
 
     // Listen for refresh event from match completion
     useEffect(() => {
@@ -114,6 +123,13 @@ export const Header: React.FC<HeaderProps> = ({ theme, setTheme, userPubkey }) =
         }
     };
 
+    const navItems = [
+        { label: 'App', icon: Home, path: '#app' },
+        { label: 'Campaigns', icon: Megaphone, path: '#campaigns' },
+        { label: 'Builders', icon: Hammer, path: '#builders' },
+        { label: 'Admin', icon: ShieldAlert, path: '#admin' },
+    ];
+
     return (
         <>
             <header className="flex justify-between items-center px-6 py-4 border-b border-[var(--border-neon)] bg-[var(--bg-glass)] backdrop-blur-md z-50 shadow-[var(--shadow-neon)] transition-all duration-500">
@@ -124,6 +140,29 @@ export const Header: React.FC<HeaderProps> = ({ theme, setTheme, userPubkey }) =
                         Attentium <span className="text-xs text-[#0EA5E9] font-mono align-top ml-1">BETA</span>
                     </h1>
                 </div>
+
+                {/* Central Navigation */}
+                <nav className="hidden lg:flex items-center gap-1 bg-white/5 p-1 rounded-full border border-white/10 backdrop-blur-md absolute left-1/2 transform -translate-x-1/2 shadow-lg shadow-black/50">
+                    {navItems.map((item) => {
+                        const isActive = activePath === item.path || (item.path === '#' && activePath === '');
+                        return (
+                            <a
+                                key={item.path}
+                                href={item.path}
+                                className={`
+                                    flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold uppercase tracking-wider transition-all duration-300
+                                    ${isActive
+                                        ? 'bg-[#0EA5E9] text-white shadow-[0_0_15px_rgba(14,165,233,0.4)] scale-105'
+                                        : 'text-gray-400 hover:text-white hover:bg-white/5'
+                                    }
+                                `}
+                            >
+                                <item.icon size={14} className={isActive ? 'animate-pulse' : ''} />
+                                {item.label}
+                            </a>
+                        );
+                    })}
+                </nav>
 
                 {/* Right Side: Stats & Wallet */}
                 <div className="flex items-center gap-6">
@@ -232,12 +271,12 @@ export const Header: React.FC<HeaderProps> = ({ theme, setTheme, userPubkey }) =
                                             }}
                                             disabled={claiming || (pendingEarnings === 0 && claimState === 'idle')}
                                             className={`w-full py-2 rounded-lg font-bold text-xs uppercase tracking-wider transition-all ${claimState === 'confirmed'
-                                                    ? 'bg-green-500 text-white'
-                                                    : claimState === 'failed'
-                                                        ? 'bg-red-500/80 text-white hover:bg-red-500 cursor-pointer'
-                                                        : claiming || pendingEarnings === 0
-                                                            ? 'bg-[#0088FF]/20 text-[#0088FF] opacity-50 cursor-not-allowed'
-                                                            : 'bg-[#0088FF] text-white hover:bg-[#0066CC] cursor-pointer'
+                                                ? 'bg-green-500 text-white'
+                                                : claimState === 'failed'
+                                                    ? 'bg-red-500/80 text-white hover:bg-red-500 cursor-pointer'
+                                                    : claiming || pendingEarnings === 0
+                                                        ? 'bg-[#0088FF]/20 text-[#0088FF] opacity-50 cursor-not-allowed'
+                                                        : 'bg-[#0088FF] text-white hover:bg-[#0066CC] cursor-pointer'
                                                 }`}
                                         >
                                             {claiming && (

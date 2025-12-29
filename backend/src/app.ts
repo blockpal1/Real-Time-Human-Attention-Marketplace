@@ -8,8 +8,8 @@ import builderRoutes from './routes/builderRoutes';
 const app = express();
 
 app.use(cors({
-    exposedHeaders: ['x-admin-key'],
-    allowedHeaders: ['Content-Type', 'x-admin-key', 'x-builder-code', 'x-agent-key', 'x-solana-tx-signature', 'x-campaign-id']
+    exposedHeaders: ['x-admin-key', 'x-admin-secret'],
+    allowedHeaders: ['Content-Type', 'x-admin-key', 'x-admin-secret', 'x-builder-code', 'x-agent-key', 'x-solana-tx-signature', 'x-campaign-id']
 }));
 app.use(express.json());
 

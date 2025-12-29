@@ -37,7 +37,7 @@ export const CampaignPage: React.FC = () => {
             <div className="p-4 border-b border-gray-800 flex justify-between items-center bg-panel">
                 <div className="flex items-center gap-4">
                     <button
-                        onClick={() => window.location.hash = ''}
+                        onClick={() => window.location.hash = '#app'}
                         className="text-gray-400 hover:text-white transition-colors flex items-center gap-2 text-sm font-bold uppercase tracking-wider"
                     >
                         <span>←</span> Market

@@ -200,6 +200,12 @@ export const AdminDashboard: React.FC = () => {
         return (
             <div style={containerStyle}>
                 <div style={{ maxWidth: '400px', margin: '100px auto' }}>
+                    <button
+                        onClick={() => window.location.hash = '#app'}
+                        style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', marginBottom: '16px', fontSize: '14px', padding: 0 }}
+                    >
+                        ← App
+                    </button>
                     <h1 style={{ marginBottom: '32px', fontSize: '28px' }}>🔐 Admin Console</h1>
                     <div style={cardStyle}>
                         <input
@@ -227,6 +233,12 @@ export const AdminDashboard: React.FC = () => {
     return (
         <div style={containerStyle}>
             <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
+                <button
+                    onClick={() => window.location.hash = '#app'}
+                    style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', marginBottom: '16px', fontSize: '14px', padding: 0 }}
+                >
+                    ← App
+                </button>
                 <h1 style={{ marginBottom: '8px', fontSize: '32px' }}>⚙️ Admin Console</h1>
                 <p style={{ color: '#888', marginBottom: '32px' }}>Attentium Platform Management</p>
 
