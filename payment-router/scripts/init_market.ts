@@ -7,9 +7,9 @@ import * as dotenv from "dotenv";
 import * as fs from "fs";
 import * as path from "path";
 
-// Load env from frontend (.env.local or .env)
-const frontendEnvPath = path.resolve(__dirname, "../../frontend/.env");
-dotenv.config({ path: frontendEnvPath });
+// Load env from backend (.env) where secrets are stored
+const backendEnvPath = path.resolve(__dirname, "../../backend/.env");
+dotenv.config({ path: backendEnvPath });
 
 async function main() {
     // 1. Setup Connection & Wallet

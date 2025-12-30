@@ -367,7 +367,7 @@ pub struct DepositEscrow<'info> {
     #[account(
         init_if_needed,
         payer = agent,
-        space = 8 + 32 + 8 + 8 + 1,  // Added settlement_nonce (8 bytes)
+        space = 8 + 32 + 8 + 8 + 1,
         seeds = [b"escrow", agent.key().as_ref()],
         bump
     )]
