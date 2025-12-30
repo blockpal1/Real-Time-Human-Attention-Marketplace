@@ -5,11 +5,12 @@ import {
     Transaction,
     TransactionInstruction
 } from '@solana/web3.js';
+import { getAssociatedTokenAddressSync, TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import { redisClient } from '../utils/redis';
 
 // Config
 const RPC_URL = process.env.SOLANA_RPC_URL || 'https://api.devnet.solana.com';
-const PAYMENT_ROUTER_PROGRAM_ID = new PublicKey(process.env.PAYMENT_ROUTER_PROGRAM_ID || '3NkmHpKX4ToYGC5kmLJYU5neMiTNePjnbsuwzFLcPVzF');
+const PAYMENT_ROUTER_PROGRAM_ID = new PublicKey(process.env.PAYMENT_ROUTER_PROGRAM_ID || 'EZPqKzvizknKZmkYC69NgiBeCs1uDVfET1MQpC7tQvin');
 const connection = new Connection(RPC_URL, 'confirmed');
 
 export class BuilderController {
@@ -104,14 +105,19 @@ export class BuilderController {
             const hash = crypto.createHash('sha256').update('global:claim_builder_balance').digest();
             const discriminator = hash.subarray(0, 8);
 
+            // Derive Builder ATA
+            const USDC_MINT = new PublicKey("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"); // Devnet
+            const builderATA = getAssociatedTokenAddressSync(USDC_MINT, builderWallet);
+
             const ix = new TransactionInstruction({
                 programId: PAYMENT_ROUTER_PROGRAM_ID,
                 keys: [
                     { pubkey: builderWallet, isSigner: true, isWritable: true },
                     { pubkey: builderPDA, isSigner: false, isWritable: true },
+                    { pubkey: builderATA, isSigner: false, isWritable: true },
                     { pubkey: feeVaultStatePDA, isSigner: false, isWritable: true },
                     { pubkey: feeVaultPDA, isSigner: false, isWritable: true },
-                    { pubkey: new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"), isSigner: false, isWritable: false }, // Token Program
+                    { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
                 ],
                 data: discriminator
             });

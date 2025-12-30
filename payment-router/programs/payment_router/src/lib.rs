@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Token, TokenAccount, Transfer};
 
-declare_id!("3NkmHpKX4ToYGC5kmLJYU5neMiTNePjnbsuwzFLcPVzF");
+declare_id!("EZPqKzvizknKZmkYC69NgiBeCs1uDVfET1MQpC7tQvin");
 
 #[program]
 pub mod payment_router {
@@ -211,13 +211,12 @@ pub mod payment_router {
             b"fee_vault_state" as &[u8],
             &[bump],
         ];
-        // Wait, the fee vault authority typically needs its own PDA or use the state PDA if it owns the token account.
-        // Let's assume FeeVaultState PDA is the authority.
+        
         let signer = &[&seeds[..]];
 
         let transfer = Transfer {
             from: ctx.accounts.fee_vault.to_account_info(),
-            to: ctx.accounts.builder_wallet.to_account_info(),
+            to: ctx.accounts.builder_token_account.to_account_info(),
             authority: ctx.accounts.fee_vault_state.to_account_info(),
         };
 
@@ -444,6 +443,13 @@ pub struct ClaimBuilderBalance<'info> {
     )]
     pub builder_balance: Account<'info, BuilderBalance>,
     
+    #[account(
+        mut,
+        constraint = builder_token_account.owner == builder_wallet.key(),
+        constraint = builder_token_account.mint == fee_vault.mint
+    )]
+    pub builder_token_account: Account<'info, TokenAccount>,
+
     #[account(
         mut,
         seeds = [b"fee_vault_state"],
