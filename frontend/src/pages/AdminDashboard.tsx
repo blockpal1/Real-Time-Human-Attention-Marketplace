@@ -138,6 +138,27 @@ export const AdminDashboard: React.FC = () => {
         setLoading(false);
     };
 
+    const sweepPlatformFees = async () => {
+        if (!confirm('Are you sure you want to sweep all accumulated protocol fees to the admin wallet?')) return;
+        setLoading(true);
+        try {
+            const res = await fetch(`${API_URL}/admin/fees/sweep`, {
+                method: 'POST',
+                headers
+            });
+            const data = await res.json();
+            if (res.ok) {
+                alert(`Success! Fees swept. Tx: ${data.tx_hash}`);
+            } else {
+                throw new Error(data.error || 'Failed to sweep fees');
+            }
+        } catch (err: any) {
+            alert(err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
     useEffect(() => {
         if (isAuthenticated) {
             fetchBuilderCodes();
@@ -291,6 +312,28 @@ export const AdminDashboard: React.FC = () => {
                         {status?.platform_mode === 'hybrid' && '🔄 Hybrid mode: Both points and real payments active'}
                         {status?.platform_mode === 'live' && '💰 Live mode: Real USDC escrow and payments only'}
                     </p>
+                </div>
+
+                {/* Protocol Fees */}
+                <div style={cardStyle}>
+                    <h2 style={{ marginBottom: '20px', fontSize: '20px' }}>💰 Protocol Fees</h2>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div>
+                            <p style={{ color: '#888', fontSize: '14px', marginBottom: '4px' }}>
+                                Accumulated fees in the Fee Vault can be swept to the Admin Wallet.
+                            </p>
+                            <p style={{ color: '#666', fontSize: '12px' }}>
+                                Destination: <code>{adminSecret ? '(Admin Keypair Wallet)' : '...'}</code>
+                            </p>
+                        </div>
+                        <button
+                            onClick={sweepPlatformFees}
+                            disabled={loading}
+                            style={{ ...buttonStyle(true), background: '#10b981', marginLeft: '20px' }}
+                        >
+                            {loading ? 'Sweeping...' : 'Sweep Fees'}
+                        </button>
+                    </div>
                 </div>
 
                 {/* Genesis Builder Codes */}

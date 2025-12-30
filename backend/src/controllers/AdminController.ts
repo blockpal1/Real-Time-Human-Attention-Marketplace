@@ -9,7 +9,12 @@ import {
     TransactionInstruction,
     SystemProgram
 } from '@solana/web3.js';
-import { TOKEN_PROGRAM_ID, getAssociatedTokenAddress } from '@solana/spl-token';
+import {
+    TOKEN_PROGRAM_ID,
+    ASSOCIATED_TOKEN_PROGRAM_ID,
+    getAssociatedTokenAddress,
+    createAssociatedTokenAccountIdempotentInstruction
+} from '@solana/spl-token';
 
 /**
  * Get platform status and configuration
@@ -410,6 +415,24 @@ export const sweepProtocolFees = async (req: Request, res: Response) => {
 
         const adminATAResolved = await getAssociatedTokenAddress(USDC_MINT, destinationWallet);
 
+        const tx = new Transaction();
+
+        // Check if ATA exists; if not, create it
+        const ataInfo = await connection.getAccountInfo(adminATAResolved);
+        if (!ataInfo) {
+            console.log(`[Admin] Initializing Admin ATA for ${destinationWallet.toBase58()}...`);
+            tx.add(
+                createAssociatedTokenAccountIdempotentInstruction(
+                    feePayerKeypair.publicKey, // Payer
+                    adminATAResolved,          // ATA
+                    destinationWallet,         // Owner
+                    USDC_MINT,                 // Mint
+                    TOKEN_PROGRAM_ID,
+                    ASSOCIATED_TOKEN_PROGRAM_ID
+                )
+            );
+        }
+
         // Discriminator: claim_protocol_fees
         // sha256("global:claim_protocol_fees").slice(0, 8)
         const crypto = require('crypto');
@@ -429,7 +452,7 @@ export const sweepProtocolFees = async (req: Request, res: Response) => {
             data: discriminator
         });
 
-        const tx = new Transaction().add(ix);
+        tx.add(ix);
         tx.feePayer = feePayerKeypair.publicKey;
         const { blockhash } = await connection.getLatestBlockhash();
         tx.recentBlockhash = blockhash;
