@@ -284,10 +284,22 @@ export async function x402Middleware(req: Request, res: Response, next: NextFunc
 
                     const data = Buffer.concat([discriminator, amountBuffer]);
 
+                    // Derive Fee Vault PDAs for mint validation
+                    const [feeVaultStatePDA] = PublicKey.findProgramAddressSync(
+                        [Buffer.from("fee_vault_state")],
+                        PAYMENT_ROUTER_PROGRAM_ID
+                    );
+                    const [feeVaultPDA] = PublicKey.findProgramAddressSync(
+                        [Buffer.from("fee_vault"), feeVaultStatePDA.toBuffer()],
+                        PAYMENT_ROUTER_PROGRAM_ID
+                    );
+
                     const keys = [
                         { pubkey: agentPubkey, isSigner: true, isWritable: true },
                         { pubkey: agentATA, isSigner: false, isWritable: true },
                         { pubkey: escrowPDA, isSigner: false, isWritable: true },
+                        { pubkey: feeVaultStatePDA, isSigner: false, isWritable: false },
+                        { pubkey: feeVaultPDA, isSigner: false, isWritable: false },
                         { pubkey: vaultATA, isSigner: false, isWritable: true },
                         { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
                         { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },

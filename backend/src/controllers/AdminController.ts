@@ -259,10 +259,17 @@ export const createBuilderCode = async (req: Request, res: Response) => {
 
                 const builderWalletKey = new PublicKey(payout_wallet);
 
+                // Derive market_config PDA for authorization check
+                const [marketConfigPDA] = PublicKey.findProgramAddressSync(
+                    [Buffer.from("market_config")],
+                    PAYMENT_ROUTER_PROGRAM_ID
+                );
+
                 const ix = new TransactionInstruction({
                     programId: PAYMENT_ROUTER_PROGRAM_ID,
                     keys: [
                         { pubkey: adminKeypair.publicKey, isSigner: true, isWritable: true },
+                        { pubkey: marketConfigPDA, isSigner: false, isWritable: false },
                         { pubkey: builderPDA, isSigner: false, isWritable: true },
                         { pubkey: builderWalletKey, isSigner: false, isWritable: false },
                         { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },

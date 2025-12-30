@@ -212,7 +212,11 @@ export class SettlementService {
                 const atomicPrice = BigInt(Math.round(data.price * 1_000_000));
                 dataBuffer.writeBigUInt64LE(atomicPrice, offset); offset += 8;
 
-                const nonce = BigInt(Date.now());
+                // Get and increment nonce atomically for this agent (replay protection)
+                // This ensures each settlement has a unique, incrementing nonce
+                const nonceKey = `settlement:nonce:${data.agent}`;
+                const nonceValue = await redisClient.client.incr(nonceKey);
+                const nonce = BigInt(nonceValue);
                 dataBuffer.writeBigUInt64LE(nonce, offset); offset += 8;
 
                 if (hasBuilder) {

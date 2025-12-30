@@ -1,7 +1,11 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Token, TokenAccount, Transfer};
+use solana_program::pubkey;
 
 declare_id!("EZPqKzvizknKZmkYC69NgiBeCs1uDVfET1MQpC7tQvin");
+
+// Authorized admin for initialization (prevents front-running attacks)
+const AUTHORIZED_ADMIN: Pubkey = pubkey!("4BTmGg6w7wQiqMqJmrHdacKE8gvhqepDAt5WE8o3DtdE");
 
 #[program]
 pub mod payment_router {
@@ -30,6 +34,9 @@ pub mod payment_router {
         ctx: Context<RegisterBuilder>, 
         builder_code: [u8; 32],
     ) -> Result<()> {
+        // Prevent null builder code registration (defense against PDA collision)
+        require!(builder_code != [0u8; 32], ErrorCode::InvalidBuilderCode);
+        
         let builder = &mut ctx.accounts.builder_balance;
         builder.builder_code = builder_code;
         builder.wallet = ctx.accounts.builder_wallet.key();
@@ -104,13 +111,23 @@ pub mod payment_router {
         ctx: Context<CloseSettlement>,
         verified_seconds: u64,
         agreed_price_per_second: u64,
-        _nonce: u64,
+        nonce: u64,
         builder_code_opt: Option<[u8; 32]>, // Optional builder code
     ) -> Result<()> {
+        let escrow = &mut ctx.accounts.escrow_account;
+        
+        // Validate nonce to prevent replay attacks
+        require!(nonce > escrow.settlement_nonce, ErrorCode::NonceAlreadyUsed);
+        escrow.settlement_nonce = nonce;
+        
+        // If builder code is provided, builder account MUST exist
+        if builder_code_opt.is_some() {
+            require!(ctx.accounts.builder_balance.is_some(), ErrorCode::BuilderAccountMissing);
+        }
+        
         let total_payout = verified_seconds.checked_mul(agreed_price_per_second)
             .ok_or(ErrorCode::MathOverflow)?;
 
-        let escrow = &mut ctx.accounts.escrow_account;
         require!(escrow.balance >= total_payout, ErrorCode::InsufficientFunds);
 
         // Deduct from internal balance
@@ -267,7 +284,7 @@ pub mod payment_router {
 
 #[derive(Accounts)]
 pub struct InitializeMarketConfig<'info> {
-    #[account(mut)]
+    #[account(mut, constraint = admin.key() == AUTHORIZED_ADMIN @ ErrorCode::Unauthorized)]
     pub admin: Signer<'info>,
     #[account(
         init,
@@ -282,7 +299,7 @@ pub struct InitializeMarketConfig<'info> {
 
 #[derive(Accounts)]
 pub struct InitializeFeeVault<'info> {
-    #[account(mut)]
+    #[account(mut, constraint = admin.key() == AUTHORIZED_ADMIN @ ErrorCode::Unauthorized)]
     pub admin: Signer<'info>,
     #[account(
         init,
@@ -310,8 +327,10 @@ pub struct InitializeFeeVault<'info> {
 #[derive(Accounts)]
 #[instruction(builder_code: [u8; 32])]
 pub struct RegisterBuilder<'info> {
-    #[account(mut)]
+    #[account(mut, constraint = admin.key() == market_config.authority @ ErrorCode::Unauthorized)]
     pub admin: Signer<'info>,
+    #[account(seeds = [b"market_config"], bump)]
+    pub market_config: Account<'info, MarketConfig>,
     #[account(
         init,
         payer = admin,
@@ -348,14 +367,20 @@ pub struct DepositEscrow<'info> {
     #[account(
         init_if_needed,
         payer = agent,
-        space = 8 + 32 + 8 + 1,
+        space = 8 + 32 + 8 + 8 + 1,  // Added settlement_nonce (8 bytes)
         seeds = [b"escrow", agent.key().as_ref()],
         bump
     )]
     pub escrow_account: Account<'info, EscrowAccount>,
+    // Fee Vault reference for mint validation
+    #[account(seeds = [b"fee_vault_state"], bump)]
+    pub fee_vault_state: Account<'info, FeeVaultState>,
+    #[account(constraint = fee_vault.owner == fee_vault_state.key())]
+    pub fee_vault: Account<'info, TokenAccount>,
     #[account(
         mut,
-        constraint = vault.owner == escrow_account.key() @ ErrorCode::InvalidVault
+        constraint = vault.owner == escrow_account.key() @ ErrorCode::InvalidVault,
+        constraint = vault.mint == fee_vault.mint @ ErrorCode::InvalidMint
     )]
     pub vault: Account<'info, TokenAccount>,
     pub token_program: Program<'info, Token>,
@@ -514,6 +539,7 @@ pub struct BuilderBalance {
 pub struct EscrowAccount {
     pub agent: Pubkey,
     pub balance: u64,
+    pub settlement_nonce: u64,  // Prevents replay attacks
     pub bump: u8,
 }
 
@@ -529,4 +555,12 @@ pub enum ErrorCode {
     Unauthorized,
     #[msg("No funds to claim")]
     NothingToClaim,
+    #[msg("Invalid mint - must match Fee Vault (USDC)")]
+    InvalidMint,
+    #[msg("Nonce already used - potential replay attack")]
+    NonceAlreadyUsed,
+    #[msg("Invalid builder code - cannot be all zeros")]
+    InvalidBuilderCode,
+    #[msg("Builder account must exist when builder code is provided")]
+    BuilderAccountMissing,
 }
