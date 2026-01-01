@@ -1,167 +1,217 @@
 # Payment Router Setup Guide
 
-This guide covers one-time setup steps required after deploying the Payment Router program.
+This guide covers the **zero-to-one** setup process for deploying and initializing the Payment Router program using **Solana Playground** (no CLI required).
 
 ---
 
 ## Prerequisites
 
-- Solana CLI installed (`solana --version`)
-- Node.js 18+ and npm
-- Access to Devnet or Mainnet
-- Admin keypair (the deployer wallet)
+1.  **Solana Playground**: Open [beta.solpg.io](https://beta.solpg.io) in your browser.
+2.  **Wallet**: A Phantom or Solflare wallet with Devnet SOL.
+3.  **Source Code**: The `payment-router` directory from this repository.
 
 ---
 
-## 1. Program Deployment
+## 1. Deploy Program (Solana Playground)
 
-The Payment Router program should already be deployed. Verify:
+We avoid using the Solana CLI. Instead, we use the browser-based IDE.
 
-```bash
-solana program show H4zbWKDAGnrJv9CTptjVvxKCDB59Mv2KpiVDx9d4jDaz --url devnet
-```
+### Step 1.1: Import Project
+1.  Go to [beta.solpg.io](https://beta.solpg.io).
+2.  Click the **"Import"** icon (folder with arrow) in the sidebar.
+3.  Select **"Import from local"**.
+4.  Choose the `payment-router` folder from your local project.
+5.  *Tip: If it asks for a project name, use `payment-router`.*
 
-Expected output includes `Program Id: H4zbWKDAGnrJv9CTptjVvxKCDB59Mv2KpiVDx9d4jDaz`.
+### Step 1.2: Connect Wallet
+1.  Click **"Not connected"** in the bottom-left corner.
+2.  Select your Phantom/Solflare wallet.
+3.  Ensure your wallet is on **Devnet** (Settings > Developer Settings > Change Network > Devnet).
+4.  If you need funds, type `solana airdrop 2` in the Playground terminal.
+
+### Step 1.3: Build & Deploy
+1.  Click the **"Build and Deploy"** icon (hammer and wrench) in the sidebar.
+2.  Click **"Build"**. Wait for "Build successful".
+3.  Click **"Deploy"**. Approve the transaction in your wallet.
+4.  **Copy the Program ID**: once deployed, the Program ID will be shown in the terminal.
+    *   *Example Output*: `Deployment successful. Program ID: EofaQa9...`
 
 ---
 
-## 2. Initialize Market Config & Fee Vault
- 
-The `market_config` and `fee_vault` PDAs must be initialized once per program deployment. This stores the router authority, fee settings, and fee collection vault.
- 
-### Run Initialization Script
- 
-We use a unified script that loads configuration from `frontend/.env`.
- 
-```bash
-cd payment-router
-npx ts-node scripts/init_market.ts
-```
- 
-### Expected Output
- 
-```
-Loading config from: .../frontend/.env
-Initializing Payment Router...
-Program ID: ...
-✅ Market Config initialized successfully.
-✅ Fee Vault initialized successfully.
-```
- 
-If already initialized, you'll see:
-```
-✅ Market Config already initialized.
-✅ Fee Vault already initialized.
-```
- 
----
- 
-## 3. Environment Variables
- 
-### Public Configuration (`frontend/.env`)
- 
-The initialization script reads these values directly from your frontend configuration:
- 
+## 2. Environment Configuration
+
+You must update your local environment variables with the new Program ID.
+
+### Frontend (`frontend/.env`)
+
 ```env
-# Program ID for the Payment Router
+# The ID you just copied from Solana Playground
 VITE_PAYMENT_ROUTER_PROGRAM_ID=EofaQa9USK8GtzfnCbqdfnhjeUrRTJoWL2jjSCD6c4Y2
- 
-# (Optional) Devnet/Mainnet RPC URL - defaults to Devnet if unset
-ANCHOR_PROVIDER_URL=https://api.devnet.solana.com
+
+# RPC URL (Use Helius/Alchemy or public Devnet)
+VITE_SOLANA_RPC_URL=https://api.devnet.solana.com
 ```
- 
-### Backend Secrets (`backend/.env`)
- 
-Add these secrets to `backend/.env` for the Settlement Service:
- 
+
+### Backend (`backend/.env`)
+
 ```env
-# Solana Configuration
-SOLANA_RPC_URL=https://api.devnet.solana.com
-# Must match the frontend VITE_ var above
+# Must match the frontend ID
 PAYMENT_ROUTER_PROGRAM_ID=EofaQa9USK8GtzfnCbqdfnhjeUrRTJoWL2jjSCD6c4Y2
 
-# Router Authority (JSON array of keypair bytes)
-# This is the admin who can call close_settlement
-ROUTER_ADMIN_KEYPAIR=[1,2,3,...,64]
+# Solana Devnet RPC
+SOLANA_RPC_URL=https://api.devnet.solana.com
 
-# Optional: Fee Payer for subsidized gas
-FEE_PAYER_KEYPAIR=[1,2,3,...,64]
-```
-
-### Finding Your Keypair Bytes
-
-```bash
-# If you have a keypair file:
-cat ~/.config/solana/id.json
-# Copy the array of numbers
+# Admin Keypair (Array of numbers)
+# This is the wallet that deployed the program.
+# Export private key from Phantom -> Settings -> Export Private Key
+# Convert Base58 to JSON Array format (use a tool or script)
+ROUTER_ADMIN_KEYPAIR=[142, 25, 201, ...]
 ```
 
 ---
 
-## 4. Verify Setup
+## 3. Initialize Market Config
 
-### Check Market Config Exists
+The `market_config` and `fee_vault` PDAs must be initialized once. We run a script from your local machine to do this.
 
-```bash
-cd payment-router
-npx ts-node scripts/init_market.ts
-# Should show "already initialized"
+### Option A: Run Local Script (Recommended)
+
+1.  Open a terminal in your project root.
+2.  Navigate to the router folder:
+    ```bash
+    cd payment-router
+    ```
+3.  Install dependencies (if not done):
+    ```bash
+    npm install
+    ```
+4.  Run the initialization script:
+    ```bash
+    npx ts-node scripts/init_market.ts
+    ```
+
+### Option B: Initialize via Solana Playground (Browser Only)
+
+If you cannot run local scripts, you can run this client script directly in Playground.
+
+1.  In Solana Playground, verify you are connected with the **Deployer Wallet**.
+2.  In the sidebar, click the **"Client"** icon (paper with "JS").
+3.  Create a new file named `init.ts`.
+4.  Paste the following code:
+
+    ```typescript
+    // Client script to run in Solana Playground
+    console.log("Initializing via Playground...");
+
+    // 1. Derive PDAs
+    const [marketConfigPDA] = web3.PublicKey.findProgramAddressSync(
+      [Buffer.from("market_config")],
+      pg.program.programId
+    );
+
+    const [feeVaultStatePDA] = web3.PublicKey.findProgramAddressSync(
+      [Buffer.from("fee_vault_state")],
+      pg.program.programId
+    );
+
+    const [feeVaultPDA] = web3.PublicKey.findProgramAddressSync(
+      [Buffer.from("fee_vault"), feeVaultStatePDA.toBuffer()],
+      pg.program.programId
+    );
+
+    // 2. Initialize Market Config
+    try {
+      const tx = await pg.program.methods.initializeMarketConfig(1500) // 15% fee
+        .accounts({
+          admin: pg.wallet.publicKey,
+          config: marketConfigPDA,
+          systemProgram: web3.SystemProgram.programId,
+        })
+        .rpc();
+      console.log("✅ Market Config initialized! Tx:", tx);
+    } catch (e) {
+      console.log("Market Config status:", e.message);
+    }
+
+    // 3. Initialize Fee Vault
+    const USDC_MINT = new web3.PublicKey("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"); // Devnet
+    try {
+      const tx2 = await pg.program.methods.initializeFeeVault()
+        .accounts({
+          admin: pg.wallet.publicKey,
+          feeVaultState: feeVaultStatePDA,
+          feeVault: feeVaultPDA,
+          mint: USDC_MINT,
+          systemProgram: web3.SystemProgram.programId,
+          tokenProgram: new web3.PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"), // Token Program
+          rent: web3.SYSVAR_RENT_PUBKEY,
+        })
+        .rpc();
+      console.log("✅ Fee Vault initialized! Tx:", tx2);
+    } catch (e) {
+        console.log("Fee Vault status:", e.message);
+    }
+    ```
+
+5.  Click the **"Run"** button (Wait for "Running client..." output).
+
+### Expected Output
+```text
+✅ Market Config initialized! Tx: ...
+✅ Fee Vault initialized! Tx: ...
 ```
-
-### Check Backend Loads Correctly
-
-```bash
-npm run dev
-# Look for: "[Settlement] Router Admin loaded: 4BTmGg6w7wQiqMqJmrHdacKE8gvhqepDAt5WE8o3DtdE"
-```
+*(If run again, you may see error messages about "already in use". This is safe.)*
 
 ---
 
-## 5. Test Claim Flow
+## 4. Verify IDL
 
-1. **Add Test Settlement Data**:
-   ```bash
-   npx ts-node src/fix_redis.ts
-   ```
+The frontend needs the **IDL (Interface Description Language)** to talk to the program.
 
-2. **Open Frontend** at `http://localhost:5173`
+### Build & Export IDL
+1.  In **Solana Playground**, go to the "Build" tab.
+2.  Click the small "IDL" button (usually near Build/Deploy).
+3.  Or verify `target/idl/payment_router.json` was created in your local `payment-router` folder if you built locally.
+4.  **Crucial**: Ensure `frontend/src/idl/payment_router.json` matches the latest build. Copy it over if needed.
 
-3. **Click "Claim to Wallet"**
+---
 
-4. **Sign the Transaction** in Phantom
+## 5. End-to-End Test
 
-5. **Verify Success** - Transaction appears on Solana Explorer
+1.  **Start Backend**:
+    ```bash
+    cd backend
+    npm run dev
+    ```
+    *Look for: `[Settlement] Router Admin loaded`*
+
+2.  **Start Frontend**:
+    ```bash
+    cd frontend
+    npm run dev
+    ```
+
+3.  **Test Claim**:
+    *   Go to `http://localhost:5173`.
+    *   Connect the wallet you used to deploy (or any wallet).
+    *   Click the "Earnings" dropdown -> "Claim to Wallet".
+    *   Sign the transaction.
+    *   **Success**: You should see a "Claim Submitted" toast and a transaction link.
 
 ---
 
 ## Troubleshooting
 
-### Error: "AccountNotInitialized" for market_config
+### "Program Not Found"
+*   Did you update `frontend/.env` with the new Program ID?
+*   Did you restart the frontend server after changing `.env`?
 
-Run the initialization script:
-```bash
-npx ts-node src/init_market_config.ts
-```
+### "AccountNotInitialized"
+*   You forgot **Step 3**. The program exists, but the market config settings haven't been saved yet. Run `npx ts-node scripts/init_market.ts`.
 
-### Error: "IncorrectProgramId"
+### "Signature verification failed"
+*   The `ROUTER_ADMIN_KEYPAIR` in `backend/.env` does not match the authority set in `market_config`.
+*   *Fix*: Ensure you put the **Deployer Wallet's** private key in `backend/.env`.
 
-Ensure `PAYMENT_ROUTER_PROGRAM_ID` in `.env` matches the deployed program.
-
-### Error: "Insufficient funds in escrow"
-
-The escrow PDA doesn't have enough USDC. Agents must deposit via `deposit_escrow` first.
-
-### Error: "Wallet not connected"
-
-Ensure Phantom is connected to Devnet and the wallet is the same as `userPubkey`.
-
----
-
-## Network Configuration
-
-| Environment | RPC URL | USDC Mint |
-|-------------|---------|-----------|
-| **Devnet** | `https://api.devnet.solana.com` | `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU` |
-| **Mainnet** | `https://api.mainnet-beta.solana.com` | `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` |
-
-The backend automatically detects the network from `SOLANA_RPC_URL` and uses the correct USDC mint.
+### "RPC Error 403 / 429"
+*   Public Devnet nodes are flaky. Use a free Helius or Alchemy RPC URL in `.env`.

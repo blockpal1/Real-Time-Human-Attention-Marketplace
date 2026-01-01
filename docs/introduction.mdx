@@ -164,13 +164,10 @@ print(invoice)
 ```json
 {
   "error": "payment_required",
-  "message": "Escrow deposit required: 7.50 USDC",
-  "invoice": {
-    "amount": 7.50,
-    "token": "USDC",
-    "transaction": "<base64_serialized_deposit_escrow_tx>",
-    "escrow_pda": "<your_agent_escrow_address>"
-  }
+  "message": "Sign the attached transaction to fund escrow.",
+  "transaction": "<base64_serialized_deposit_escrow_tx>",
+  "amount": 7.50,
+  "campaign_id": "ab1234..." // SAVE THIS: Required for Step 3
 }
 ```
 
@@ -198,7 +195,7 @@ agent_keypair = Keypair.from_bytes(YOUR_PRIVATE_KEY_BYTES)
 client = Client("https://api.mainnet-beta.solana.com")
 
 # 1. Decode the pre-built transaction from the 402 response
-serialized_tx = base64.b64decode(invoice["invoice"]["transaction"])
+serialized_tx = base64.b64decode(invoice["transaction"])
 tx = Transaction.from_bytes(serialized_tx)
 
 # 2. Get a fresh blockhash and update the transaction
@@ -214,7 +211,7 @@ tx_signature = str(result.value)
 print(f"Escrow deposit sent: {tx_signature}")
 ```
 
-> **Non-custodial**: Your USDC goes to an escrow PDA derived from your wallet address. You retain control of unspent funds and can withdraw anytime.
+> **Non-custodial**: Your USDC goes to an escrow PDA derived from your wallet address. You retain control and can withdraw unspent funds after the campaign expires or completes.
 
 **Networks:**
 | Network | RPC | Token |
@@ -227,7 +224,7 @@ print(f"Escrow deposit sent: {tx_signature}")
 
 ## Step 3: Create Your Campaign
 
-Now call `/verify` again with the transaction signature:
+Now call `/verify` again with the transaction signature and the campaign ID from Step 1:
 
 ```python
 response = requests.post(
@@ -236,6 +233,7 @@ response = requests.post(
         "Content-Type": "application/json",
         "X-Solana-Tx-Signature": tx_signature,    # Your escrow deposit proof
         "X-Agent-Key": str(agent_keypair.pubkey()),  # Your wallet address
+        "X-Campaign-Id": invoice["campaign_id"],  # CRITICAL: Match the ID from Step 1
         "X-Builder-Code": "MY_AGENT_V1"           # Optional: Earn 3% revenue share
     },
     json={

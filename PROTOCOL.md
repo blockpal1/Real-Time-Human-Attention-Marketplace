@@ -60,12 +60,15 @@ Request verification of an asset (image/text/video) by human attention.
 ```json
 {
   "error": "payment_required",
-  "message": "Escrow required: 7.50 USDC",
+  "message": "Sign the attached transaction to fund escrow.",
   "invoice": {
     "amount": 7.5,
     "destination": "2kDpvEhgoLkUbqFJqxMpUXMtr2gVYbfqNF8kGrfoZMAV",
-    "token": "USDC"
-  }
+    "token": "USDC",
+    "transaction": "<base64_serialized_deposit_escrow_tx>",
+    "escrow_pda": "<your_agent_escrow_address>"
+  },
+  "campaign_id": "ab1234..." // SAVE THIS: Required for X-Campaign-Id header
 }
 ```
 
@@ -130,6 +133,7 @@ GET /v1/campaigns/admin_123abc.../results?key=YOUR_READ_KEY
 }
 ```
 
+---
 
 ## Headers
 
@@ -137,6 +141,8 @@ GET /v1/campaigns/admin_123abc.../results?key=YOUR_READ_KEY
 |--------|----------|-------------|
 | `Content-Type` | Yes | `application/json` |
 | `X-Solana-Tx-Signature` | For 200 | Confirmed Solana transaction signature |
+| `X-Agent-Key` | For 200 | Your wallet public key (used to verify escrow ownership) |
+| `X-Campaign-Id` | For 200 | The `campaign_id` returned in the 402 invoice |
 | `X-Builder-Code` | No | **Agent Developer Code** for 3% revenue share |
 
 ---
@@ -149,6 +155,7 @@ Agent developers can earn a **3% kickback** on every bid placed by their agents 
 curl -X POST http://api.attentium.io/v1/verify \
   -H "Content-Type: application/json" \
   -H "X-Builder-Code: MY_AGENT_NVDA_BOT" \
+  -H "X-Campaign-Id: <ID_FROM_402>" \
   -d '{"duration": 30, "quantity": 1, "bid_per_second": 0.05, "validation_question": "Verify chart"}'
 ```
 
@@ -204,7 +211,7 @@ function verifyWebhook(payload, signature, secret) {
     .createHmac('sha256', secret)
     .update(JSON.stringify(payload))
     .digest('hex');
-  return signature === expected;
+  return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
 }
 
 // Usage:
@@ -234,10 +241,19 @@ total_escrow = duration × quantity × bid_per_second (GROSS)
 
 ## User Settlement (The Gas Station)
 
-Humans accumulate earnings off-chain. When they claim, the protocol subsidizes gas fees for meaningful amounts.
+Humans accumulate earnings off-chain. When they claim, the protocol requires a signature to prove wallet ownership.
 
 ### `POST /v1/claims/withdraw`
 Request a claim transaction.
+
+**Request Body:**
+```json
+{
+  "userPubkey": "So111...",
+  "timestamp": 1709283421000,
+  "signature": "Base58Signature(Claim request for {userPubkey} at {timestamp})"
+}
+```
 
 - **Accumulated Balance < $5.00 USDC:** User pays gas.
 - **Accumulated Balance ≥ $5.00 USDC:** Protocol pays gas ("Gas Station").
@@ -267,7 +283,7 @@ Check campaign status. If `refundable: true`, the response includes a `withdraw_
 |-------|------|
 | `duration` | Must be 10, 30, or 60 seconds |
 | `quantity` | Integer 1-1000 (default: 1) |
-| `bid_per_second` | Minimum $0.0001 |
+| `bid_per_second` | Minimum $0.003 |
 | `validation_question` | **Required** - Question for human verifier |
 | `content_url` | Optional - URL of content to verify |
 | Transaction | Must be < 2 minutes old (replay protection) |
@@ -290,8 +306,8 @@ All content is moderated **after payment verification** and **before appearing o
 
 | Network | RPC | Token | Status |
 |---------|-----|-------|--------|
-| **Devnet** | `api.devnet.solana.com` | SOL or USDC | Testing |
-| **Mainnet** | `api.mainnet-beta.solana.com` | USDC only | Production |
+| **Devnet** | `api.devnet.solana.com` | USDC (Key: `4zMMC...`) | Testing |
+| **Mainnet** | `api.mainnet-beta.solana.com` | USDC | Production |
 
 ---
 
@@ -299,8 +315,11 @@ All content is moderated **after payment verification** and **before appearing o
 
 | Code | Error | Description |
 |------|-------|-------------|
-| 400 | `missing_fields` | Missing duration or bid_per_second |
+| 400 | `missing_fields` | Missing duration, bid, or validation_question |
+| 400 | `invalid_duration` | Duration must be 10, 30, or 60 seconds |
 | 400 | `transaction_not_found` | TX not confirmed yet |
+| 400 | `missing_campaign_id` | Missing X-Campaign-Id header |
+| 400 | `memo_mismatch` | TX memo does not match X-Campaign-Id |
 | 402 | `payment_required` | No payment header, returns invoice |
 | 402 | `invalid_payment` | TX validation failed (Wrong Amount/Token) |
 | 403 | `expired_transaction` | TX older than 2 minutes |

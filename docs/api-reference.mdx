@@ -9,9 +9,52 @@ description: "Endpoints for the Attentium x402 Protocol"
 
 ---
 
+## Market Data (Public)
+
+Public endpoints for viewing market status and pricing.
+
+### GET /v1/oracle/quote
+
+Returns the "Oracle" clearing price for agents. This is the recommended gross bid to ensure fulfillment.
+
+<ParamField query="duration" type="integer" required>
+  Length of attention needed in seconds (10, 30, 60).
+</ParamField>
+
+```json
+{
+  "duration": 30,
+  "gross_bid_cents": 2,
+  "market_depth": 15,
+  "timestamp": "2024-01-01T12:00:00Z"
+}
+```
+
+### GET /v1/orderbook
+
+Returns the live order book of active campaigns.
+
+```json
+{
+  "count": 5,
+  "orders": [
+    {
+      "tx_hash": "...",
+      "bid_per_second": 0.003,
+      "duration": 30,
+      "quantity": 100
+    }
+  ]
+}
+```
+
+---
+
 ## Create Campaign
 
 Initialize a verification request. Returns a serialized escrow deposit transaction (402) or campaign keys (200).
+
+### POST /v1/verify
 
 <ParamField body="duration" type="integer" required>
   Length of attention needed in seconds (10, 30, 60).
@@ -25,11 +68,19 @@ Initialize a verification request. Returns a serialized escrow deposit transacti
   USDC amount per second offered. **Minimum: 0.003**.
 </ParamField>
 
+<ParamField body="validation_question" type="string" required>
+  The question verifiers must answer (e.g., "Is this a cat?").
+</ParamField>
+
+<ParamField body="content_url" type="string">
+  URL of the content to verify.
+</ParamField>
+
 <ParamField body="callback_url" type="string">
   Webhook URL to receive results.
 </ParamField>
 
-### Required Headers (with payment)
+### Required Headers (Step 2 - with payment)
 
 <ParamField header="X-Solana-Tx-Signature" type="string" required>
   The Solana transaction signature of your escrow deposit.
@@ -37,6 +88,10 @@ Initialize a verification request. Returns a serialized escrow deposit transacti
 
 <ParamField header="X-Agent-Key" type="string" required>
   Your wallet public key (used to derive escrow PDA).
+</ParamField>
+
+<ParamField header="X-Campaign-Id" type="string" required>
+  The `campaign_id` returned in the 402 response. **Critical**: Transaction memo must match this ID.
 </ParamField>
 
 ---
@@ -50,13 +105,10 @@ The 402 response includes a **pre-built serialized transaction** for the `deposi
 ```json
 {
   "error": "payment_required",
-  "message": "Escrow deposit required: 7.50 USDC",
-  "invoice": {
-    "amount": 7.50,
-    "token": "USDC",
-    "transaction": "<base64_serialized_deposit_escrow_tx>",
-    "escrow_pda": "<your_escrow_address>"
-  }
+  "message": "Sign the attached transaction to fund escrow.",
+  "transaction": "<base64_serialized_deposit_escrow_tx>",
+  "amount": 7.50,
+  "campaign_id": "ab12..." // MUST be sent back as X-Campaign-Id header
 }
 ```
 
@@ -67,7 +119,7 @@ import base64
 from solana.transaction import Transaction
 
 # Decode the pre-built transaction
-serialized_tx = base64.b64decode(invoice["invoice"]["transaction"])
+serialized_tx = base64.b64decode(invoice["transaction"])
 tx = Transaction.from_bytes(serialized_tx)
 
 # Sign with your agent keypair
@@ -76,41 +128,12 @@ tx.sign(agent_keypair)
 # Submit to Solana
 result = client.send_transaction(tx)
 tx_signature = str(result.value)
+
+# Step 2: Call Verify again with headers
+# Headers: X-Solana-Tx-Signature, X-Agent-Key, X-Campaign-Id
 ```
 
 > **Non-custodial**: Funds go to an escrow PDA, not a wallet. You retain control of unspent funds.
-
----
-
-### Example Request (with Payment)
-
-```bash
-# Step 1: Get serialized escrow transaction
-curl -X POST https://api.attentium.ai/v1/verify \
-  -H "Content-Type: application/json" \
-  -d '{
-    "duration": 30,
-    "quantity": 5,
-    "bid_per_second": 0.05,
-    "validation_question": "Is this a cat?",
-    "content_url": "https://example.com/image.png"
-  }'
-# Returns 402 with serialized transaction
-
-# Step 2: Sign tx, submit to Solana, then verify
-curl -X POST https://api.attentium.ai/v1/verify \
-  -H "Content-Type: application/json" \
-  -H "X-Solana-Tx-Signature: YOUR_ESCROW_TX_SIGNATURE" \
-  -H "X-Agent-Key: YOUR_WALLET_PUBKEY" \
-  -d '{
-    "duration": 30,
-    "quantity": 5,
-    "bid_per_second": 0.05,
-    "validation_question": "Is this a cat?",
-    "content_url": "https://example.com/image.png"
-  }'
-# Returns 200 with campaign keys
-```
 
 ---
 
@@ -118,21 +141,17 @@ curl -X POST https://api.attentium.ai/v1/verify \
 
 Poll for campaign completion status.
 
+### GET /v1/campaigns/:tx_hash/results
+
 <ParamField query="key" type="string" required>
-  The read_key returned during creation.
+  The `read_key` returned during creation.
 </ParamField>
-
-### Example Request
-
-```bash
-curl "https://api.attentium.ai/v1/campaigns/0x123abc/results?key=YOUR_READ_KEY"
-```
 
 ---
 
 ## Claims API
 
-Human workers claim their accumulated USDC earnings via the claims endpoints.
+Human workers claim their accumulated USDC earnings.
 
 ### POST /v1/claims/withdraw
 
@@ -140,6 +159,14 @@ Creates a claim intent and returns an unsigned transaction for the user to sign.
 
 <ParamField body="userPubkey" type="string" required>
   The user's Solana wallet address.
+</ParamField>
+
+<ParamField body="timestamp" type="integer" required>
+  Current timestamp (ms). Must be within 5 minutes of server time.
+</ParamField>
+
+<ParamField body="signature" type="string" required>
+  **Security Signature**. Sign the message: `Claim request for {userPubkey} at {timestamp}`.
 </ParamField>
 
 #### Response
