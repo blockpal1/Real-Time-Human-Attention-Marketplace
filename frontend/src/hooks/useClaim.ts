@@ -117,50 +117,26 @@ export const useClaim = (userPubkey: string) => {
 
             setClaimState('signing');
 
-            // 5. Sign based on wallet type
-            let signResult;
+
+            // 5. Sign using Privy Hook for ALL wallets (safest for compatibility)
+            // We conditionally add the 'chain' parameter for embedded wallets only.
+
+            const signOptions: any = {
+                transaction: tx.serialize({ verifySignatures: false, requireAllSignatures: false }),
+                wallet: activeWallet as any
+            };
 
             if (isEmbeddedTarget) {
-                // Use Privy hook with explicit chain for Embedded Wallets
-                console.log("[Claim] Using Privy signTransaction hook (Embedded Flow)...");
-                signResult = await privySignTransaction({
-                    transaction: tx.serialize({ verifySignatures: false, requireAllSignatures: false }),
-                    wallet: activeWallet as any,
-                    chain: 'solana:devnet' as any
-                });
+                console.log("[Claim] Using Privy Hook (Embedded Flow) - Enforcing solana:devnet");
+                signOptions.chain = 'solana:devnet';
             } else {
-                // Use standard wallet signing for External Wallets (Phantom, Solflare, etc.)
-                console.log("[Claim] Using standard wallet signing (External Flow)...");
-                // For external wallets, we can use the hook OR direct method, but hook is safer if they are in session
-                // However, Privy hook often forces its own UI or logic. 
-                // Let's try the hook without the chain param (default) or rely on standard adapter
-
-                // If the wallet object has standard adapter methods, usage might vary.
-                // But since we are using useWallets() from Privy, these are Privy implementations of Wallet Adapters.
-                // Safest bet: Use the same hook but WITHOUT the chain param override if it causes issues,
-                // OR use the hook exactly as is.
-
-                // User reported: "clicking the button also opens up the privy transaction, not my phantom wallet"
-                // This implies the hook `privySignTransaction` INTERCEPTS the flow.
-
-                // Let's try relying on the wallet object's native signTransaction if available (standard adapter)
-                // BUT Privy wraps them. 
-
-                // Correct approach for external wallets via Privy: 
-                // Just call `activeWallet.signTransaction(tx)` if it exists?
-                // Privy docs say `useWallets` returns objects that look like adapters.
-
-                if (typeof (activeWallet as any).signTransaction === 'function') {
-                    const signedTx = await (activeWallet as any).signTransaction(tx);
-                    signResult = { signedTransaction: signedTx.serialize() };
-                } else {
-                    // Fallback to hook
-                    signResult = await privySignTransaction({
-                        transaction: tx.serialize({ verifySignatures: false, requireAllSignatures: false }),
-                        wallet: activeWallet as any
-                    });
-                }
+                console.log("[Claim] Using Privy Hook (External Flow) - Delegating to wallet");
+                // For external wallets, we let the wallet adapter determine the network/chain
+                // or use the default connection. 
             }
+
+            // This hook handles the serialization intricacies for both embedded and external wallets
+            const signResult = await privySignTransaction(signOptions);
 
             // Check if result has signedTransaction or signature property
             const signedBuffer = (signResult as any).signedTransaction || (signResult as any).signature;
