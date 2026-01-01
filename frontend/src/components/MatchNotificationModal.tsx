@@ -30,7 +30,7 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
     const [sessionTime, setSessionTime] = useState(match.duration);
     const [questionTime, setQuestionTime] = useState(QUESTION_GRACE_PERIOD);
 
-    const [failedVerification, setFailedVerification] = useState(false);
+    const [failedVerification, _setFailedVerification] = useState(false); // Setter unused while liveness timer is disabled
     const [answer, setAnswer] = useState('');
     const [initialDuration] = useState(match.duration); // Store initial duration
     const [rejectionMessage, setRejectionMessage] = useState('');

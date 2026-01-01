@@ -21,9 +21,15 @@ interface CampaignState {
     txHash: string | null;
 }
 
+import { useSignTransaction } from '@privy-io/react-auth/solana';
+
 export const useCampaign = () => {
     const { user } = usePrivy();
     const { wallets } = useWallets();
+
+    // CRITICAL: Initialize hook at top level
+    const { signTransaction: privySignTransaction } = useSignTransaction();
+
     const [campaignState, setCampaignState] = useState<CampaignState>({
         status: 'idle',
         error: null,
@@ -52,11 +58,6 @@ export const useCampaign = () => {
             let campaignIdFromServer: string | null = null;
 
             try {
-                // We use the existing verify endpoint.
-                // Note: api.verifyCampaign needs to be updated or we use a raw fetch here if it doesn't support returning the error response body
-                // Let's assume api.verify throws an error with the response data if 402
-                // Actually, for this specific "Campaign Manager" flow, we might want a dedicated helper or just fetch directly here to handle the 402 gracefully.
-
                 const headers: any = {
                     'Content-Type': 'application/json',
                     'X-Admin-Key': import.meta.env.VITE_ADMIN_SECRET || ''
@@ -113,7 +114,7 @@ export const useCampaign = () => {
 
             // 4. Refresh blockhash to prevent stale blockhash errors
             const connection = new Connection(RPC_URL);
-            const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
+            const { blockhash } = await connection.getLatestBlockhash();
             transaction.recentBlockhash = blockhash;
 
             // 5. Sign Transaction
@@ -140,11 +141,13 @@ export const useCampaign = () => {
                 return null;
             };
 
-            if (embeddedWallet) {
-                // Embedded Privy wallet
-                const provider = await (embeddedWallet as any).getProvider();
-                if (!provider) throw new Error("Failed to get embedded wallet provider");
-                signedTx = await provider.signTransaction(transaction);
+            if (embeddedWallet?.walletClientType === 'privy') {
+                // Branch A: Embedded Privy wallet
+                const { signedTransaction } = await privySignTransaction({
+                    transaction: transaction.serialize(),
+                    wallet: embeddedWallet as any
+                });
+                signedTx = Transaction.from(signedTransaction);
             } else {
                 const externalProvider = getExternalProvider();
                 if (externalProvider) {

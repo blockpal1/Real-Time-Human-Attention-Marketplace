@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { getStatus } from '../controllers/StatusController';
 import { createChallenge } from '../controllers/AttestationController';
 import { startSession, getActiveSessions, cancelSession, updateSession, acceptHighestBid } from '../controllers/UserController';
-import { getActiveBids } from '../controllers/AgentController';
+import { getActiveBids, getAgentCampaigns } from '../controllers/AgentController';
 import { completeMatch, submitValidationResult, dismissMatch } from '../controllers/MatchController';
 import { authenticateAdmin } from '../middleware/adminAuth';
 import {
@@ -27,6 +27,7 @@ router.post('/attestation/challenge', createChallenge);
 
 // Getter Routes
 router.get('/agents/bids', getActiveBids);
+router.get('/agents/:pubkey/campaigns', getAgentCampaigns);
 router.get('/users/sessions', getActiveSessions);
 
 // Human Session (Ask) Management

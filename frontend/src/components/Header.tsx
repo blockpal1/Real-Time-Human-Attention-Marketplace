@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { usePrivy, useWallets } from '@privy-io/react-auth';
+import { usePrivy, useConnectWallet } from '@privy-io/react-auth';
+import { useWallets } from '@privy-io/react-auth/solana';
 import { Home, Megaphone, Hammer, ShieldAlert } from 'lucide-react';
 import { LoginButton } from './LoginButton';
 import { EarningsDashboard } from './EarningsDashboard';
@@ -16,6 +17,7 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({ theme, setTheme, userPubkey }) => {
     const { authenticated, user, logout } = usePrivy();
     const { wallets } = useWallets();
+    const { connectWallet } = useConnectWallet();
     const [showEarnings, setShowEarnings] = useState(false);
     const [showEarningsDropdown, setShowEarningsDropdown] = useState(false);
     const [showSignalDropdown, setShowSignalDropdown] = useState(false);
@@ -29,11 +31,78 @@ export const Header: React.FC<HeaderProps> = ({ theme, setTheme, userPubkey }) =
     const [activePath, setActivePath] = useState(window.location.hash || '#');
 
     // Get wallet address from Privy
-    const embeddedWallet = wallets.find((wallet) => wallet.walletClientType === 'privy');
+    const embeddedWallet = wallets.find((wallet) => (wallet as any).walletClientType === 'privy');
     const walletAddress = embeddedWallet?.address || user?.wallet?.address;
 
     // Claim hook for USDC withdrawals
-    const { claiming, claimEarnings, claimState, claimResult, getStatusText, resetClaimState } = useClaim(walletAddress || '');
+    const { claiming, claimEarnings, claimState, claimResult, getStatusText: getClaimStatusText, resetClaimState } = useClaim(walletAddress || '');
+
+    // -------------------------------------------------------------------------
+    // Connect & Claim Logic
+    // -------------------------------------------------------------------------
+
+    // Determine button state and handlers
+    const getClaimButtonConfig = () => {
+        // Check if we have an embedded wallet in linkedAccounts
+        const embeddedAccount = user?.linkedAccounts.find(
+            (a) => a.type === 'wallet' &&
+                (a as any).walletClientType === 'privy' &&
+                (a as any).chainType === 'solana'
+        );
+
+        const embeddedAddress = (embeddedAccount as any)?.address;
+
+        // Check if that wallet is in active session
+        const sessionWallet = wallets.find(w => w.address === embeddedAddress);
+
+        console.log('[Header] Button Config Debug:', {
+            embeddedAddress,
+            sessionWalletExists: !!sessionWallet,
+            totalWallets: wallets.length,
+            walletAddresses: wallets.map(w => w.address),
+            linkedAccounts: user?.linkedAccounts?.map(a => ({ type: a.type, clientType: (a as any).walletClientType }))
+        });
+
+        if (embeddedAddress && !sessionWallet) {
+            // Embedded exists but not connected
+            console.log('[Header] Showing "Connect to Claim"');
+            return {
+                text: 'Connect to Claim',
+                handler: handleConnectEmbedded,
+                isConnecting: true
+            };
+        } else {
+            // Either external wallet OR embedded wallet already connected
+            console.log('[Header] Showing claim status:', getClaimStatusText());
+            return {
+                text: getClaimStatusText(),
+                handler: handleClaim,
+                isConnecting: false
+            };
+        }
+    };
+
+    const handleConnectEmbedded = async () => {
+        try {
+            console.log('[Header] Connecting embedded wallet to session...');
+            await connectWallet({
+                walletChainType: 'solana-only',
+                connectEmbedded: true
+            } as any);
+            console.log('[Header] Embedded wallet connected. Button should now show "Claim to Wallet"');
+        } catch (err) {
+            console.error('[Header] Failed to connect embedded wallet:', err);
+        }
+    };
+
+    const handleClaim = async () => {
+        if (claimState === 'confirmed' || claimState === 'failed') {
+            resetClaimState();
+        }
+
+        console.log('[Header] Initiating claim...');
+        claimEarnings(() => loadEarnings());
+    };
 
     // Listen for hash changes to update active path
     useEffect(() => {
@@ -232,6 +301,37 @@ export const Header: React.FC<HeaderProps> = ({ theme, setTheme, userPubkey }) =
                                             </div>
                                         </div>
 
+                                        {/* Gas Station Status - Only for Embedded Wallet Users */}
+                                        {/* Gas Station Status - Only for Embedded Wallet Users */}
+                                        {user?.linkedAccounts.some(
+                                            (a) => a.type === 'wallet' &&
+                                                (a as any).walletClientType === 'privy' &&
+                                                (a as any).chainType === 'solana' &&
+                                                (a as any).address === walletAddress // CRITICAL: Only match ACTIVE wallet
+                                        ) && pendingEarnings > 0 && (
+                                                <div className={`mb-4 p-2 rounded-lg text-xs ${pendingEarnings >= 5.0
+                                                    ? 'bg-green-500/10 border border-green-500/30 text-green-400'
+                                                    : 'bg-amber-500/10 border border-amber-500/30 text-amber-400'
+                                                    }`}>
+                                                    {pendingEarnings >= 5.0 ? (
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-sm">✓</span>
+                                                            <span className="font-semibold">Platform pays gas fees</span>
+                                                        </div>
+                                                    ) : (
+                                                        <div>
+                                                            <div className="flex items-center gap-2 mb-1">
+                                                                <span className="text-amber-500 font-bold">⚡</span>
+                                                                <span className="font-semibold">You pay gas (~0.001 SOL)</span>
+                                                            </div>
+                                                            <div className="text-[10px] text-gray-400 pl-5">
+                                                                Earn <span className="text-white font-mono">${(5.0 - pendingEarnings).toFixed(2)}</span> more for free gas
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+
                                         {/* Claim Result Toast */}
                                         {claimResult && (
                                             <div className={`mb-3 p-3 rounded-lg text-xs ${claimResult.success
@@ -264,10 +364,8 @@ export const Header: React.FC<HeaderProps> = ({ theme, setTheme, userPubkey }) =
 
                                         <button
                                             onClick={() => {
-                                                if (claimState === 'confirmed' || claimState === 'failed') {
-                                                    resetClaimState();
-                                                }
-                                                claimEarnings(() => loadEarnings());
+                                                const config = getClaimButtonConfig();
+                                                config.handler();
                                             }}
                                             disabled={claiming || (pendingEarnings === 0 && claimState === 'idle')}
                                             className={`w-full py-2 rounded-lg font-bold text-xs uppercase tracking-wider transition-all ${claimState === 'confirmed'
@@ -282,7 +380,7 @@ export const Header: React.FC<HeaderProps> = ({ theme, setTheme, userPubkey }) =
                                             {claiming && (
                                                 <span className="inline-block w-3 h-3 mr-2 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                                             )}
-                                            {getStatusText()}
+                                            {getClaimButtonConfig().text}
                                         </button>
                                     </div>
                                 </div>

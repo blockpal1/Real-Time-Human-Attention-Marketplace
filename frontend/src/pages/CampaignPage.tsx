@@ -112,7 +112,7 @@ export const CampaignPage: React.FC = () => {
                                 <h2 className="text-2xl font-bold text-white mb-2">Campaign Analytics</h2>
                                 <p className="text-gray-400 text-sm">Real-time performance metrics for your active campaigns.</p>
                             </div>
-                            <CampaignAnalytics agentPubkey="mock-agent-pubkey" />
+                            <CampaignAnalytics agentPubkey={displayAddress || ""} />
                         </>
                     )}
                 </div>

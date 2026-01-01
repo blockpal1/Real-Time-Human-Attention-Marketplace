@@ -12,13 +12,21 @@ export const CampaignAnalytics: React.FC<CampaignAnalyticsProps> = ({ agentPubke
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
+        if (!agentPubkey) {
+            console.log('[CampaignAnalytics] No agentPubkey provided yet...');
+            setLoading(false);
+            return;
+        }
+        console.log('[CampaignAnalytics] Loading campaigns for:', agentPubkey);
         loadCampaigns();
     }, [agentPubkey]);
 
     const loadCampaigns = async () => {
+        if (!agentPubkey) return;
         setLoading(true);
         try {
             const data = await api.getAgentCampaigns(agentPubkey);
+            console.log('[CampaignAnalytics] Fetched campaigns:', data);
             setCampaigns(data);
         } catch (error) {
             console.error('Failed to load campaigns:', error);

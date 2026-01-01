@@ -1,5 +1,4 @@
 import { useState, useCallback } from 'react';
-import { api } from '../services/api'; // Assumption: api service exists and has generic fetchers or I need to extend it
 import { Connection, Transaction } from '@solana/web3.js';
 
 // If api service doesn't have a generic fetcher, I might need to implement one or use fetch directly.
@@ -15,10 +14,15 @@ export interface BuilderData {
     lifetimeEarnings: number;
 }
 
+import { useSignTransaction } from '@privy-io/react-auth/solana';
+
 export const useBuilderBalance = () => {
     const [builderData, setBuilderData] = useState<BuilderData | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    // CRITICAL: Initialize hook at top level
+    const { signTransaction: privySignTransaction } = useSignTransaction();
 
     const fetchBalance = useCallback(async (code: string) => {
         setLoading(true);
@@ -64,7 +68,18 @@ export const useBuilderBalance = () => {
             const tx = Transaction.from(txBuffer);
 
             console.log('[useBuilderBalance] Requesting signature...');
-            const signedTx = await wallet.signTransaction(tx);
+
+            let signedTx: Transaction;
+            if (wallet.walletClientType === 'privy') {
+                const { signedTransaction } = await privySignTransaction({
+                    transaction: tx.serialize(),
+                    wallet: wallet
+                });
+                signedTx = Transaction.from(signedTransaction);
+            } else {
+                signedTx = await wallet.signTransaction(tx);
+            }
+
             console.log('[useBuilderBalance] Signed. Sending to network...');
 
             // 3. Send via connection
@@ -86,7 +101,7 @@ export const useBuilderBalance = () => {
         } finally {
             setLoading(false);
         }
-    }, [builderData, fetchBalance]);
+    }, [builderData, fetchBalance, privySignTransaction]);
 
     const updateWallet = useCallback(async (code: string, oldWalletAdapter: any, newWalletPubkey: string) => {
         setLoading(true);
@@ -106,7 +121,17 @@ export const useBuilderBalance = () => {
             // 2. Sign
             const txBuffer = Buffer.from(transaction, 'base64');
             const tx = Transaction.from(txBuffer);
-            const signedTx = await oldWalletAdapter.signTransaction(tx);
+
+            let signedTx: Transaction;
+            if (oldWalletAdapter.walletClientType === 'privy') {
+                const { signedTransaction } = await privySignTransaction({
+                    transaction: tx.serialize(),
+                    wallet: oldWalletAdapter
+                });
+                signedTx = Transaction.from(signedTransaction);
+            } else {
+                signedTx = await oldWalletAdapter.signTransaction(tx);
+            }
 
             // 3. Send
             const connection = new Connection('https://api.devnet.solana.com', 'confirmed');

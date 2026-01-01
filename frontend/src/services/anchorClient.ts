@@ -1,13 +1,20 @@
-import { Program, AnchorProvider, Idl, BN, web3, utils } from '@coral-xyz/anchor';
-import { Connection, PublicKey, Transaction } from '@solana/web3.js';
+import { Program, AnchorProvider, Idl, BN, utils } from '@coral-xyz/anchor';
+import { Connection, PublicKey } from '@solana/web3.js';
 import { Buffer } from 'buffer';
+
+// Extend Window interface for Buffer polyfill
+declare global {
+    interface Window {
+        Buffer: typeof Buffer;
+    }
+}
 
 // Explicitly polyfill Buffer for browser environment if needed
 if (typeof window !== 'undefined') {
     window.Buffer = Buffer;
 }
 
-// TODO: Import the actual IDL JSON
+// @ts-ignore - IDL JSON import without type declarations
 import idl from '../../../../specs/idl.json';
 
 const PROGRAM_ID = new PublicKey("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS"); // Devnet/Localnet ID
@@ -72,14 +79,16 @@ export class AnchorClient {
     async fetchMarketConfig(): Promise<any> {
         if (!this.program) throw new Error("Program not initialized");
         const pda = await this.getMarketConfigPDA();
-        return await this.program.account.marketConfig.fetch(pda);
+        // Use bracket notation to access account since IDL types are loose
+        return await (this.program.account as any)['marketConfig'].fetch(pda);
     }
 
     async fetchEscrowAccount(agent: PublicKey): Promise<any> {
         if (!this.program) throw new Error("Program not initialized");
         const pda = await this.getEscrowPDA(agent);
         try {
-            return await this.program.account.escrowAccount.fetch(pda);
+            // Use bracket notation to access account since IDL types are loose
+            return await (this.program.account as any)['escrowAccount'].fetch(pda);
         } catch (e) {
             console.warn("Escrow account not found for agent", agent.toString());
             return null;

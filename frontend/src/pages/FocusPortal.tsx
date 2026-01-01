@@ -9,13 +9,20 @@ interface FocusPortalProps {
 }
 
 export default function FocusPortal({ initialMatch, initialToken }: FocusPortalProps) {
-    // Logic
-    const { videoRef, isAttentive, permissionGranted, error } = useAttentionAI();
+    // State
     const [state, setState] = useState<PortalState>(initialMatch ? 'ACTIVE' : 'LOBBY');
     const [statusText, setStatusText] = useState("Initializing...");
     const [match, setMatch] = useState<any>(initialMatch || null);
     const [ws, setWs] = useState<WebSocket | null>(null);
     const [balance, setBalance] = useState(0.0000);
+    // Use active state to control when attention tracking runs
+    const isTrackingActive = state === 'ACTIVE';
+
+    // Logic - useAttentionAI requires an `active` boolean parameter
+    const { videoRef, isAttentive, status } = useAttentionAI(isTrackingActive);
+    const permissionGranted = status === 'ready';
+    const error = status === 'error' ? 'Failed to initialize attention tracking' : null;
+
     // Web 2.5 State
     const [countdown, setCountdown] = useState(30);
     const [sessionToken] = useState<string | null>(initialToken || null);

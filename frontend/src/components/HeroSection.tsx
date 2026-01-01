@@ -1,52 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 
-// --- Utility for class merging ---
-import { clsx, type ClassValue } from 'clsx';
-import { twMerge } from 'tailwind-merge';
-
-function cn(...inputs: ClassValue[]) {
-    return twMerge(clsx(inputs));
-}
-
-// --- 1. Custom Logo Component (Recreated from Image) ---
-const AttentiumLogo = ({ className }: { className?: string }) => (
-    <svg
-        viewBox="0 0 100 100"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-        className={cn("w-12 h-12", className)}
-    >
-        {/* Top Eyelid (White) */}
-        <path
-            d="M10 50 C 10 20, 90 20, 90 50"
-            stroke="white"
-            strokeWidth="12"
-            strokeLinecap="round"
-            className="drop-shadow-[0_0_10px_rgba(255,255,255,0.5)]"
-        />
-
-        {/* Pupil (White) */}
-        <circle cx="50" cy="50" r="12" fill="white" />
-
-        {/* Bottom Circuit Maze (Electric Blue) */}
-        {/* Abstract representation of the circuit maze pattern in the logo */}
-        <path
-            d="M15 55 C 15 80, 85 80, 85 55"
-            stroke="#0EA5E9"
-            strokeWidth="10"
-            strokeLinecap="round"
-            strokeDasharray="10 4 20 4"
-            className="drop-shadow-[0_0_15px_#0EA5E9]"
-        />
-        <path
-            d="M20 65 L 30 75 M 45 80 L 45 90 M 70 70 L 80 80"
-            stroke="#0EA5E9"
-            strokeWidth="4"
-            strokeLinecap="square"
-        />
-    </svg>
-);
 
 // --- 2. Background Animation Components ---
 

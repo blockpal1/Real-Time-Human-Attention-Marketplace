@@ -38,31 +38,6 @@ const FooterColumn: React.FC<FooterColumnProps> = ({ title, children }) => (
     </div>
 );
 
-// Attentium Logo for Footer
-const AttentiumLogoSmall = () => (
-    <svg
-        viewBox="0 0 100 100"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-        className="w-8 h-8"
-    >
-        <path
-            d="M10 50 C 10 20, 90 20, 90 50"
-            stroke="white"
-            strokeWidth="12"
-            strokeLinecap="round"
-        />
-        <circle cx="50" cy="50" r="12" fill="white" />
-        <path
-            d="M15 55 C 15 80, 85 80, 85 55"
-            stroke="#0EA5E9"
-            strokeWidth="10"
-            strokeLinecap="round"
-            strokeDasharray="10 4 20 4"
-        />
-    </svg>
-);
-
 /**
  * LandingFooter - Comprehensive 4-column footer for landing page
  */
