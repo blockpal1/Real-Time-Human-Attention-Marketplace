@@ -9,7 +9,6 @@ import { MatchNotificationModal } from './components/MatchNotificationModal';
 import { HeroSection, ManifestoSection, HowItWorks, PrivacyGuarantee, FinalCTA, LandingFooter } from './components';
 import { MobileNav } from './components/MobileNav';
 import { AdminDashboard } from './pages/AdminDashboard';
-import { CampaignPage } from './pages/CampaignPage';
 import { HowItWorksPage } from './pages/HowItWorksPage';
 import { PrivacyPage } from './pages/PrivacyPage';
 import { BuilderDashboard } from './pages/BuilderDashboard';
@@ -33,7 +32,6 @@ function App() {
     const [userPubkey, setUserPubkey] = React.useState<string | null>(null);
     const [showLanding, setShowLanding] = React.useState(true);
     const [showAdmin, setShowAdmin] = React.useState(false);
-    const [showCampaigns, setShowCampaigns] = React.useState(false);
     const [showHowItWorks, setShowHowItWorks] = React.useState(false);
     const [showPrivacy, setShowPrivacy] = React.useState(false);
     const [showBuilder, setShowBuilder] = React.useState(false);
@@ -44,7 +42,7 @@ function App() {
         const handleHashChange = () => {
             const hash = window.location.hash;
             setShowAdmin(hash === '#admin');
-            setShowCampaigns(hash === '#campaigns' || hash === '#analytics'); // Analytics also lives in CampaignPage now
+            // Analytics logic moved to Admin or kept internal if needed, removed #campaigns public route
             setShowHowItWorks(hash === '#how-it-works' || hash === '#faq');
             setShowPrivacy(hash === '#privacy');
             setShowBuilder(hash === '#builders');
@@ -156,8 +154,7 @@ function App() {
             {/* Admin Dashboard */}
             {showAdmin && <AdminDashboard />}
 
-            {/* Campaign Manager Page */}
-            {showCampaigns && <CampaignPage />}
+
 
             {/* How It Works Page */}
             {showHowItWorks && (
@@ -177,7 +174,7 @@ function App() {
             {showBuilder && <BuilderDashboard />}
 
             {/* Main App Dashboard */}
-            {!showLanding && !showAdmin && !showCampaigns && !showHowItWorks && !showPrivacy && !showBuilder && (
+            {!showLanding && !showAdmin && !showHowItWorks && !showPrivacy && !showBuilder && (
                 <div className={`flex flex-col h-screen text-main bg-dark overflow-hidden ${theme}`}>
                     <Header theme={theme} setTheme={setTheme} userPubkey={userPubkey} />
 

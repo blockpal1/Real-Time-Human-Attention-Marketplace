@@ -61,6 +61,9 @@ export const TermsOfServiceModal: React.FC<TermsOfServiceModalProps> = ({ isOpen
                                 <li>Publishing or maintaining supporting software and documentation</li>
                             </ul>
                             <p className="mt-2">All economic activity, reward logic, and settlement occur exclusively on-chain via smart contracts.</p>
+                            <p className="mt-2 font-bold text-[#0EA5E9]">
+                                The Dashboard is for informational purposes only. In the event of a discrepancy between the Dashboard and the Solana Blockchain, the Blockchain record is final.
+                            </p>
                         </section>
 
                         {/* 2. Season Zero / Beta Disclaimer */}

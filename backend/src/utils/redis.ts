@@ -360,6 +360,16 @@ class RedisClient {
         await this.client.sRem('rejected_orders', txHash);
     }
 
+    // ===== Agent Campaign Indexing =====
+
+    async addAgentCampaign(agentKey: string, txHash: string): Promise<void> {
+        await this.client.sAdd(`agent:${agentKey}:campaigns`, txHash);
+    }
+
+    async getAgentCampaigns(agentKey: string): Promise<string[]> {
+        return await this.client.sMembers(`agent:${agentKey}:campaigns`);
+    }
+
     // ===== Match History Stream =====
 
     async addMatchToStream(matchData: object): Promise<string> {

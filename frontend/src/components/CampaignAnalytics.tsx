@@ -3,31 +3,57 @@ import { api } from '../services/api';
 
 interface CampaignAnalyticsProps {
     agentPubkey: string;
+    isAdmin?: boolean;
 }
 
-export const CampaignAnalytics: React.FC<CampaignAnalyticsProps> = ({ agentPubkey }) => {
+export const CampaignAnalytics: React.FC<CampaignAnalyticsProps> = ({ agentPubkey, isAdmin }) => {
     const [campaigns, setCampaigns] = useState<any[]>([]);
     const [selectedCampaign, setSelectedCampaign] = useState<any>(null);
     const [responses, setResponses] = useState<any>(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        if (!agentPubkey) {
+        if (!agentPubkey && !isAdmin) {
             console.log('[CampaignAnalytics] No agentPubkey provided yet...');
             setLoading(false);
             return;
         }
-        console.log('[CampaignAnalytics] Loading campaigns for:', agentPubkey);
+        console.log('[CampaignAnalytics] Loading campaigns for:', agentPubkey, 'Admin:', isAdmin);
         loadCampaigns();
-    }, [agentPubkey]);
+    }, [agentPubkey, isAdmin]);
 
     const loadCampaigns = async () => {
-        if (!agentPubkey) return;
         setLoading(true);
         try {
-            const data = await api.getAgentCampaigns(agentPubkey);
-            console.log('[CampaignAnalytics] Fetched campaigns:', data);
-            setCampaigns(data);
+            const requests = [];
+
+            // 1. Fetch User Campaigns
+            if (agentPubkey) {
+                requests.push(api.getAgentCampaigns(agentPubkey).catch(e => {
+                    console.warn('Failed to fetch user campaigns:', e);
+                    return [];
+                }));
+            }
+
+            // 2. Fetch Admin Virtual Campaigns (if Admin)
+            if (isAdmin) {
+                requests.push(api.getAgentCampaigns('admin_virtual').catch(e => {
+                    console.warn('Failed to fetch admin campaigns:', e);
+                    return [];
+                }));
+            }
+
+            const results = await Promise.all(requests);
+
+            // Merge and deduplicate by bidId
+            const allCampaigns = results.flat();
+            const uniqueCampaigns = Array.from(new Map(allCampaigns.map(c => [c.bidId, c])).values());
+
+            // Sort by date desc
+            uniqueCampaigns.sort((a: any, b: any) => b.date - a.date);
+
+            console.log('[CampaignAnalytics] Fetched campaigns:', uniqueCampaigns);
+            setCampaigns(uniqueCampaigns);
         } catch (error) {
             console.error('Failed to load campaigns:', error);
         } finally {

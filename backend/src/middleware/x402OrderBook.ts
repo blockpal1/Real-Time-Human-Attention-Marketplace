@@ -177,6 +177,7 @@ export async function x402Middleware(req: Request, res: Response, next: NextFunc
                 // Save to Redis
                 if (redisClient.isOpen) {
                     await redisClient.setOrder(tx_hash, orderRecord);
+                    await redisClient.addAgentCampaign(orderRecord.agent, tx_hash);
 
                     // Emit socket event (broadcast NET price to frontend)
                     await redisClient.client.publish('marketplace_events', JSON.stringify({
@@ -554,6 +555,7 @@ export async function x402Middleware(req: Request, res: Response, next: NextFunc
             // Save to Redis (regardless of moderation result)
             if (redisClient.isOpen) {
                 await redisClient.setOrder(txSignature, orderRecord);
+                await redisClient.addAgentCampaign(agentKey, txSignature);
 
                 // ONLY broadcast to WebSocket if moderation passed (broadcast NET price)
                 if (orderStatus === 'open') {

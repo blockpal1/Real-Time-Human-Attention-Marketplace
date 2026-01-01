@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { CampaignPage } from './CampaignPage';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/v1';
 
@@ -42,6 +43,7 @@ export const AdminDashboard: React.FC = () => {
     const [x402FlaggedOrders, setX402FlaggedOrders] = useState<X402FlaggedOrder[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const [viewMode, setViewMode] = useState<'overview' | 'campaigns'>('overview');
 
     // New builder code form
     const [newCode, setNewCode] = useState('');
@@ -263,235 +265,278 @@ export const AdminDashboard: React.FC = () => {
                 <h1 style={{ marginBottom: '8px', fontSize: '32px' }}>⚙️ Admin Console</h1>
                 <p style={{ color: '#888', marginBottom: '32px' }}>Attentium Platform Management</p>
 
-                {/* Platform Status */}
-                <div style={cardStyle}>
-                    <h2 style={{ marginBottom: '20px', fontSize: '20px' }}>Platform Status</h2>
-
-                    <div style={{ display: 'flex', marginBottom: '24px' }}>
-                        <div style={statBoxStyle}>
-                            <div style={{ fontSize: '32px', fontWeight: 700, color: '#6366f1' }}>
-                                {status?.stats.total_agents || 0}
-                            </div>
-                            <div style={{ color: '#888', fontSize: '14px' }}>Agents</div>
-                        </div>
-                        <div style={statBoxStyle}>
-                            <div style={{ fontSize: '32px', fontWeight: 700, color: '#22c55e' }}>
-                                {status?.stats.active_bids || 0}
-                            </div>
-                            <div style={{ color: '#888', fontSize: '14px' }}>Active Bids</div>
-                        </div>
-                        <div style={statBoxStyle}>
-                            <div style={{ fontSize: '32px', fontWeight: 700, color: '#f59e0b' }}>
-                                {status?.stats.pending_builder_codes || 0}
-                            </div>
-                            <div style={{ color: '#888', fontSize: '14px' }}>Pending Codes</div>
-                        </div>
-                        <div style={statBoxStyle}>
-                            <div style={{ fontSize: '32px', fontWeight: 700, color: '#ef4444' }}>
-                                {status?.stats.flagged_content || 0}
-                            </div>
-                            <div style={{ color: '#888', fontSize: '14px' }}>Flagged Content</div>
-                        </div>
-                    </div>
-
-                    <h3 style={{ marginBottom: '12px', fontSize: '16px' }}>Platform Mode</h3>
-                    <div>
-                        {['beta', 'hybrid', 'live'].map((mode) => (
-                            <button
-                                key={mode}
-                                onClick={() => changeMode(mode)}
-                                disabled={loading}
-                                style={buttonStyle(status?.platform_mode === mode)}
-                            >
-                                {mode.toUpperCase()}
-                            </button>
-                        ))}
-                    </div>
-                    <p style={{ color: '#666', fontSize: '12px', marginTop: '12px' }}>
-                        {status?.platform_mode === 'beta' && '💡 Sandbox mode: Points for users, no escrow required'}
-                        {status?.platform_mode === 'hybrid' && '🔄 Hybrid mode: Both points and real payments active'}
-                        {status?.platform_mode === 'live' && '💰 Live mode: Real USDC escrow and payments only'}
-                    </p>
+                {/* Navigation Tabs */}
+                <div style={{ display: 'flex', gap: '16px', marginBottom: '32px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '16px' }}>
+                    <button
+                        onClick={() => setViewMode('overview')}
+                        style={{
+                            background: 'none',
+                            border: 'none',
+                            padding: '8px 16px',
+                            color: viewMode === 'overview' ? '#6366f1' : '#888',
+                            borderBottom: viewMode === 'overview' ? '2px solid #6366f1' : '2px solid transparent',
+                            fontWeight: viewMode === 'overview' ? 700 : 400,
+                            cursor: 'pointer',
+                            fontSize: '16px'
+                        }}
+                    >
+                        Overview
+                    </button>
+                    <button
+                        onClick={() => setViewMode('campaigns')}
+                        style={{
+                            background: 'none',
+                            border: 'none',
+                            padding: '8px 16px',
+                            color: viewMode === 'campaigns' ? '#6366f1' : '#888',
+                            borderBottom: viewMode === 'campaigns' ? '2px solid #6366f1' : '2px solid transparent',
+                            fontWeight: viewMode === 'campaigns' ? 700 : 400,
+                            cursor: 'pointer',
+                            fontSize: '16px'
+                        }}
+                    >
+                        Campaign Manager
+                    </button>
                 </div>
 
-                {/* Protocol Fees */}
-                <div style={cardStyle}>
-                    <h2 style={{ marginBottom: '20px', fontSize: '20px' }}>💰 Protocol Fees</h2>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <div>
-                            <p style={{ color: '#888', fontSize: '14px', marginBottom: '4px' }}>
-                                Accumulated fees in the Fee Vault can be swept to the Admin Wallet.
-                            </p>
-                            <p style={{ color: '#666', fontSize: '12px' }}>
-                                Destination: <code>{adminSecret ? '(Admin Keypair Wallet)' : '...'}</code>
-                            </p>
-                        </div>
-                        <button
-                            onClick={sweepPlatformFees}
-                            disabled={loading}
-                            style={{ ...buttonStyle(true), background: '#10b981', marginLeft: '20px' }}
-                        >
-                            {loading ? 'Sweeping...' : 'Sweep Fees'}
-                        </button>
+                {viewMode === 'campaigns' ? (
+                    <div className="bg-dark rounded-xl border border-white/10 p-6">
+                        <CampaignPage isAdmin={true} />
                     </div>
-                </div>
+                ) : (
+                    <>
+                        {/* Platform Status */}
+                        <div style={cardStyle}>
+                            <h2 style={{ marginBottom: '20px', fontSize: '20px' }}>Platform Status</h2>
 
-                {/* Genesis Builder Codes */}
-                <div style={cardStyle}>
-                    <h2 style={{ marginBottom: '20px', fontSize: '20px' }}>🔑 Genesis Builder Codes</h2>
+                            <div style={{ display: 'flex', marginBottom: '24px' }}>
+                                <div style={statBoxStyle}>
+                                    <div style={{ fontSize: '32px', fontWeight: 700, color: '#6366f1' }}>
+                                        {status?.stats.total_agents || 0}
+                                    </div>
+                                    <div style={{ color: '#888', fontSize: '14px' }}>Agents</div>
+                                </div>
+                                <div style={statBoxStyle}>
+                                    <div style={{ fontSize: '32px', fontWeight: 700, color: '#22c55e' }}>
+                                        {status?.stats.active_bids || 0}
+                                    </div>
+                                    <div style={{ color: '#888', fontSize: '14px' }}>Active Bids</div>
+                                </div>
+                                <div style={statBoxStyle}>
+                                    <div style={{ fontSize: '32px', fontWeight: 700, color: '#f59e0b' }}>
+                                        {status?.stats.pending_builder_codes || 0}
+                                    </div>
+                                    <div style={{ color: '#888', fontSize: '14px' }}>Pending Codes</div>
+                                </div>
+                                <div style={statBoxStyle}>
+                                    <div style={{ fontSize: '32px', fontWeight: 700, color: '#ef4444' }}>
+                                        {status?.stats.flagged_content || 0}
+                                    </div>
+                                    <div style={{ color: '#888', fontSize: '14px' }}>Flagged Content</div>
+                                </div>
+                            </div>
 
-                    <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap' }}>
-                        <input
-                            placeholder="Code (e.g., LANGCHAIN)"
-                            value={newCode}
-                            onChange={(e) => setNewCode(e.target.value.toUpperCase())}
-                            style={{ ...inputStyle, flex: 1, minWidth: '120px', marginBottom: 0 }}
-                        />
-                        <input
-                            placeholder="Owner Email"
-                            value={newEmail}
-                            onChange={(e) => setNewEmail(e.target.value)}
-                            style={{ ...inputStyle, flex: 1, minWidth: '140px', marginBottom: 0 }}
-                        />
-                        <input
-                            placeholder="Payout Wallet (Solana)"
-                            value={newPayoutWallet}
-                            onChange={(e) => setNewPayoutWallet(e.target.value)}
-                            style={{ ...inputStyle, flex: 1, minWidth: '160px', marginBottom: 0, fontFamily: 'monospace', fontSize: '11px' }}
-                        />
-                        <input
-                            placeholder="Description"
-                            value={newDescription}
-                            onChange={(e) => setNewDescription(e.target.value)}
-                            style={{ ...inputStyle, flex: 2, minWidth: '160px', marginBottom: 0 }}
-                        />
-                        <button
-                            onClick={createBuilderCode}
-                            disabled={loading || !newCode}
-                            style={buttonStyle(true)}
-                        >
-                            Create
-                        </button>
-                    </div>
-
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                        <thead>
-                            <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-                                <th style={{ textAlign: 'left', padding: '12px', color: '#888' }}>Code</th>
-                                <th style={{ textAlign: 'left', padding: '12px', color: '#888' }}>Owner</th>
-                                <th style={{ textAlign: 'left', padding: '12px', color: '#888' }}>Wallet</th>
-                                <th style={{ textAlign: 'right', padding: '12px', color: '#888' }}>Balance</th>
-                                <th style={{ textAlign: 'left', padding: '12px', color: '#888' }}>Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {builderCodes.map((bc) => (
-                                <tr key={bc.code} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                                    <td style={{ padding: '12px', fontWeight: 600, fontFamily: 'monospace' }}>{bc.code}</td>
-                                    <td style={{ padding: '12px', fontSize: '12px' }}>
-                                        {bc.owner_email || '-'}
-                                    </td>
-                                    <td style={{ padding: '12px', fontSize: '11px', fontFamily: 'monospace', color: bc.payout_wallet === 'pending' ? '#f59e0b' : '#aaa' }}>
-                                        {bc.payout_wallet === 'pending' ? 'pending' : `${bc.payout_wallet.slice(0, 4)}...${bc.payout_wallet.slice(-4)}`}
-                                    </td>
-                                    <td style={{ padding: '12px', textAlign: 'right', fontFamily: 'monospace', color: bc.balance > 0 ? '#22c55e' : '#666' }}>
-                                        ${bc.balance.toFixed(4)}
-                                    </td>
-                                    <td style={{ padding: '12px' }}>
-                                        <span style={{
-                                            padding: '4px 8px',
-                                            borderRadius: '4px',
-                                            fontSize: '12px',
-                                            background: bc.status === 'active' ? '#22c55e' : '#f59e0b'
-                                        }}>
-                                            {bc.status}
-                                        </span>
-                                    </td>
-                                </tr>
-                            ))}
-                            {builderCodes.length === 0 && (
-                                <tr>
-                                    <td colSpan={5} style={{ padding: '24px', textAlign: 'center', color: '#666' }}>
-                                        No builder codes yet
-                                    </td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-
-                {/* x402 Flagged Content */}
-                <div style={cardStyle}>
-                    <h2 style={{ marginBottom: '20px', fontSize: '20px' }}>⚠️ x402 Flagged Orders (ToS Rejected)</h2>
-
-                    {x402FlaggedOrders.length === 0 ? (
-                        <p style={{ color: '#666', textAlign: 'center', padding: '24px' }}>
-                            ✅ No x402 orders flagged for ToS violations
-                        </p>
-                    ) : (
-                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                            <thead>
-                                <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-                                    <th style={{ textAlign: 'left', padding: '12px', color: '#888' }}>TX Hash</th>
-                                    <th style={{ textAlign: 'left', padding: '12px', color: '#888' }}>Content</th>
-                                    <th style={{ textAlign: 'left', padding: '12px', color: '#888' }}>Bid</th>
-                                    <th style={{ textAlign: 'left', padding: '12px', color: '#888' }}>Status</th>
-                                    <th style={{ textAlign: 'left', padding: '12px', color: '#888' }}>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {x402FlaggedOrders.map((order) => (
-                                    <tr key={order.tx_hash} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                                        <td style={{ padding: '12px', fontFamily: 'monospace', fontSize: '12px' }}>
-                                            {order.tx_hash.slice(0, 16)}...
-                                        </td>
-                                        <td style={{ padding: '12px', maxWidth: '300px' }}>
-                                            {order.content_url && (
-                                                <a href={order.content_url} target="_blank" rel="noreferrer"
-                                                    style={{ color: '#6366f1' }}>
-                                                    {order.content_url.slice(0, 40)}...
-                                                </a>
-                                            )}
-                                            {order.validation_question && (
-                                                <p style={{ fontSize: '12px', color: '#888', margin: '4px 0' }}>
-                                                    Q: {order.validation_question}
-                                                </p>
-                                            )}
-                                        </td>
-                                        <td style={{ padding: '12px', fontFamily: 'monospace' }}>
-                                            ${order.bid_per_second.toFixed(4)}/s
-                                        </td>
-                                        <td style={{ padding: '12px' }}>
-                                            <span style={{
-                                                padding: '4px 8px',
-                                                borderRadius: '4px',
-                                                fontSize: '12px',
-                                                background: '#ef4444'
-                                            }}>
-                                                {order.status}
-                                            </span>
-                                        </td>
-                                        <td style={{ padding: '12px' }}>
-                                            <button
-                                                onClick={() => reviewX402Content(order.tx_hash, 'approve')}
-                                                disabled={loading}
-                                                style={{ ...buttonStyle(true), padding: '6px 12px', fontSize: '12px', marginRight: '4px' }}
-                                            >
-                                                Approve
-                                            </button>
-                                        </td>
-                                    </tr>
+                            <h3 style={{ marginBottom: '12px', fontSize: '16px' }}>Platform Mode</h3>
+                            <div>
+                                {['beta', 'hybrid', 'live'].map((mode) => (
+                                    <button
+                                        key={mode}
+                                        onClick={() => changeMode(mode)}
+                                        disabled={loading}
+                                        style={buttonStyle(status?.platform_mode === mode)}
+                                    >
+                                        {mode.toUpperCase()}
+                                    </button>
                                 ))}
-                            </tbody>
-                        </table>
-                    )}
-                </div>
+                            </div>
+                            <p style={{ color: '#666', fontSize: '12px', marginTop: '12px' }}>
+                                {status?.platform_mode === 'beta' && '💡 Sandbox mode: Points for users, no escrow required'}
+                                {status?.platform_mode === 'hybrid' && '🔄 Hybrid mode: Both points and real payments active'}
+                                {status?.platform_mode === 'live' && '💰 Live mode: Real USDC escrow and payments only'}
+                            </p>
+                        </div>
 
-                <p style={{ textAlign: 'center', color: '#444', fontSize: '12px', marginTop: '40px' }}>
-                    Attentium Admin Console • Environment: {status?.platform_mode}
-                </p>
+                        {/* Protocol Fees */}
+                        <div style={cardStyle}>
+                            <h2 style={{ marginBottom: '20px', fontSize: '20px' }}>💰 Protocol Fees</h2>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <div>
+                                    <p style={{ color: '#888', fontSize: '14px', marginBottom: '4px' }}>
+                                        Accumulated fees in the Fee Vault can be swept to the Admin Wallet.
+                                    </p>
+                                    <p style={{ color: '#666', fontSize: '12px' }}>
+                                        Destination: <code>{adminSecret ? '(Admin Keypair Wallet)' : '...'}</code>
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={sweepPlatformFees}
+                                    disabled={loading}
+                                    style={{ ...buttonStyle(true), background: '#10b981', marginLeft: '20px' }}
+                                >
+                                    {loading ? 'Sweeping...' : 'Sweep Fees'}
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Genesis Builder Codes */}
+                        <div style={cardStyle}>
+                            <h2 style={{ marginBottom: '20px', fontSize: '20px' }}>🔑 Genesis Builder Codes</h2>
+
+                            <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap' }}>
+                                <input
+                                    placeholder="Code (e.g., LANGCHAIN)"
+                                    value={newCode}
+                                    onChange={(e) => setNewCode(e.target.value.toUpperCase())}
+                                    style={{ ...inputStyle, flex: 1, minWidth: '120px', marginBottom: 0 }}
+                                />
+                                <input
+                                    placeholder="Owner Email"
+                                    value={newEmail}
+                                    onChange={(e) => setNewEmail(e.target.value)}
+                                    style={{ ...inputStyle, flex: 1, minWidth: '140px', marginBottom: 0 }}
+                                />
+                                <input
+                                    placeholder="Payout Wallet (Solana)"
+                                    value={newPayoutWallet}
+                                    onChange={(e) => setNewPayoutWallet(e.target.value)}
+                                    style={{ ...inputStyle, flex: 1, minWidth: '160px', marginBottom: 0, fontFamily: 'monospace', fontSize: '11px' }}
+                                />
+                                <input
+                                    placeholder="Description"
+                                    value={newDescription}
+                                    onChange={(e) => setNewDescription(e.target.value)}
+                                    style={{ ...inputStyle, flex: 2, minWidth: '160px', marginBottom: 0 }}
+                                />
+                                <button
+                                    onClick={createBuilderCode}
+                                    disabled={loading || !newCode}
+                                    style={buttonStyle(true)}
+                                >
+                                    Create
+                                </button>
+                            </div>
+
+                            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                <thead>
+                                    <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                                        <th style={{ textAlign: 'left', padding: '12px', color: '#888' }}>Code</th>
+                                        <th style={{ textAlign: 'left', padding: '12px', color: '#888' }}>Owner</th>
+                                        <th style={{ textAlign: 'left', padding: '12px', color: '#888' }}>Wallet</th>
+                                        <th style={{ textAlign: 'right', padding: '12px', color: '#888' }}>Balance</th>
+                                        <th style={{ textAlign: 'left', padding: '12px', color: '#888' }}>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {builderCodes.map((bc) => (
+                                        <tr key={bc.code} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                            <td style={{ padding: '12px', fontWeight: 600, fontFamily: 'monospace' }}>{bc.code}</td>
+                                            <td style={{ padding: '12px', fontSize: '12px' }}>
+                                                {bc.owner_email || '-'}
+                                            </td>
+                                            <td style={{ padding: '12px', fontSize: '11px', fontFamily: 'monospace', color: bc.payout_wallet === 'pending' ? '#f59e0b' : '#aaa' }}>
+                                                {bc.payout_wallet === 'pending' ? 'pending' : `${bc.payout_wallet.slice(0, 4)}...${bc.payout_wallet.slice(-4)}`}
+                                            </td>
+                                            <td style={{ padding: '12px', textAlign: 'right', fontFamily: 'monospace', color: bc.balance > 0 ? '#22c55e' : '#666' }}>
+                                                ${bc.balance.toFixed(4)}
+                                            </td>
+                                            <td style={{ padding: '12px' }}>
+                                                <span style={{
+                                                    padding: '4px 8px',
+                                                    borderRadius: '4px',
+                                                    fontSize: '12px',
+                                                    background: bc.status === 'active' ? '#22c55e' : '#f59e0b'
+                                                }}>
+                                                    {bc.status}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                    {builderCodes.length === 0 && (
+                                        <tr>
+                                            <td colSpan={5} style={{ padding: '24px', textAlign: 'center', color: '#666' }}>
+                                                No builder codes yet
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {/* x402 Flagged Content */}
+                        <div style={cardStyle}>
+                            <h2 style={{ marginBottom: '20px', fontSize: '20px' }}>⚠️ x402 Flagged Orders (ToS Rejected)</h2>
+
+                            {x402FlaggedOrders.length === 0 ? (
+                                <p style={{ color: '#666', textAlign: 'center', padding: '24px' }}>
+                                    ✅ No x402 orders flagged for ToS violations
+                                </p>
+                            ) : (
+                                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                    <thead>
+                                        <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                                            <th style={{ textAlign: 'left', padding: '12px', color: '#888' }}>TX Hash</th>
+                                            <th style={{ textAlign: 'left', padding: '12px', color: '#888' }}>Content</th>
+                                            <th style={{ textAlign: 'left', padding: '12px', color: '#888' }}>Bid</th>
+                                            <th style={{ textAlign: 'left', padding: '12px', color: '#888' }}>Status</th>
+                                            <th style={{ textAlign: 'left', padding: '12px', color: '#888' }}>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {x402FlaggedOrders.map((order) => (
+                                            <tr key={order.tx_hash} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                                <td style={{ padding: '12px', fontFamily: 'monospace', fontSize: '12px' }}>
+                                                    {order.tx_hash.slice(0, 16)}...
+                                                </td>
+                                                <td style={{ padding: '12px', maxWidth: '300px' }}>
+                                                    {order.content_url && (
+                                                        <a href={order.content_url} target="_blank" rel="noreferrer"
+                                                            style={{ color: '#6366f1' }}>
+                                                            {order.content_url.slice(0, 40)}...
+                                                        </a>
+                                                    )}
+                                                    {order.validation_question && (
+                                                        <p style={{ fontSize: '12px', color: '#888', margin: '4px 0' }}>
+                                                            Q: {order.validation_question}
+                                                        </p>
+                                                    )}
+                                                </td>
+                                                <td style={{ padding: '12px', fontFamily: 'monospace' }}>
+                                                    ${order.bid_per_second.toFixed(4)}/s
+                                                </td>
+                                                <td style={{ padding: '12px' }}>
+                                                    <span style={{
+                                                        padding: '4px 8px',
+                                                        borderRadius: '4px',
+                                                        fontSize: '12px',
+                                                        background: '#ef4444'
+                                                    }}>
+                                                        {order.status}
+                                                    </span>
+                                                </td>
+                                                <td style={{ padding: '12px' }}>
+                                                    <button
+                                                        onClick={() => reviewX402Content(order.tx_hash, 'approve')}
+                                                        disabled={loading}
+                                                        style={{ ...buttonStyle(true), padding: '6px 12px', fontSize: '12px', marginRight: '4px' }}
+                                                    >
+                                                        Approve
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            )}
+                        </div>
+
+                        <p style={{ textAlign: 'center', color: '#444', fontSize: '12px', marginTop: '40px' }}>
+                            Attentium Admin Console • Environment: {status?.platform_mode}
+                        </p>
+                    </>
+                )}
+
             </div>
-        </div>
+        </div >
     );
 };
 

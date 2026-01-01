@@ -58,37 +58,65 @@ export const getAgentCampaigns = async (req: Request, res: Response) => {
             return res.status(503).json({ error: 'Redis connection unavailable' });
         }
 
-        const campaigns: any[] = [];
-        // TODO: In production, use a SET per agent to index their orders.
-        // For now, scanning all open orders is acceptable for MVP scale.
-        const orderIds = await redisClient.getOpenOrders();
+        // SET of all relevant TxHashes for this agent
+        const relevantTxHashes = new Set<string>();
+
+        // 1. Fetch from Persistent Index (History)
+        const indexedIds = await redisClient.getAgentCampaigns(pubkey);
+        indexedIds.forEach(id => relevantTxHashes.add(id));
+
+        // 2. Scan Open Orders (Legacy Support + Lazy Backfill)
+        // This ensures existing active campaigns are found and indexed
+        const openOrderIds = await redisClient.getOpenOrders();
+
+        for (const txHash of openOrderIds) {
+            // Optimization: if we already have it internally, skip fetching (unless we need to check if we should index it?)
+            // Actually, we don't know IF it's in the index just by having it in the Set (Set was built from Index).
+            // But if it IS in the Set, we don't need to re-check if it belongs to agent (we assume index is correct).
+            if (relevantTxHashes.has(txHash)) continue;
+
+            // If not in our index, we must check it
+            const order = await redisClient.getOrder(txHash) as any;
+            if (order && (order.agent === pubkey || order.creator === pubkey)) {
+                // Found a legacy/unindexed active campaign!
+                relevantTxHashes.add(txHash);
+
+                // BACKFILL: Add to persistent index
+                console.log(`[AgentController] Backfilling index for agent ${pubkey} -> ${txHash}`);
+                await redisClient.addAgentCampaign(pubkey, txHash);
+            }
+        }
 
         console.log(`[AgentController] Fetching campaigns for agent: ${pubkey}`);
-        console.log(`[AgentController] Total open orders in Redis: ${orderIds.length}`);
+        console.log(`[AgentController] Total unique campaigns found: ${relevantTxHashes.size}`);
 
-        for (const txHash of orderIds) {
+        // 3. Fetch details for all unique campaigns
+        const campaignPromises = Array.from(relevantTxHashes).map(async (txHash) => {
             const order = await redisClient.getOrder(txHash) as any;
-            // Check if this order belongs to the requesting agent
-            // We need to store 'creator' or 'signer' in the order object during creation.
-            // If it's missing, we can't filter effectively yet.
-
-            // Support both keys for backward compatibility/migration
-            if (order && (order.agent === pubkey || order.creator === pubkey)) {
-                campaigns.push({
+            if (order) {
+                return {
                     bidId: txHash,
                     question: order.validation_question,
                     targetResponses: order.quantity,
                     completedResponses: order.filled_count || 0,
                     budgetSpent: (order.filled_count || 0) * order.bid,
-                    status: order.filled_count >= order.quantity ? 'completed' : 'active',
+                    status: order.filled_count >= order.quantity ? 'completed' : order.status,
                     progress: ((order.filled_count || 0) / order.quantity) * 100,
                     date: order.created_at
-                });
+                };
             }
-        }
+            return null;
+        });
 
-        console.log(`[AgentController] Found ${campaigns.length} matching campaigns.`);
-        res.json(campaigns);
+        const results = await Promise.all(campaignPromises);
+
+        // Filter out nulls (if order data was deleted/expired but ID remained in set)
+        const validCampaigns = results.filter(c => c !== null);
+
+        // Sort by date descending
+        validCampaigns.sort((a, b) => b.date - a.date);
+
+        res.json(validCampaigns);
     } catch (error) {
         console.error('Get Agent Campaigns Error:', error);
         res.status(500).json({ error: 'Failed to fetch agent campaigns' });

@@ -1,35 +1,26 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { PlaceBid } from '../components/PlaceBid';
 import { CampaignAnalytics } from '../components/CampaignAnalytics';
 import { Footer } from '../components/Footer';
 import { LoginButton } from '../components/LoginButton';
 
-export const CampaignPage: React.FC = () => {
+interface CampaignPageProps {
+    isAdmin?: boolean;
+}
+
+export const CampaignPage: React.FC<CampaignPageProps> = ({ isAdmin }) => {
     const { user, authenticated, logout } = usePrivy();
     const { wallets } = useWallets();
     const [duration, setDuration] = useState(10);
-    const [view, setView] = useState<'create' | 'analytics'>(() => {
-        return window.location.hash === '#analytics' ? 'analytics' : 'create';
-    });
+    const [view, setView] = useState<'create' | 'analytics'>('create');
 
     // Determine active wallet address for display
     const wallet = wallets.find((w) => w.walletClientType === 'privy') || wallets[0];
     const displayAddress = wallet?.address || user?.wallet?.address;
 
-    useEffect(() => {
-        const handleHashChange = () => {
-            const hash = window.location.hash;
-            if (hash === '#analytics') setView('analytics');
-            if (hash === '#campaigns') setView('create');
-        };
-        window.addEventListener('hashchange', handleHashChange);
-        return () => window.removeEventListener('hashchange', handleHashChange);
-    }, []);
-
     const handleViewChange = (newView: 'create' | 'analytics') => {
         setView(newView);
-        window.location.hash = newView === 'analytics' ? '#analytics' : '#campaigns';
     };
 
     return (
@@ -112,7 +103,7 @@ export const CampaignPage: React.FC = () => {
                                 <h2 className="text-2xl font-bold text-white mb-2">Campaign Analytics</h2>
                                 <p className="text-gray-400 text-sm">Real-time performance metrics for your active campaigns.</p>
                             </div>
-                            <CampaignAnalytics agentPubkey={displayAddress || ""} />
+                            <CampaignAnalytics agentPubkey={displayAddress || ""} isAdmin={isAdmin} />
                         </>
                     )}
                 </div>

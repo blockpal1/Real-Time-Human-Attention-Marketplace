@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { usePrivy, useConnectWallet } from '@privy-io/react-auth';
 import { useWallets } from '@privy-io/react-auth/solana';
-import { Home, Megaphone, Hammer, ShieldAlert } from 'lucide-react';
+import { Home, Hammer, ShieldAlert } from 'lucide-react';
 import { LoginButton } from './LoginButton';
 import { EarningsDashboard } from './EarningsDashboard';
 import { useClaim } from '../hooks/useClaim';
@@ -194,8 +194,8 @@ export const Header: React.FC<HeaderProps> = ({ theme, setTheme, userPubkey }) =
 
     const navItems = [
         { label: 'App', icon: Home, path: '#app' },
-        { label: 'Campaigns', icon: Megaphone, path: '#campaigns' },
         { label: 'Builders', icon: Hammer, path: '#builders' },
+
         { label: 'Admin', icon: ShieldAlert, path: '#admin' },
     ];
 

@@ -96,6 +96,10 @@ export const PrivacyPage: React.FC = () => {
                                     <span className="text-green-500 font-mono">03</span>
                                     <span><strong>Proof of Attention:</strong> The cryptographic output of your session.</span>
                                 </li>
+                                <li className="flex gap-3">
+                                    <span className="text-green-500 font-mono">04</span>
+                                    <span><strong>Session Metadata:</strong> Anonymous usage stats (e.g. valid sessions count) to power your analytics.</span>
+                                </li>
                             </ul>
                         </div>
                         <div className="bg-gray-900/40 p-8 rounded-xl border border-gray-800">
@@ -160,7 +164,7 @@ export const PrivacyPage: React.FC = () => {
                         <div>
                             <h3 className="text-white font-bold mb-2">Can I download my data?</h3>
                             <p className="text-gray-400 text-sm leading-relaxed">
-                                <span className="text-red-400">No.</span> We don't keep it. Your "data" is your on-chain payment history, which is publicly available on the Solana blockchain. We do not maintain off-chain user profiles or session archives.
+                                <span className="text-red-400">No.</span> We don't keep personal data. Your "data" is your on-chain payment history and anonymous session metadata used to power your dashboard. We do not store video, real-world identities, or long-term behavioral profiles.
                             </p>
                         </div>
                         <div>

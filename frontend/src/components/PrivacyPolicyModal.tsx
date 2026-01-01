@@ -41,7 +41,7 @@ export const PrivacyPolicyModal: React.FC<PrivacyPolicyModalProps> = ({ isOpen, 
                                 This Privacy Policy describes how Blockpal LLC (“we,” “us,” or the “Interface Operator”) processes limited off-chain information in connection with the Attentium Protocol.
                             </p>
                             <p className="mt-2">
-                                The Attentium Protocol itself is a decentralized system of smart contracts deployed on the Solana blockchain. Blockpal LLC does not control on-chain data, transactions, or settlement.
+                                The Attentium Protocol itself is a decentralized system of smart contracts. Blockpal LLC does not control on-chain data, but we do process off-chain metadata to power the Interface.
                             </p>
                         </div>
 
@@ -72,6 +72,7 @@ export const PrivacyPolicyModal: React.FC<PrivacyPolicyModalProps> = ({ isOpen, 
                             <ul className="list-disc pl-5 space-y-1 mb-2">
                                 <li>Browser and device metadata</li>
                                 <li>Session timing and interaction signals</li>
+                                <li>Campaign history and anonymous session analytics</li>
                             </ul>
                             <div className="bg-gray-900/50 p-2 rounded mb-2">
                                 <p className="font-semibold text-white mb-1">These signals:</p>
@@ -114,6 +115,7 @@ export const PrivacyPolicyModal: React.FC<PrivacyPolicyModalProps> = ({ isOpen, 
                                 <li>Generate and submit Oracle Signals</li>
                                 <li>Detect fraud, abuse, or Sybil attacks</li>
                                 <li>Maintain protocol security and reliability</li>
+                                <li>Provide dashboard analytics and campaign reporting</li>
                             </ul>
                             <p className="mt-4 text-[#0EA5E9]">We do not sell personal data.</p>
                         </section>
