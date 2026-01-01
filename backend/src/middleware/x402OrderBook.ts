@@ -164,7 +164,7 @@ export async function x402Middleware(req: Request, res: Response, next: NextFunc
                     validation_question: validation_question,
                     status: 'open',
                     created_at: Date.now(),
-                    expires_at: Date.now() + (10 * 60 * 1000), // 10 minutes TTL
+                    expires_at: Date.now() + (30 * 24 * 60 * 60 * 1000), // 30 Days TTL for Admin/Points (Evergreen)
                     result: null,
                     read_key,
                     webhook_secret,
@@ -541,7 +541,7 @@ export async function x402Middleware(req: Request, res: Response, next: NextFunc
                 validation_question: validation_question,
                 status: orderStatus,
                 created_at: Date.now(),
-                expires_at: Date.now() + (10 * 60 * 1000), // 10 minutes TTL
+                expires_at: Date.now() + (24 * 60 * 60 * 1000), // 24 Hours TTL for Paid Campaigns
                 result: null,
                 read_key,
                 webhook_secret,
