@@ -1,4 +1,3 @@
-```json
 {
     "name": "attentium-frontend",
     "private": true,
@@ -51,4 +50,3 @@
         "vite": "^7.2.6"
     }
 }
-```
