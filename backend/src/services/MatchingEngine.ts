@@ -4,6 +4,7 @@ import { OrderRecord } from '../middleware/x402OrderBook';
 export class MatchingEngine {
     private isRunning = false;
     private matchInterval: NodeJS.Timeout | null = null;
+    private cleanupInterval: NodeJS.Timeout | null = null;
 
     start() {
         if (this.isRunning) return;
@@ -12,11 +13,15 @@ export class MatchingEngine {
 
         // Run matching loop every 500ms
         this.matchInterval = setInterval(() => this.runMatchingCycle(), 500);
+
+        // Run stale match cleanup every 60 seconds
+        this.cleanupInterval = setInterval(() => this.cleanupStaleMatches(), 60000);
     }
 
     stop() {
         this.isRunning = false;
         if (this.matchInterval) clearInterval(this.matchInterval);
+        if (this.cleanupInterval) clearInterval(this.cleanupInterval);
     }
 
     private async runMatchingCycle() {
@@ -141,6 +146,9 @@ export class MatchingEngine {
         // 3. Generate a match ID for this x402 match (for tracking)
         const matchId = `x402_match_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
 
+        // TRACKING: Add to pending matches (for stale sweeper)
+        await redisClient.addPendingMatch(matchId, txHash);
+
         // 4. Publish events to WebSocket
         if (redisClient.isOpen) {
             // A. Update Order Book (remove or decrement)
@@ -190,5 +198,61 @@ export class MatchingEngine {
 
         // Mark user as seen for this campaign (uniqueness)
         await redisClient.markUserSeenCampaign(txHash, session.userPubkey);
+    }
+
+    /**
+     * Periodic cleanup of stale matches (User abandoned / Tab closed)
+     * Limit: 5 minutes
+     */
+    private async cleanupStaleMatches() {
+        try {
+            if (!redisClient.isOpen) return;
+
+            // Get matches older than 300 seconds (5 mins)
+            const staleMatches = await redisClient.getStaleMatches(300);
+
+            if (staleMatches.length > 0) {
+                console.log(`[Sweeper] Found ${staleMatches.length} stale matches. Cleaning up...`);
+            }
+
+            for (const matchId of staleMatches) {
+                const details = await redisClient.getPendingMatchDetails(matchId);
+
+                if (details && details.bidId) {
+                    const bidId = details.bidId;
+                    // Restore Order Quantity
+                    const order = await redisClient.getOrder(bidId) as OrderRecord | null;
+                    if (order) {
+                        order.quantity += 1;
+                        // Determine status: if it was completed/in_progress, force it back to open since we added qty
+                        order.status = 'open';
+
+                        await redisClient.setOrder(bidId, order);
+                        await redisClient.updateOrderStatus(bidId, 'open');
+
+                        console.log(`[Sweeper] Restored Stale Order ${bidId.slice(0, 16)}... quantity to ${order.quantity}`);
+
+                        // Broadcast update to frontend
+                        if (redisClient.isOpen) {
+                            await redisClient.client.publish('marketplace_events', JSON.stringify({
+                                type: 'BID_UPDATED',
+                                payload: {
+                                    bidId,
+                                    remainingQuantity: order.quantity
+                                }
+                            }));
+                        }
+                    } else {
+                        console.warn(`[Sweeper] Order ${bidId} not found for stale match ${matchId}`);
+                    }
+                }
+
+                // Always remove pending marker so we don't process again
+                await redisClient.removePendingMatch(matchId);
+            }
+
+        } catch (error) {
+            console.error('[Sweeper] Error cleaning stale matches:', error);
+        }
     }
 }

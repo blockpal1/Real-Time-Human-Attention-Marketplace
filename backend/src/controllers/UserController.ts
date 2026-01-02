@@ -289,6 +289,12 @@ export const acceptHighestBid = async (req: Request, res: Response) => {
 
         // Get or create user session from Redis
         let sessionId = await redisClient.client.get(`user:${pubkey}:active_session`);
+
+        // CRITICAL FIX: If user is already in available pool, remove them because we are matching them manually NOW.
+        if (sessionId) {
+            await redisClient.removeAvailableUser(sessionId);
+        }
+
         let session = sessionId ? await redisClient.getSession(sessionId) as any : null;
 
         if (!session) {
@@ -305,7 +311,10 @@ export const acceptHighestBid = async (req: Request, res: Response) => {
             };
             await redisClient.setSession(sessionId, session, 3600);
             await redisClient.client.set(`user:${pubkey}:active_session`, sessionId, { EX: 3600 });
-            await redisClient.addAvailableUser(sessionId, 0);
+            await redisClient.client.set(`user:${pubkey}:active_session`, sessionId, { EX: 3600 });
+            // Do NOT add to available pool here, as we are consuming them immediately
+            // If we added them, the background engine might snatch them before we return!
+            // await redisClient.addAvailableUser(sessionId, 0); 
         }
 
         // Decrement order quantity for x402 orders
@@ -339,6 +348,9 @@ export const acceptHighestBid = async (req: Request, res: Response) => {
 
         // Generate match ID
         const matchId = `match_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+
+        // TRACKING: Add to pending matches (for stale sweeper)
+        await redisClient.addPendingMatch(matchId, winner.id);
 
         // Broadcast MATCH_FOUND to trigger the modal
         if (redisClient.isOpen) {

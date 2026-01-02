@@ -41,6 +41,10 @@ export const completeMatch = async (req: Request, res: Response) => {
                         await redisClient.updateOrderStatus(bidId, order.status);
                     }
 
+
+                    // REMOVE FROM PENDING (Prevent Stale Sweeper from processing)
+                    await redisClient.removePendingMatch(matchId);
+
                     console.log(`[x402] Order ${bidId.slice(0, 16)}... match completed. Status: ${order.status}, Qty: ${order.quantity}`);
                 }
             }
@@ -79,18 +83,22 @@ export const completeMatch = async (req: Request, res: Response) => {
                         );
                         const qualityStatus = await updateSignalQuality(userWallet, passed);
 
-                        if (qualityStatus === 'BANNED') {
-                            return res.status(403).json({
-                                success: false,
-                                status: 'banned',
-                                message: 'Account suspended for low signal quality',
-                                earned: 0,
-                                points: 0,
-                                isPointsReward: true
-                            });
-                        }
+                        // RESTORE QTY
+                        if (bidId) await restoreOrderQuantity(bidId);
+
+                        return res.status(403).json({
+                            success: false,
+                            status: 'banned',
+                            message: 'Account suspended for low signal quality',
+                            earned: 0,
+                            points: 0,
+                            isPointsReward: true
+                        });
 
                         if (qualityStatus === 'LOW_SIGNAL') {
+                            // RESTORE QTY
+                            if (bidId) await restoreOrderQuantity(bidId);
+
                             return res.status(200).json({
                                 success: false,
                                 status: 'rejected',
@@ -117,6 +125,7 @@ export const completeMatch = async (req: Request, res: Response) => {
                         });
                     }
 
+
                     if (userWallet && grossAmount > 0) {
                         // ========================================
                         // QUALITY GATE: Validate before payment
@@ -128,6 +137,9 @@ export const completeMatch = async (req: Request, res: Response) => {
                         const qualityStatus = await updateSignalQuality(userWallet, passed);
 
                         if (qualityStatus === 'BANNED') {
+                            // RESTORE QTY
+                            if (bidId) await restoreOrderQuantity(bidId);
+
                             return res.status(403).json({
                                 success: false,
                                 status: 'banned',
@@ -136,6 +148,9 @@ export const completeMatch = async (req: Request, res: Response) => {
                         }
 
                         if (qualityStatus === 'LOW_SIGNAL') {
+                            // RESTORE QTY
+                            if (bidId) await restoreOrderQuantity(bidId);
+
                             return res.status(200).json({
                                 success: false,
                                 status: 'rejected',
@@ -376,6 +391,11 @@ export const dismissMatch = async (req: Request, res: Response) => {
             sessionCancelled: !!pubkey
         });
 
+        // REMOVE FROM PENDING (Prevent Stale Sweeper from processing)
+        if (redisClient.isOpen) {
+            await redisClient.removePendingMatch(matchId);
+        }
+
     } catch (error) {
         console.error('Dismiss Match Error:', error);
         res.status(500).json({ error: 'Failed to dismiss match' });
@@ -417,4 +437,37 @@ function triggerWebhook(order: any, responseData: any) {
     }).catch(err => {
         console.error('[Webhook] Failed:', order.callback_url, err.message);
     });
+}
+
+/**
+ * Helper: Restore order quantity if match failed/dismissed
+ */
+async function restoreOrderQuantity(bidId: string) {
+    try {
+        const { redisClient, redis } = await import('../utils/redis');
+
+        const order = await redisClient.getOrder(bidId) as any;
+        if (order) {
+            order.quantity += 1;
+            order.status = 'open';
+
+            await redisClient.setOrder(bidId, order);
+            await redisClient.updateOrderStatus(bidId, 'open');
+
+            console.log(`[Restore] Restored Order ${bidId.slice(0, 16)}... quantity to ${order.quantity}`);
+
+            // Broadcast update
+            if (redis.isOpen) {
+                await redis.publish('marketplace_events', JSON.stringify({
+                    type: 'BID_UPDATED',
+                    payload: {
+                        bidId,
+                        remainingQuantity: order.quantity
+                    }
+                }));
+            }
+        }
+    } catch (error) {
+        console.error(`[Restore] Failed to restore quantity for ${bidId}:`, error);
+    }
 }

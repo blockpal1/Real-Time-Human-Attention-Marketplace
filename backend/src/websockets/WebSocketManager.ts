@@ -122,7 +122,7 @@ export class WebSocketManager {
 
                     // 1. MATCH FOUND (Handle both MATCH_CREATED and MATCH_FOUND types)
                     if (event.type === 'MATCH_CREATED' || event.type === 'MATCH_FOUND') {
-                        console.log('WS Broadcasting MATCH_FOUND to client');
+                        // console.log('WS Broadcasting MATCH_FOUND to client');
                         const payload = event.payload || event;
                         client.send(JSON.stringify({
                             type: 'MATCH_FOUND',
@@ -138,17 +138,17 @@ export class WebSocketManager {
                     }
                     // 2. BID CREATED
                     else if (event.type === 'BID_CREATED') {
-                        console.log('WS Broadcasting BID_CREATED');
+                        // console.log('WS Broadcasting BID_CREATED');
                         client.send(JSON.stringify({ type: 'BID_CREATED', payload: event.payload }));
                     }
                     // 3. ASK CREATED
                     else if (event.type === 'ASK_CREATED') {
-                        console.log('WS Broadcasting ASK_CREATED');
+                        // console.log('WS Broadcasting ASK_CREATED');
                         client.send(JSON.stringify({ type: 'ASK_CREATED', payload: event.payload }));
                     }
                     // 4. BID UPDATED
                     else if (event.type === 'BID_UPDATED') {
-                        console.log('WS Broadcasting BID_UPDATED:', event.payload);
+                        // console.log('WS Broadcasting BID_UPDATED:', event.payload);
                         client.send(JSON.stringify({ type: 'BID_UPDATED', payload: event.payload }));
                     }
                     // 5. BID FILLED / REMOVED
@@ -161,17 +161,17 @@ export class WebSocketManager {
                     }
                     // 6b. ASK CANCELLED
                     else if (event.type === 'ASK_CANCELLED') {
-                        console.log('WS Broadcasting ASK_CANCELLED');
+                        // console.log('WS Broadcasting ASK_CANCELLED');
                         client.send(JSON.stringify({ type: 'ASK_CANCELLED', payload: event.payload }));
                     }
                     // 7. MATCH COMPLETED (Human submitted answer)
                     else if (event.type === 'MATCH_COMPLETED') {
-                        console.log('WS Broadcasting MATCH_COMPLETED to agent');
+                        // console.log('WS Broadcasting MATCH_COMPLETED to agent');
                         client.send(JSON.stringify({ type: 'MATCH_COMPLETED', payload: event.payload }));
                     }
                     // 8. VALIDATION RESULT (Agent approved/rejected)
                     else if (event.type === 'VALIDATION_RESULT') {
-                        console.log('WS Broadcasting VALIDATION_RESULT to human');
+                        // console.log('WS Broadcasting VALIDATION_RESULT to human');
                         client.send(JSON.stringify({ type: 'VALIDATION_RESULT', payload: event.payload }));
                     }
                 }

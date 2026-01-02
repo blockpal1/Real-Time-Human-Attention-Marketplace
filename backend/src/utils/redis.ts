@@ -409,6 +409,37 @@ class RedisClient {
         await this.client.sAdd(`campaign:${campaignId}:users`, userPubkey);
     }
 
+    // ===== Pending Match Tracking (Stale Sweeper) =====
+
+    async addPendingMatch(matchId: string, bidId: string): Promise<void> {
+        const now = Date.now();
+        // 1. Store metadata
+        await this.client.hSet(`pending:match:${matchId}`, {
+            matchId,
+            bidId,
+            createdAt: now
+        });
+        // 2. Add to time-based index
+        await this.client.zAdd('pending_matches', { score: now, value: matchId });
+    }
+
+    async removePendingMatch(matchId: string): Promise<void> {
+        await this.client.del(`pending:match:${matchId}`);
+        await this.client.zRem('pending_matches', matchId);
+    }
+
+    async getStaleMatches(maxAgeSeconds: number): Promise<string[]> {
+        const threshold = Date.now() - (maxAgeSeconds * 1000);
+        // Get matchIds older than threshold
+        return await this.client.zRangeByScore('pending_matches', 0, threshold);
+    }
+
+    async getPendingMatchDetails(matchId: string): Promise<{ bidId: string } | null> {
+        const data = await this.client.hGetAll(`pending:match:${matchId}`);
+        if (!data || !data.bidId) return null;
+        return { bidId: data.bidId };
+    }
+
     // ===== Helpers =====
 
     private flattenObject(obj: object): Record<string, string> {
