@@ -83,17 +83,19 @@ export const completeMatch = async (req: Request, res: Response) => {
                         );
                         const qualityStatus = await updateSignalQuality(userWallet, passed);
 
-                        // RESTORE QTY
-                        if (bidId) await restoreOrderQuantity(bidId);
+                        if (qualityStatus === 'BANNED') {
+                            // RESTORE QTY
+                            if (bidId) await restoreOrderQuantity(bidId);
 
-                        return res.status(403).json({
-                            success: false,
-                            status: 'banned',
-                            message: 'Account suspended for low signal quality',
-                            earned: 0,
-                            points: 0,
-                            isPointsReward: true
-                        });
+                            return res.status(403).json({
+                                success: false,
+                                status: 'banned',
+                                message: 'Account suspended for low signal quality',
+                                earned: 0,
+                                points: 0,
+                                isPointsReward: true
+                            });
+                        }
 
                         if (qualityStatus === 'LOW_SIGNAL') {
                             // RESTORE QTY
