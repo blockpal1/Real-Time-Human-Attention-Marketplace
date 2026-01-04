@@ -72,7 +72,7 @@ export const useCampaign = () => {
                     headers['X-Builder-Code'] = params.builder_code;
                 }
 
-                const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/v1/verify`, {
+                const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/verify`, {
                     method: 'POST',
                     headers,
                     body: JSON.stringify({
