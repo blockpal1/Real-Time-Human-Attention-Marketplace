@@ -180,7 +180,7 @@ export const useCampaign = () => {
                 confirmHeaders['X-Campaign-Id'] = campaignIdFromServer;
             }
 
-            const confirmResponse = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/v1/verify`, {
+            const confirmResponse = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/verify`, {
                 method: 'POST',
                 headers: confirmHeaders,
                 body: JSON.stringify({
