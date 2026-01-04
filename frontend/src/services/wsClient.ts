@@ -74,4 +74,24 @@ class WSClient {
     }
 }
 
-export const wsClient = new WSClient('ws://localhost:3000/v1/ws/events');
+// Construct WS URL from API URL (http -> ws, https -> wss)
+const getWsUrl = () => {
+    // Check for explicit WS URL first
+    if (import.meta.env.VITE_WS_URL) return import.meta.env.VITE_WS_URL;
+
+    // Otherwise derive from API URL
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000/v1';
+    const protocol = apiUrl.startsWith('https') ? 'wss' : 'ws';
+    // Remove protocol and ensure path is correct
+    const host = apiUrl.replace(/^https?:\/\//, '');
+    const wsUrl = `${protocol}://${host}/ws/events`; // API_URL usually includes /v1, so we verify path
+
+    // If API_URL already has /v1, we use it. If not, we might need to append it?
+    // Hardcoded fallback was: ws://localhost:3000/v1/ws/events
+    // API_URL fallback is: http://localhost:3000/v1
+    // So apiUrl.replace -> localhost:3000/v1
+    // Result: ws://localhost:3000/v1/ws/events
+    return wsUrl;
+};
+
+export const wsClient = new WSClient(getWsUrl());

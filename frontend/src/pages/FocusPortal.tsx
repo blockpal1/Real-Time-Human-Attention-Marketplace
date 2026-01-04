@@ -35,7 +35,12 @@ export default function FocusPortal({ initialMatch, initialToken }: FocusPortalP
         if (!permissionGranted || !sessionToken) return;
 
         // Connect only when we have permission (User is "Online")
-        const socket = new WebSocket('ws://localhost:3000/ws/events');
+        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000/v1';
+        const protocol = apiUrl.startsWith('https') ? 'wss' : 'ws';
+        const host = apiUrl.replace(/^https?:\/\//, '');
+        const wsUrl = `${protocol}://${host}/ws/events`;
+
+        const socket = new WebSocket(wsUrl);
 
         socket.onopen = () => {
             console.log('Connected to Focus Grid');

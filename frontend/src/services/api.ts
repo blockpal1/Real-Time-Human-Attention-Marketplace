@@ -1,4 +1,4 @@
-const API_URL = 'http://localhost:3000/v1';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/v1';
 
 export const api = {
     // submitBid removed: Use useCampaign hook for non-custodial funding
