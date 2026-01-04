@@ -8,6 +8,7 @@ import builderRoutes from './routes/builderRoutes';
 const app = express();
 
 app.use(cors({
+    origin: 'https://attentium.ai',
     exposedHeaders: ['x-admin-key', 'x-admin-secret'],
     allowedHeaders: ['Content-Type', 'x-admin-key', 'x-admin-secret', 'x-builder-code', 'x-agent-key', 'x-solana-tx-signature', 'x-campaign-id']
 }));
