@@ -88,26 +88,30 @@ export const startSession = async (req: Request, res: Response) => {
 };
 
 export const getActiveSessions = async (req: Request, res: Response) => {
-    // PLACEHOLDER DATA (Requested by User)
-    const sessions = [
-        {
-            id: 'session_mock_1',
-            userPubkey: 'UserMockWallet123',
-            priceFloor: 50,
-            active: true,
-            connected: true,
-            createdAt: Date.now() - 10000
-        },
-        {
-            id: 'session_mock_2',
-            userPubkey: 'UserMockWallet456',
-            priceFloor: 100,
-            active: true,
-            connected: false,
-            createdAt: Date.now() - 50000
+    try {
+        // Get all available users from the sorted set
+        const sessionIds = await redisClient.client.zRange('market:available_users', 0, 99);
+
+        const sessions: any[] = [];
+        for (const sessionId of sessionIds) {
+            const session = await redisClient.getSession(sessionId) as any;
+            if (session && session.active) {
+                sessions.push({
+                    id: sessionId,
+                    userPubkey: session.userPubkey,
+                    priceFloor: session.priceFloor,
+                    active: session.active,
+                    connected: session.connected,
+                    createdAt: session.createdAt
+                });
+            }
         }
-    ];
-    res.json(sessions);
+
+        res.json(sessions);
+    } catch (error) {
+        console.error('Get Active Sessions Error:', error);
+        res.status(500).json({ error: 'Failed to fetch sessions' });
+    }
 };
 
 /**
