@@ -93,33 +93,50 @@ router.get('/oracle/quote', async (req, res) => {
  * bid is already NET (spread applied at order creation)
  */
 router.get('/orderbook', async (req, res) => {
-    // PLACEHOLDER DATA (Requested by User)
-    const openOrders = [
-        {
-            tx_hash: 'order_mock_123',
-            duration: 30,
-            bid_per_second: 0.05,
-            gross_bid: 0.06,
-            total_escrow: 10,
-            quantity: 5,
-            created_at: Date.now()
-        },
-        {
-            tx_hash: 'order_mock_456',
-            duration: 60,
-            bid_per_second: 0.10,
-            gross_bid: 0.12,
-            total_escrow: 20,
-            quantity: 2,
-            created_at: Date.now() - 60000
-        }
-    ];
+    try {
+        const fees = await configService.getFees();
 
-    res.json({
-        count: openOrders.length,
-        fee_rate: 0.20,
-        orders: openOrders
-    });
+        const openOrders: Array<{
+            tx_hash: string;
+            duration: number;
+            bid_per_second: number;      // NET (what human earns) - spread already applied
+            gross_bid: number;           // GROSS (what agent paid)
+            total_escrow: number;
+            quantity: number;
+            created_at: number;
+        }> = [];
+
+        if (redisClient.isOpen) {
+            const openOrderIds = await redisClient.getOpenOrders();
+
+            for (const txHash of openOrderIds) {
+                const order = await redisClient.getOrder(txHash) as any;
+                if (order && order.status === 'open') {
+                    openOrders.push({
+                        tx_hash: txHash,
+                        duration: order.duration,
+                        bid_per_second: order.bid,           // Already NET (spread applied at creation)
+                        gross_bid: order.gross_bid || order.bid,  // GROSS (fallback for legacy orders)
+                        total_escrow: order.total_escrow,
+                        quantity: order.quantity,
+                        created_at: order.created_at
+                    });
+                }
+            }
+        }
+
+        // Sort by bid (highest first - what humans see)
+        openOrders.sort((a, b) => b.bid_per_second - a.bid_per_second);
+
+        res.json({
+            count: openOrders.length,
+            fee_rate: fees.total,
+            orders: openOrders
+        });
+    } catch (error) {
+        console.error('Orderbook Error:', error);
+        res.status(500).json({ error: 'Failed to fetch order book' });
+    }
 });
 
 /**
