@@ -8,18 +8,26 @@
         "light": "#14B8A6",
         "dark": "#0F766E"
     },
-    "navigation": [
+    "tabs": [
         {
-            "group": "Get Started",
-            "pages": [
-                "introduction"
-            ]
-        },
-        {
-            "group": "Reference",
-            "pages": [
-                "api-reference"
-            ]
+            "name": "Docs",
+            "url": "docs"
         }
-    ]
+    ],
+    "navigation": {
+        "docs": [
+            {
+                "group": "Get Started",
+                "pages": [
+                    "introduction"
+                ]
+            },
+            {
+                "group": "Reference",
+                "pages": [
+                    "api-reference"
+                ]
+            }
+        ]
+    }
 }
