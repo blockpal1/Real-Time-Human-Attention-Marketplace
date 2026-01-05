@@ -1,4 +1,5 @@
 {
+    "$schema": "https://mintlify.com/schema.json",
     "name": "Attentium",
     "favicon": "/favicon.png",
     "colors": {
@@ -8,9 +9,15 @@
     },
     "navigation": [
         {
-            "group": "Docs",
+            "group": "Get Started",
             "pages": [
-                "test"
+                "introduction"
+            ]
+        },
+        {
+            "group": "Reference",
+            "pages": [
+                "api-reference"
             ]
         }
     ]
