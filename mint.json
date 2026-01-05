@@ -13,12 +13,6 @@
             "pages": [
                 "introduction"
             ]
-        },
-        {
-            "group": "Reference",
-            "pages": [
-                "api-reference"
-            ]
         }
     ]
 }
