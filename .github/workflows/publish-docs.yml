@@ -7,7 +7,7 @@ on:
       - master  # Make sure this matches your PRIVATE repo branch name
     paths:
       - 'docs/**'
-      - 'mint.json'
+      - 'docs.json'
 
 jobs:
   publish-docs:
@@ -32,7 +32,7 @@ jobs:
           # 4. Copy files from Private Repo (root) to Public Repo (root)
           # We go back to the workspace root ($GITHUB_WORKSPACE) to grab files
           cp -R $GITHUB_WORKSPACE/docs/* .
-          cp $GITHUB_WORKSPACE/mint.json .
+          cp $GITHUB_WORKSPACE/docs.json .
           
           # 5. Config Git User
           git config user.name "Attentium Bot"
