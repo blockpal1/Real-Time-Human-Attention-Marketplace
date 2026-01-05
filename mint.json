@@ -1,17 +1,10 @@
 {
-    "$schema": "https://mintlify.com/schema.json",
     "name": "Attentium",
-    "favicon": "/favicon.png",
-    "colors": {
-        "primary": "#0D9488",
-        "light": "#14B8A6",
-        "dark": "#0F766E"
-    },
     "navigation": [
         {
-            "group": "Reference",
+            "group": "Docs",
             "pages": [
-                "api-reference"
+                "test"
             ]
         }
     ]
