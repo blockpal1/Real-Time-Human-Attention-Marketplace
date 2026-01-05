@@ -9,9 +9,9 @@
     },
     "navigation": [
         {
-            "group": "Get Started",
+            "group": "Reference",
             "pages": [
-                "introduction"
+                "api-reference"
             ]
         }
     ]
