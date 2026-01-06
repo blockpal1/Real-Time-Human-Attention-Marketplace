@@ -9,6 +9,7 @@ build
 .env.local
 *.key
 *.pem
+agent_wallet.json
 
 # IDEs
 .vscode
