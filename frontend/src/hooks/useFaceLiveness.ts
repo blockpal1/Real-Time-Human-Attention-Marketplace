@@ -91,8 +91,9 @@ export const useFaceLiveness = ({ videoRef, onVerified, active }: UseFaceLivenes
                 const dy = rightEye.y - leftEye.y;
                 const angle = Math.atan2(dy, dx) * (180 / Math.PI);
                 console.log(`[LIVENESS] Tilt Angle: ${angle.toFixed(1)}°`);
-                score = Math.min(Math.abs(angle) / 20, 1.0);
-                if (Math.abs(angle) > 10 && Math.abs(angle) < 90) verified = true;
+                score = Math.min(Math.abs(angle) / 15, 1.0);
+                // ACTION: Relaxed constraint from 10 -> 5 degrees
+                if (Math.abs(angle) > 5 && Math.abs(angle) < 90) verified = true;
             }
         }
 
