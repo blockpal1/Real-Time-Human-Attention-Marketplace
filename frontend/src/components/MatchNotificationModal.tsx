@@ -462,7 +462,23 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
                     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 24px 24px' }}>
                         {questionTime > 0 ? (
                             <div style={{ width: '100%', maxWidth: '600px', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '12px', padding: '32px' }}>
-                                <div style={{ color: '#888', fontSize: '10px', letterSpacing: '2px', marginBottom: '16px' }}>VALIDATION QUESTION</div>
+                                {/* Timer Progress Bar */}
+                                <div style={{ width: '100%', height: '4px', backgroundColor: '#333', borderRadius: '2px', marginBottom: '24px', overflow: 'hidden' }}>
+                                    <div style={{
+                                        width: `${(questionTime / 30) * 100}%`,
+                                        height: '100%',
+                                        backgroundColor: questionTime <= 10 ? '#ff4444' : '#0EA5E9',
+                                        transition: 'width 1s linear, background-color 0.3s'
+                                    }} />
+                                </div>
+
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                                    <div style={{ color: '#888', fontSize: '10px', letterSpacing: '2px' }}>VALIDATION QUESTION</div>
+                                    <div style={{ color: questionTime <= 10 ? '#ff4444' : '#0EA5E9', fontWeight: 'bold', fontFamily: 'monospace', fontSize: '14px' }}>
+                                        {questionTime}s REMAINING
+                                    </div>
+                                </div>
+
                                 <div style={{ color: 'white', fontSize: '18px', marginBottom: '24px', lineHeight: '1.6' }}>{validationQuestion}</div>
                                 <input
                                     type="text"
