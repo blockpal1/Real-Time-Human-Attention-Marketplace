@@ -1,22 +1,57 @@
 import React, { useEffect, useState } from 'react';
 import { AIBid } from '../types/AIBid';
 import { wsClient } from '../services/wsClient';
+import { api } from '../services/api';
 
 export const AIBidList: React.FC = () => {
     const [bids, setBids] = useState<AIBid[]>([]);
 
     useEffect(() => {
-        const unsub = wsClient.subscribe('bid', (data: any) => {
+        // 1. Initial Fetch
+        const fetchBids = async () => {
+            try {
+                const activeBids = await api.getActiveBids();
+                // Map Backend API format to Frontend AIBid format
+                const mappedBids: AIBid[] = activeBids.map((b: any) => ({
+                    id: b.id,
+                    agentName: 'Agent ' + (b.id ? b.id.slice(0, 4) : 'X'),
+                    // Backend sends micros (int), frontend wants USDC (float)
+                    bidPerSecond: (b.maxPricePerSecond || 0) / 1_000_000,
+                    taskDescription: b.validationQuestion || 'View Content',
+                    taskLength: b.durationPerUser || 30,
+                    priority: 1
+                }));
+                setBids(mappedBids);
+            } catch (e) {
+                console.error('Failed to fetch bids:', e);
+            }
+        };
+
+        fetchBids();
+
+        // 2. WebSocket Subscription
+        const unsub = wsClient.subscribe('BID_CREATED', (event: any) => {
+            console.log('New Bid Event:', event);
+            // Payload might be in event directly or event.payload depending on WS manager
+            const data = event.payload || event;
+
             const newBid: AIBid = {
-                id: data.bidId,
-                agentName: 'Agent X',
-                bidPerSecond: data.max_price_per_second,
-                taskDescription: 'View Ad',
-                taskLength: 30,
+                id: data.id || data.bidId || Date.now().toString(),
+                agentName: 'Agent ' + (data.id ? data.id.slice(0, 4) : 'New'),
+                // Handle various likely price keys from different event sources
+                bidPerSecond: (data.maxPricePerSecond || data.max_price_per_second || 0) / 1_000_000,
+                taskDescription: data.validationQuestion || data.validation_question || 'View Ad',
+                taskLength: data.durationPerUser || data.duration || 30,
                 priority: 1
             };
-            setBids(prev => [newBid, ...prev].slice(0, 10));
+
+            // Avoid duplicates
+            setBids(prev => {
+                if (prev.find(b => b.id === newBid.id)) return prev;
+                return [newBid, ...prev].slice(0, 50);
+            });
         });
+
         return () => { if (unsub) unsub(); };
     }, []);
 
