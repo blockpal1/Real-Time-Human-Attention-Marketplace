@@ -118,9 +118,9 @@ function App() {
         console.log('Focus session ended, user state reset');
     };
 
-    const handleDismissMatch = async () => {
+    const handleDismissMatch = async (shouldRestock: boolean = true) => {
         // Notify backend to restore bid to order book and cancel session
-        if (match?.matchId) {
+        if (match?.matchId && shouldRestock) {
             try {
                 await api.dismissMatch(match.matchId, match.bidId, userPubkey || undefined);
                 console.log('Match dismissed, bid returned to order book, session cancelled');

@@ -15,7 +15,7 @@ interface MatchNotificationModalProps {
     };
     walletPubkey?: string | null; // User wallet for fee distribution
     onAccept: () => void;
-    onDismiss: () => void;
+    onDismiss: (shouldRestock?: boolean) => void;
 }
 
 type Phase = 'matching' | 'preparing' | 'liveness' | 'expanding' | 'focused' | 'question' | 'verifying' | 'rejected' | 'banned' | 'success';
@@ -350,7 +350,7 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
                     <div style={{ color: '#888', fontSize: '14px', marginBottom: '16px', maxWidth: '400px', margin: '0 auto 16px' }}>
                         This answer was flagged as irrelevant or low-quality. As a result, your Signal Quality Score has dropped. To earn rewards and restore your score, please provide accurate, thoughtful answers.
                     </div>
-                    <button onClick={onDismiss} style={{ backgroundColor: '#333', color: 'white', fontWeight: 'bold', padding: '12px 32px', borderRadius: '8px', border: 'none', fontSize: '14px', cursor: 'pointer' }}>I Understand</button>
+                    <button onClick={() => onDismiss(false)} style={{ backgroundColor: '#333', color: 'white', fontWeight: 'bold', padding: '12px 32px', borderRadius: '8px', border: 'none', fontSize: '14px', cursor: 'pointer' }}>I Understand</button>
                 </div>
             );
         }
@@ -363,7 +363,7 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
                     <div style={{ color: '#ff4444', fontSize: '18px', fontWeight: 'bold', marginBottom: '8px' }}>ACCOUNT SUSPENDED</div>
                     <div style={{ color: '#888', fontSize: '14px', marginBottom: '16px' }}>{rejectionMessage}</div>
                     <div style={{ color: '#666', fontSize: '12px', marginBottom: '24px' }}>Your Signal Quality score is too low.</div>
-                    <button onClick={onDismiss} style={{ backgroundColor: '#ff4444', color: 'white', fontWeight: 'bold', padding: '12px 32px', borderRadius: '8px', border: 'none', fontSize: '14px', cursor: 'pointer' }}>LOG OUT</button>
+                    <button onClick={() => onDismiss(false)} style={{ backgroundColor: '#ff4444', color: 'white', fontWeight: 'bold', padding: '12px 32px', borderRadius: '8px', border: 'none', fontSize: '14px', cursor: 'pointer' }}>LOG OUT</button>
                 </div>
             );
         }
@@ -390,7 +390,7 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
                         <span style={{ color: '#0EA5E9', fontSize: '24px', fontFamily: 'monospace', fontWeight: 'bold' }}>${totalEarnings.toFixed(4)}</span>
                     </div>
                     <button onClick={handleAccept} style={{ width: '100%', backgroundColor: '#0EA5E9', color: 'black', fontWeight: 'bold', padding: '16px', borderRadius: '8px', border: 'none', fontSize: '16px', cursor: 'pointer', marginBottom: '12px' }}>ACCEPT & FOCUS</button>
-                    <button onClick={onDismiss} style={{ width: '100%', backgroundColor: 'transparent', color: '#888', padding: '12px', borderRadius: '8px', border: '1px solid #333', fontSize: '12px', cursor: 'pointer' }}>Dismiss Offer</button>
+                    <button onClick={() => onDismiss(true)} style={{ width: '100%', backgroundColor: 'transparent', color: '#888', padding: '12px', borderRadius: '8px', border: '1px solid #333', fontSize: '12px', cursor: 'pointer' }}>Dismiss Offer</button>
                 </>
             );
         }
@@ -453,8 +453,8 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
                     {/* Top Bar */}
                     <div style={{ position: 'absolute', top: 0, left: 0, right: 0, padding: '12px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                            <div style={{ color: '#0EA5E9', fontSize: '10px', letterSpacing: '2px' }}>SESSION ENDED - ANSWER QUESTION</div>
-                            <div style={{ color: questionTime <= 5 ? '#ff4444' : '#888', fontSize: '12px', fontFamily: 'monospace' }}>{questionTime}s</div>
+                            <div style={{ color: '#0EA5E9', fontSize: '12px', letterSpacing: '2px', fontWeight: 'bold' }}>SESSION ENDED - ANSWER QUESTION</div>
+                            <div style={{ color: questionTime <= 10 ? '#ff4444' : '#white', fontSize: '24px', fontFamily: 'monospace', fontWeight: 'bold' }}>{questionTime}s</div>
                         </div>
                     </div>
 
@@ -463,7 +463,7 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
                         {questionTime > 0 ? (
                             <div style={{ width: '100%', maxWidth: '600px', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '12px', padding: '32px' }}>
                                 {/* Timer Progress Bar */}
-                                <div style={{ width: '100%', height: '4px', backgroundColor: '#333', borderRadius: '2px', marginBottom: '24px', overflow: 'hidden' }}>
+                                <div style={{ width: '100%', height: '8px', backgroundColor: '#333', borderRadius: '4px', marginBottom: '24px', overflow: 'hidden' }}>
                                     <div style={{
                                         width: `${(questionTime / 30) * 100}%`,
                                         height: '100%',
@@ -473,9 +473,9 @@ export const MatchNotificationModal: React.FC<MatchNotificationModalProps> = ({ 
                                 </div>
 
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                                    <div style={{ color: '#888', fontSize: '10px', letterSpacing: '2px' }}>VALIDATION QUESTION</div>
-                                    <div style={{ color: questionTime <= 10 ? '#ff4444' : '#0EA5E9', fontWeight: 'bold', fontFamily: 'monospace', fontSize: '14px' }}>
-                                        {questionTime}s REMAINING
+                                    <div style={{ color: '#888', fontSize: '12px', letterSpacing: '2px' }}>VALIDATION QUESTION</div>
+                                    <div style={{ color: questionTime <= 10 ? '#ff4444' : '#0EA5E9', fontWeight: 'bold', fontFamily: 'monospace', fontSize: '32px' }}>
+                                        {questionTime}s
                                     </div>
                                 </div>
 
